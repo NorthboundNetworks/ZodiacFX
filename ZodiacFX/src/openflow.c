@@ -132,9 +132,14 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 			size = size + plen;
 			switch(ofph->type)
 			{
-				case OFPT10_HELLO:
-					if (ofph->version == 0x01) OF_Version = 0x01;
-					if (ofph->version == 0x04) OF_Version = 0x04;
+				case OFPT10_HELLO:	// TODO: Add error handling for unsupported versions
+					if (ofph->version == 0x01 && Zodiac_Config.of_version == 1) {
+						OF_Version = 0x01;
+					} else if (ofph->version == 0x04 && Zodiac_Config.of_version == 4) {
+						OF_Version = 0x04;
+					} else {
+						OF_Version = MAX_OFP_VERSION;
+					}
 				break;
 			
 				case OFPT10_ECHO_REQUEST:
