@@ -133,8 +133,8 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 			switch(ofph->type)
 			{
 				case OFPT10_HELLO:
-					if (ofph->version == 0x01 && MAX_OFP_VERSION == 0x01) OF_Version = 0x01;
-					if (ofph->version == 0x04 && MAX_OFP_VERSION == 0x04) OF_Version = 0x04;
+					if (ofph->version == 0x01) OF_Version = 0x01;
+					if (ofph->version == 0x04) OF_Version = 0x04;
 				break;
 			
 				case OFPT10_ECHO_REQUEST:
@@ -165,7 +165,14 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 void OF_hello(void)
 {
 	struct ofp_header ofph;
-	ofph.version = MAX_OFP_VERSION;
+	// Make sure this is a valid version otherwise it won't connect
+	if (Zodiac_Config.of_version == 1){
+		ofph.version = 1;
+	} else if (Zodiac_Config.of_version == 4){
+		ofph.version = 4;
+	} else {
+		ofph.version = MAX_OFP_VERSION;
+	}
 	ofph.type = OFPT10_HELLO;
 	ofph.length = HTONS(sizeof(ofph));
 	ofph.xid = HTONL(1);

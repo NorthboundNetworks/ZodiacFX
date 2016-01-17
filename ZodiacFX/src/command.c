@@ -48,7 +48,7 @@
 // Global variables
 extern struct zodiac_config Zodiac_Config;
 extern bool debug_output;
-struct arp_header arp_test;
+
 extern int charcount, charcount_last;
 extern struct ofp_flow_mod flow_match[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
@@ -58,13 +58,17 @@ extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters;
 extern bool masterselect;
-uint8_t uCLIContext = 0;
 extern struct tcp_pcb *tcp_pcb;
 extern uint8_t port_status[4];
 extern int totaltime;
-bool showintro = true;
 extern int32_t ul_temp;
-		
+extern int OF_Version;
+
+// Local Variables
+bool showintro = true;		
+uint8_t uCLIContext = 0;
+struct arp_header arp_test;
+
 // Internal Functions	
 void saveConfig(void);
 void command_root(char *command, char *param1, char *param2, char *param3);
@@ -356,7 +360,14 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		if (Zodiac_Config.OFEnabled == OF_ENABLED) printf(" Openflow Status: Enabled\r\n");
 		if (Zodiac_Config.OFEnabled == OF_DISABLED) printf(" Openflow Status: Disabled\r\n");
 		if (Zodiac_Config.failstate == 0) printf(" Failstate: Secure\r\n");
-		if (Zodiac_Config.failstate == 1) printf(" Failstate: Safe\r\n");		
+		if (Zodiac_Config.failstate == 1) printf(" Failstate: Safe\r\n");
+		if (Zodiac_Config.of_version == 1) {
+			printf(" Force OpenFlow version: 1.0 (0x01)\r\n");
+		} else if (Zodiac_Config.of_version == 4){
+			printf(" Force OpenFlow version: 1.3 (0x04)\r\n");	
+		} else {
+			printf(" Force OpenFlow version: Disabled\r\n");
+		}
 		if (masterselect == true) printf(" Stacking Select: SLAVE\r\n");
 		if (masterselect == false) printf(" Stacking Select: MASTER\r\n");
 		printf(" Stacking Status: Unavailable\r\n");
@@ -680,6 +691,9 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		
 		// Failstate
 		reset_config.failstate = 0;			// Failstate Secure
+		
+		// Force OpenFlow version
+		reset_config.of_version = 0;			// Force version disabled
 								
 		memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existng MAC address so it is not reset
 		memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
@@ -701,7 +715,28 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		}
 		return;
 	}
-	
+
+	// Set Force OpenFlow Version
+	if (strcmp(command, "set")==0 && strcmp(param1, "of-version")==0)
+	{
+		int tmp_version = -1;
+		sscanf(param2, "%d", &tmp_version);
+		if (tmp_version == 0){
+				printf("Force OpenFlow version Disabled\r\n");
+				Zodiac_Config.of_version = 0;
+			} else if (tmp_version == 1){
+				printf("Force OpenFlow version set to 1.0 (0x01)\r\n");
+				Zodiac_Config.of_version = 1;
+			} else if (tmp_version == 4){
+				printf("Force OpenFlow version set to 1.3 (0x04)\r\n");
+				Zodiac_Config.of_version = 4;
+			} else {
+				printf("Invalid OpenFlow version, valid options are 0, 1 or 4\r\n");
+				Zodiac_Config.of_version = 0;
+		}
+		return;
+	}
+		
 	// Unknown Command
 	printf("Unknown command\r\n");
 	return;	
@@ -811,6 +846,8 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		if (tcp_pcb->state != ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED) printf(" Status: Disconnected\r\n");			
 		if (tcp_pcb->state == ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED) printf(" Status: Connected\r\n");
 		if (Zodiac_Config.OFEnabled == OF_DISABLED) printf(" Status: Disabled\r\n");
+		if (OF_Version == 1) printf(" Version: 1.0 (0x01)\r\n");
+		if (OF_Version == 4) printf(" Version: 1.3 (0x04)\r\n");
 		printf(" No tables: 1\r\n");
 		printf(" No flows: %d\r\n",iLastFlow);
 		printf(" Table Lookups: %d\r\n",table_counters.lookup_count);
@@ -951,10 +988,11 @@ void printhelp(void)
 	printf(" set failstate <secure|safe>\r\n");
 	printf(" add vlan <vlan id> <vlan name>\r\n");
 	printf(" delete vlan <vlan id>\r\n");
-	printf(" set vlan-type <openflow/native>\r\n");
+	printf(" set vlan-type <openflow|native>\r\n");
 	printf(" add vlan-port <vlan id> <port>\r\n");
 	printf(" delete vlan-port <port>\r\n");
 	printf(" factory reset\r\n");
+	printf(" set of-version <version(0|1|4)>\r\n");
 	printf(" exit\r\n");
 	printf("\r\n");
 	printf("OpenFlow:\r\n");
