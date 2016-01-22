@@ -34,9 +34,10 @@
 #include "openflow.h"
 
 int flowmatch(uint8_t *pBuffer, int port);
-int field_match(struct ofp_match *match_a, struct ofp_match *match_b);
+int field_match10(struct ofp_match *match_a, struct ofp_match *match_b);
 void nnOF_timer(void);
 void clear_flows(void);
-int flow_stats_msg(char *buffer, int first, int last);
+int flow_stats_msg10(char *buffer, int first, int last);
+int flow_stats_msg13(char *buffer, int first, int last);
 
 #endif /* OF_HELPER_H_ */

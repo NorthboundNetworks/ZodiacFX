@@ -48,9 +48,10 @@ extern struct ofp13_port_stats phys13_port_stats[4];
 // Local Variables
 struct ofp_switch_config Switch_config;
 struct ofp_flow_mod flow_match[MAX_FLOWS];
+struct ofp13_flow_mod flow_match13[MAX_FLOWS];
+uint8_t *ofp13_oxm_match[MAX_FLOWS];
 struct flows_counter flow_counters[MAX_FLOWS];
 struct flow_tbl_actions flow_actions[MAX_FLOWS];
-struct ofp13_flow_mod flow_match13[MAX_FLOWS];
 struct table_counter table_counters;
 int iLastFlow = 0;
 uint8_t shared_buffer[2048];
@@ -132,11 +133,10 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 			size = size + plen;
 			switch(ofph->type)
 			{
-				case OFPT10_HELLO:	// TODO: Add error handling for unsupported versions
-					if (ofph->version == 0x01 && Zodiac_Config.of_version == 1) {
-						OF_Version = 0x01;
-					} else if (ofph->version == 0x04 && Zodiac_Config.of_version == 4) {
-						OF_Version = 0x04;
+				case OFPT10_HELLO:	// TODO: Add error handling for unsupported versions	
+					if (Zodiac_Config.of_version == 1 || Zodiac_Config.of_version == 4)
+					{
+						OF_Version = Zodiac_Config.of_version;
 					} else {
 						OF_Version = MAX_OFP_VERSION;
 					}

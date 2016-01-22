@@ -58,6 +58,13 @@ struct flow_tbl_actions
 	uint8_t action4[16];
 };
 
+struct oxm_header13
+{
+	uint16_t oxm_class;
+	uint8_t oxm_field;
+	uint8_t oxm_len;
+};
+
 void task_openflow(void);
 void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
 void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);

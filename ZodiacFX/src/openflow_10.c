@@ -626,7 +626,7 @@ void stats_flow_reply(struct ofp_stats_request *msg)
 	reply->type = htons(OFPST_FLOW);
 
 	if(iLastFlow > 12) iLastFlow = 12;	// Need to fix this! LWIP won't send buffers bigger then 1 packet (1460 bytes)
-	int len = flow_stats_msg(&statsbuffer, 0, iLastFlow);
+	int len = flow_stats_msg10(&statsbuffer, 0, iLastFlow);
 	reply->header.length = htons(len);
 	reply->flags = 0;
 	sendtcp(&statsbuffer, len);
@@ -948,7 +948,7 @@ void flow_modify(struct ofp_header *msg)
 	{
 		if(flow_counters[q].active == true)
 		{
-			if (field_match(&ptr_fm->match, &flow_match[q].match) == 1)
+			if (field_match10(&ptr_fm->match, &flow_match[q].match) == 1)
 			{
 				// Update actions
 				action_hdr = &ptr_fm->actions;
@@ -1086,7 +1086,7 @@ void flow_delete(struct ofp_header *msg)
 	{
 		if(flow_counters[q].active == true)
 		{
-			if (field_match(&ptr_fm->match, &flow_match[q].match) == 1)
+			if (field_match10(&ptr_fm->match, &flow_match[q].match) == 1)
 			{
 				if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
 				// Clear flow counters and actions

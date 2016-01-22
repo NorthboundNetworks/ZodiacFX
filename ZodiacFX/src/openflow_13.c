@@ -42,6 +42,7 @@ extern int OF_Version;
 extern int iLastFlow;
 extern int totaltime;
 extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
+extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern uint8_t port_status[4];
@@ -57,11 +58,12 @@ void of_error13(struct ofp_header *msg, uint16_t type, uint16_t code);
 void set_config13(struct ofp_header * msg);
 void flow_mod13(struct ofp_header *msg);
 void flow_add13(struct ofp_header *msg);
-void flow_delete13(struct ofp_header *msg);
+void flow_delete_strict13(struct ofp_header *msg);
 int multi_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
+int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
 void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason);
 void packet_out13(struct ofp_header *msg);
 
@@ -123,6 +125,11 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 			multi_pos += multi_tablefeat_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 		
+		if ( HTONS(multi_req->type) == 	OFPMP13_FLOW )
+		{
+			multi_pos += multi_flow_reply13(&shared_buffer[multi_pos], multi_req);
+		}		
+
 		break;
 
 		case OFPT10_PACKET_OUT:
@@ -279,7 +286,6 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	}
 	
 	memcpy(reply->body, &phys_port[0],sizeof(phys_port));
-	//sendtcp(&buffer, len);
 	return len;	
 }
 
@@ -305,14 +311,42 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 	reply->type = htons(OFPMP13_TABLE_FEATURES);
 	
 	tbl_feats.length = htons(sizeof(struct ofp13_table_features));
-	tbl_feats.table_id = 0;
-	sprintf(tablename, "table_0");
+	tbl_feats.table_id = 100;
+	sprintf(tablename, "table_100");
 	strcpy(tbl_feats.name, tablename);	
 	tbl_feats.metadata_match = 0;
 	tbl_feats.metadata_write = 0;
 	tbl_feats.config = 0;
 	tbl_feats.max_entries = htonl(MAX_FLOWS);
 	memcpy(reply->body, &tbl_feats, sizeof(struct ofp13_table_features));
+	return len;
+}
+
+/*
+*	OpenFlow Multi-part FLOW reply message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
+{
+	char statsbuffer[2048];
+	struct ofp13_multipart_reply *reply;
+	reply = (struct ofp13_multipart_reply *) buffer;
+	reply->header.version = OF_Version;
+	reply->header.type = OFPT13_MULTIPART_REPLY;
+	reply->header.xid = msg->header.xid;
+	reply->flags = 0;
+	reply->type = htons(OFPMP13_FLOW);
+	
+	if(iLastFlow > 12) iLastFlow = 12;	// Need to fix this! LWIP won't send buffers bigger then 1 packet (1460 bytes)
+	//int len = flow_stats_msg13(&statsbuffer, 0, 3);
+	int len = flow_stats_msg13(&statsbuffer, 0, iLastFlow);
+
+	memcpy(reply->body, &statsbuffer, len);
+	len += 	sizeof(struct ofp13_multipart_reply);
+	reply->header.length = htons(len);		
+
 	return len;
 }
 
@@ -402,15 +436,13 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 */
 void flow_mod13(struct ofp_header *msg)
 {
-	struct ofp_flow_mod * ptr_fm;
-	ptr_fm = (struct ofp_flow_mod *) msg;
+	struct ofp13_flow_mod * ptr_fm;
+	ptr_fm = (struct ofp13_flow_mod *) msg;
 
-	uint8_t command = HTONS(ptr_fm->command);
-	switch(command)
+	switch(ptr_fm->command)
 	{
-		
-		case OFPFC_ADD:
-		//flow_add(msg);
+		case OFPFC13_ADD:
+		flow_add13(msg);
 		break;
 		
 		case OFPFC_MODIFY:
@@ -422,13 +454,12 @@ void flow_mod13(struct ofp_header *msg)
 		break;
 		
 		case OFPFC13_DELETE:
-		flow_delete13(msg);
+		//flow_delete13(msg);
 		break;
 		
-		case OFPFC_DELETE_STRICT:
-		//flow_delete_strict(msg);
+		case OFPFC13_DELETE_STRICT:
+		flow_delete_strict13(msg);
 		break;
-		
 	}
 	return;
 }
@@ -441,7 +472,6 @@ void flow_mod13(struct ofp_header *msg)
 */
 void flow_add13(struct ofp_header *msg)
 {
-
 	if (iLastFlow > (MAX_FLOWS-1))
 	{
 		of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
@@ -450,60 +480,16 @@ void flow_add13(struct ofp_header *msg)
 	
 	struct ofp13_flow_mod * ptr_fm;
 	ptr_fm = (struct ofp13_flow_mod *) msg;
-// 	struct ofp_action_header * action_hdr = NULL;
-// 	struct ofp_action_header * action_hdr1 = NULL;
-// 	int action_size = ntohs(msg->length) - sizeof(struct ofp_flow_mod);
-// 	int action_cnt_size = 0;
-// 	int action_count = 0;
-// 
-// 	memset(&flow_actions[iLastFlow].action1, 0, 16);
-// 	memset(&flow_actions[iLastFlow].action2, 0, 16);
-// 	memset(&flow_actions[iLastFlow].action3, 0, 16);
-// 	memset(&flow_actions[iLastFlow].action4, 0, 16);
-// 	
-// 	action_hdr = &ptr_fm->actions;
-// 	memcpy(&flow_match[iLastFlow], ptr_fm, action_hdr->len);
-// 	
-// 	if(action_size > 0)
-// 	{
-// 		for(int q=0;q<4;q++)
-// 		{
-// 			if (action_cnt_size < action_size)
-// 			{
-// 				action_hdr1 = action_hdr + action_count;
-// 				
-// 				// Check for unsupported ports
-// 				if (HTONS(action_hdr1->type) == OFPAT10_OUTPUT)
-// 				{
-// 					struct ofp_action_output * action_out;
-// 					action_out = action_hdr1;
-// 					
-// 					if (htons(action_out->port) == OFPP_NORMAL) // We do not support port NORMAL
-// 					{
-// 						of10_error(msg, OFPET10_BAD_ACTION, OFPBAC10_BAD_OUT_PORT);
-// 						return;
-// 					}
-// 				}
-// 				// If set VLAD ID field is 0 change to a STRIP_VLAN action
-// 				if (htons(action_hdr1->type) == OFPAT10_SET_VLAN_VID)
-// 				{
-// 					struct ofp_action_vlan_vid * action_vlan;
-// 					action_vlan = action_hdr1;
-// 					if(action_vlan->vlan_vid == 0) action_hdr1->type = htons(OFPAT10_STRIP_VLAN);
-// 				}
-// 				
-// 				// Copy action
-// 				if(q == 0) memcpy(&flow_actions[iLastFlow].action1, action_hdr1, ntohs(action_hdr1->len));
-// 				if(q == 1) memcpy(&flow_actions[iLastFlow].action2, action_hdr1, ntohs(action_hdr1->len));
-// 				if(q == 2) memcpy(&flow_actions[iLastFlow].action3, action_hdr1, ntohs(action_hdr1->len));
-// 				if(q == 3) memcpy(&flow_actions[iLastFlow].action4, action_hdr1, ntohs(action_hdr1->len));
-// 			}
-// 			if(ntohs(action_hdr1->len) == 8) action_count += 1;
-// 			if(ntohs(action_hdr1->len) == 16) action_count += 2;
-// 			action_cnt_size += ntohs(action_hdr1->len);
-// 		}
-// 	}
-	
+	memcpy(&flow_match13[iLastFlow], ptr_fm, sizeof(struct ofp13_flow_mod));
+	if (htons(ptr_fm->match.length) > 4)
+	{
+		ofp13_oxm_match[iLastFlow] = malloc(htons(flow_match13[iLastFlow].match.length)-4);	// Allocate a space to store match fields
+		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, htons(flow_match13[iLastFlow].match.length)-4);
+	} else {
+		ofp13_oxm_match[iLastFlow] = NULL;
+	}
+
+		
 	flow_counters[iLastFlow].duration = totaltime;
 	flow_counters[iLastFlow].lastmatch = totaltime;
 	flow_counters[iLastFlow].active = true;
@@ -513,39 +499,35 @@ void flow_add13(struct ofp_header *msg)
 }
 
 /*
-*	OpenFlow FLOW Delete function
+*	OpenFlow FLOW Delete Strict function
 *
 *	@param *msg - pointer to the OpenFlow message.
 *
 */
-void flow_delete13(struct ofp_header *msg)
+void flow_delete_strict13(struct ofp_header *msg)
 {
 	struct ofp13_flow_mod * ptr_fm;
-	ptr_fm = (struct ofp_flow_mod *) msg;
-	int q = 0;
+	ptr_fm = (struct ofp13_flow_mod *) msg;
+	int q;
 	
-	while(q<iLastFlow)
+	for(q=0;q<iLastFlow;q++)
 	{
 		if(flow_counters[q].active == true)
 		{
-			if (field_match(&ptr_fm->match, &flow_match13[q].match) == 1)
+			if((memcmp(&flow_match13[q].match, &ptr_fm->match, sizeof(struct ofp13_match)) == 0))
 			{
 				if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
 				// Clear flow counters and actions
 				memset(&flow_counters[q], 0, sizeof(struct flows_counter));
-				//memset(&flow_actions[q], 0, sizeof(struct flow_tbl_actions));
-				
 				// Copy the last flow to here to fill the gap
 				memcpy(&flow_match13[q], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));
-				//memcpy(&flow_actions[q], &flow_actions[iLastFlow-1], sizeof(struct flow_tbl_actions));
+				// If there are OXM match fields move them too
+				ofp13_oxm_match[q] = ofp13_oxm_match[iLastFlow-1];
+				ofp13_oxm_match[iLastFlow-1] = NULL;
 				memcpy(&flow_counters[q], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-				
 				// Clear the counters and action from the last flow that was moved
 				memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-				//memset(&flow_actions[iLastFlow-1], 0, sizeof(struct flow_tbl_actions));
 				iLastFlow --;
-				} else {
-				q++;
 			}
 		}
 	}
@@ -581,7 +563,7 @@ void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason
 	pi->header.length = HTONS(size);
 	pi->total_len = HTONS(ul_size);
 	pi->reason = reason;
-	pi->match.type = htons(OFPMT13_OXM);
+	pi->match.type = htons(OFPMT_OXM);
 	pi->match.length = htons(4);
 	memcpy(pi->data, buffer, send_size);
 	sendtcp(&shared_buffer, size);
