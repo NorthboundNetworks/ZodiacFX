@@ -51,6 +51,8 @@ extern bool debug_output;
 
 extern int charcount, charcount_last;
 extern struct ofp_flow_mod flow_match[MAX_FLOWS];
+extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
+extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
 extern int iLastFlow;
@@ -68,6 +70,7 @@ extern int OF_Version;
 bool showintro = true;		
 uint8_t uCLIContext = 0;
 struct arp_header arp_test;
+uint8_t esc_char = 0;
 
 // Internal Functions	
 void saveConfig(void);
@@ -126,21 +129,34 @@ void task_command(char *str, char *str_last)
 	
 	while(udi_cdc_is_rx_ready()){
 		ch = udi_cdc_getc();
-		if (ch == 27)
+		
+		if (showintro == true)	// Show the intro only on the first key press
 		{
-			if (charcount == 0){
-				strcpy(str, str_last);
-				charcount = charcount_last;
-				printf("%s",str);
-			}	
+			printintro();
+			showintro = false;
+			ch = 13;
+		}	
+		if (ch == 27) // Is this the start of an escape key sequence?
+		{
+			esc_char = 1;
+			return;
 		}
-			
-		if (ch == 13){
-			if (showintro == true)
-			{
-				printintro();
-				showintro = false;
-			}
+		if (ch == 91 && esc_char == 1) // Second key in the escape key sequence?
+		{
+			esc_char = 2;
+			return;
+		}
+		if (ch == 65 && esc_char == 2 && charcount == 0)	// Last char for the escape sequence for the up arrow (ascii codes 27,91,65)
+		{
+			strcpy(str, str_last);
+			charcount = charcount_last;
+			printf("%s",str);
+			esc_char = 0;
+			return;		
+		}
+		
+		if (ch == 13)	// Enter Key
+		{
 			printf("\r\n");
 			str[charcount] = '\0';
 			strcpy(str_last, str);
@@ -196,30 +212,30 @@ void task_command(char *str, char *str_last)
 			};
 			charcount = 0;
 			str[0] = '\0';
+			esc_char = 0;
 			return;
-		}
-		
-		if (ch == 127 || ch == 8)
+			
+		} else if ((ch == 127 || ch == 8) && charcount > 0)	// Backspace key
 		{	
-			if (charcount > 0)
-			{
-				charcount--;
-				char tempstr[64];
-				tempstr[0] = '\0';
-				strncat(tempstr,str,charcount);
-				strcpy(str, tempstr);
-				printf("%c",ch); // echo to output
-			}
+			charcount--;
+			char tempstr[64];
+			tempstr[0] = '\0';
+			strncat(tempstr,str,charcount);
+			strcpy(str, tempstr);
+			printf("%c",ch); // echo to output
+			esc_char = 0;
 			return;
-		}
-
-		if (charcount < 63 && ch !=27 && ch !=91 && ch !=65)
+			
+		} else if (charcount < 63 && ch > 31 && ch < 127 && esc_char == 0)	// Alphanumeric key
 		{
 			strncat(str,&ch,1);
 			charcount++;
 			printf("%c",ch); // echo to output
+			esc_char = 0;
 			return;
 		}
+		
+		if (esc_char > 0) esc_char = 0; // If the escape key wasn't up arrow (ascii 65) then clear to flag
 	}
 }
 
@@ -761,77 +777,115 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 	if (strcmp(command, "show") == 0 && strcmp(param1, "flows") == 0)
 	{
 		int i;
-
-		//struct ofp_action_output * action_out2;
-		struct ofp_action_header * act_hdr;
-		//struct ofp_action_header * act_hdr2;
-		
+		struct ofp_action_header * act_hdr;	
 		if (iLastFlow > 0)
-		{			
-			printf("\r\n-------------------------------------------------------------------------\r\n");
-			for (i=0;i<iLastFlow;i++)
-			{
-				//act_hdr1 = flow_actions[i].action1;
-				//act_hdr2 = act_hdr1 + 2;
-				printf("\r\nFlow %d\r\n",i+1);
-				printf(" Match:\r\n");
-				printf("  Incoming Port: %d\t\t\tEthernet Type: 0x%.4X\r\n",ntohs(flow_match[i].match.in_port), ntohs(flow_match[i].match.dl_type));
-				printf("  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t\tDestination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",flow_match[i].match.dl_src[0], flow_match[i].match.dl_src[1], flow_match[i].match.dl_src[2], flow_match[i].match.dl_src[3], flow_match[i].match.dl_src[4], flow_match[i].match.dl_src[5] \
-				, flow_match[i].match.dl_dst[0], flow_match[i].match.dl_dst[1], flow_match[i].match.dl_dst[2], flow_match[i].match.dl_dst[3], flow_match[i].match.dl_dst[4], flow_match[i].match.dl_dst[5]);
-				printf("  VLAN ID: %d\t\t\t\tVLAN Priority: 0x%x\r\n",ntohs(flow_match[i].match.dl_vlan), flow_match[i].match.dl_vlan_pcp);
-				printf("  IP Protocol: %d\t\t\tIP ToS Bits: 0x%.2X\r\n",flow_match[i].match.nw_proto, flow_match[i].match.nw_tos);
-				printf("  TCP Source Address: %d.%d.%d.%d\r\n",ip4_addr1(&flow_match[i].match.nw_src), ip4_addr2(&flow_match[i].match.nw_src), ip4_addr3(&flow_match[i].match.nw_src), ip4_addr4(&flow_match[i].match.nw_src));
-				printf("  TCP Destination Address: %d.%d.%d.%d\r\n", ip4_addr1(&flow_match[i].match.nw_dst), ip4_addr2(&flow_match[i].match.nw_dst), ip4_addr3(&flow_match[i].match.nw_dst), ip4_addr4(&flow_match[i].match.nw_dst));
-				printf("  TCP/UDP Source Port: %d\t\tTCP/UDP Destination Port: %d\r\n",ntohs(flow_match[i].match.tp_src), ntohs(flow_match[i].match.tp_dst));
-				printf("  Wildcards: 0x%.8x\t\t\tCookie: 0x%" PRIx64 "\r\n",ntohl(flow_match[i].match.wildcards), htonll(flow_match[i].cookie));
-				printf("\r Attributes:\r\n");
-				printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match[i].priority), totaltime - flow_counters[i].duration);
-				printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match[i].hard_timeout), ntohs(flow_match[i].idle_timeout));
-				printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
-				printf("\r\n Actions:\r\n");
-				for(int q=0;q<4;q++)
+		{
+			// OpenFlow v1.0 (0x01) Flow Table
+			if( OF_Version == 1)
+			{				
+				printf("\r\n-------------------------------------------------------------------------\r\n");
+				for (i=0;i<iLastFlow;i++)
 				{
-					if(q == 0) act_hdr = flow_actions[i].action1;
-					if(q == 1) act_hdr = flow_actions[i].action2;
-					if(q == 2) act_hdr = flow_actions[i].action3;
-					if(q == 3) act_hdr = flow_actions[i].action4;
+					printf("\r\nFlow %d\r\n",i+1);
+					printf(" Match:\r\n");
+					printf("  Incoming Port: %d\t\t\tEthernet Type: 0x%.4X\r\n",ntohs(flow_match[i].match.in_port), ntohs(flow_match[i].match.dl_type));
+					printf("  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t\tDestination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",flow_match[i].match.dl_src[0], flow_match[i].match.dl_src[1], flow_match[i].match.dl_src[2], flow_match[i].match.dl_src[3], flow_match[i].match.dl_src[4], flow_match[i].match.dl_src[5] \
+					, flow_match[i].match.dl_dst[0], flow_match[i].match.dl_dst[1], flow_match[i].match.dl_dst[2], flow_match[i].match.dl_dst[3], flow_match[i].match.dl_dst[4], flow_match[i].match.dl_dst[5]);
+					printf("  VLAN ID: %d\t\t\t\tVLAN Priority: 0x%x\r\n",ntohs(flow_match[i].match.dl_vlan), flow_match[i].match.dl_vlan_pcp);
+					printf("  IP Protocol: %d\t\t\tIP ToS Bits: 0x%.2X\r\n",flow_match[i].match.nw_proto, flow_match[i].match.nw_tos);
+					printf("  TCP Source Address: %d.%d.%d.%d\r\n",ip4_addr1(&flow_match[i].match.nw_src), ip4_addr2(&flow_match[i].match.nw_src), ip4_addr3(&flow_match[i].match.nw_src), ip4_addr4(&flow_match[i].match.nw_src));
+					printf("  TCP Destination Address: %d.%d.%d.%d\r\n", ip4_addr1(&flow_match[i].match.nw_dst), ip4_addr2(&flow_match[i].match.nw_dst), ip4_addr3(&flow_match[i].match.nw_dst), ip4_addr4(&flow_match[i].match.nw_dst));
+					printf("  TCP/UDP Source Port: %d\t\tTCP/UDP Destination Port: %d\r\n",ntohs(flow_match[i].match.tp_src), ntohs(flow_match[i].match.tp_dst));
+					printf("  Wildcards: 0x%.8x\t\t\tCookie: 0x%" PRIx64 "\r\n",ntohl(flow_match[i].match.wildcards), htonll(flow_match[i].cookie));
+					printf("\r Attributes:\r\n");
+					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match[i].priority), totaltime - flow_counters[i].duration);
+					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match[i].hard_timeout), ntohs(flow_match[i].idle_timeout));
+					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
+					printf("\r\n Actions:\r\n");
+					for(int q=0;q<4;q++)
+					{
+						if(q == 0) act_hdr = flow_actions[i].action1;
+						if(q == 1) act_hdr = flow_actions[i].action2;
+						if(q == 2) act_hdr = flow_actions[i].action3;
+						if(q == 3) act_hdr = flow_actions[i].action4;
 					
-					if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_OUTPUT) // Output to port action
-					{
-						struct ofp_action_output * action_out = act_hdr;
-						printf("  Action %d:\r\n",q+1);
-						if (ntohs(action_out->port) <= 255) printf("   Output: %d\r\n", ntohs(action_out->port));
-						if (ntohs(action_out->port) == OFPP_CONTROLLER) printf("   Output: CONTROLLER\r\n");
-						if (ntohs(action_out->port) == OFPP_ALL) printf("   Output: ALL\r\n");
-						if (ntohs(action_out->port) == OFPP_FLOOD) printf("   Output: FLOOD\r\n");
-					}
-					if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_VLAN_VID) // 
-					{
-						struct ofp_action_vlan_vid *action_vlanid = act_hdr;
-						printf("  Action %d:\r\n",q+1);
-						printf("   Set VLAN ID to: %d\r\n", ntohs(action_vlanid->vlan_vid));
-					}
+						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_OUTPUT) // Output to port action
+						{
+							struct ofp_action_output * action_out = act_hdr;
+							printf("  Action %d:\r\n",q+1);
+							if (ntohs(action_out->port) <= 255) printf("   Output: %d\r\n", ntohs(action_out->port));
+							if (ntohs(action_out->port) == OFPP_CONTROLLER) printf("   Output: CONTROLLER\r\n");
+							if (ntohs(action_out->port) == OFPP_ALL) printf("   Output: ALL\r\n");
+							if (ntohs(action_out->port) == OFPP_FLOOD) printf("   Output: FLOOD\r\n");
+						}
+						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_VLAN_VID) // 
+						{
+							struct ofp_action_vlan_vid *action_vlanid = act_hdr;
+							printf("  Action %d:\r\n",q+1);
+							printf("   Set VLAN ID to: %d\r\n", ntohs(action_vlanid->vlan_vid));
+						}
 				
-					if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_DL_DST) // 
-					{
-						struct ofp_action_dl_addr *action_setdl = act_hdr;
-						printf("  Action %d:\r\n",q+1);
-						printf("   Set Destination MAC to: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", action_setdl->dl_addr[0],action_setdl->dl_addr[1],action_setdl->dl_addr[2],action_setdl->dl_addr[3],action_setdl->dl_addr[4],action_setdl->dl_addr[5]);
+						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_DL_DST) // 
+						{
+							struct ofp_action_dl_addr *action_setdl = act_hdr;
+							printf("  Action %d:\r\n",q+1);
+							printf("   Set Destination MAC to: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", action_setdl->dl_addr[0],action_setdl->dl_addr[1],action_setdl->dl_addr[2],action_setdl->dl_addr[3],action_setdl->dl_addr[4],action_setdl->dl_addr[5]);
+						}
+						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_DL_SRC) //
+						{
+							struct ofp_action_dl_addr *action_setdl = act_hdr;
+							printf("  Action %d:\r\n",q+1);
+							printf("   Set Source MAC to: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", action_setdl->dl_addr[0],action_setdl->dl_addr[1],action_setdl->dl_addr[2],action_setdl->dl_addr[3],action_setdl->dl_addr[4],action_setdl->dl_addr[5]);
+						}				
+						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_STRIP_VLAN) //
+						{
+							printf("  Action %d:\r\n",q+1);
+							printf("   Strip VLAN ID\r\n");
+						}			
 					}
-					if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_DL_SRC) //
-					{
-						struct ofp_action_dl_addr *action_setdl = act_hdr;
-						printf("  Action %d:\r\n",q+1);
-						printf("   Set Source MAC to: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", action_setdl->dl_addr[0],action_setdl->dl_addr[1],action_setdl->dl_addr[2],action_setdl->dl_addr[3],action_setdl->dl_addr[4],action_setdl->dl_addr[5]);
-					}				
-					if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_STRIP_VLAN) //
-					{
-						printf("  Action %d:\r\n",q+1);
-						printf("   Strip VLAN ID\r\n");
-					}			
 				}
+				printf("\r\n-------------------------------------------------------------------------\r\n\n");
 			}
-			printf("\r\n-------------------------------------------------------------------------\r\n\n");
+			// OpenFlow v1.3 (0x04) Flow Table
+			if( OF_Version == 4)
+			{
+				int match_size;
+				struct oxm_header13 oxm_header;
+				uint16_t oxm_value16;
+				uint32_t oxm_value32;
+				
+				printf("\r\n-------------------------------------------------------------------------\r\n");
+				for (i=0;i<iLastFlow;i++)
+				{
+					printf("\r\nFlow %d\r\n",i+1);
+					printf(" Match:\r\n");
+					match_size = 0;
+					while (match_size < (ntohs(flow_match13[i].match.length)-4))
+					{
+						memcpy(&oxm_header, ofp13_oxm_match[i] + match_size,4);
+						oxm_header.oxm_field = oxm_header.oxm_field >> 1;
+						switch(oxm_header.oxm_field)
+						{
+							case OFPXMT_OFB_IN_PORT:
+							memcpy(&oxm_value32, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+							printf("  In Port: %d\r\n",ntohl(oxm_value32));
+							break;
+							
+							case OFPXMT_OFB_VLAN_VID:
+							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+							printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
+							break;
+							
+						};
+						match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					}
+					printf("\r Attributes:\r\n");
+					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i].priority), totaltime - flow_counters[i].duration);
+					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match13[i].hard_timeout), ntohs(flow_match13[i].idle_timeout));
+					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
+				}
+				printf("\r\n-------------------------------------------------------------------------\r\n\n");				
+			}
 		} else {
 			printf("No Flows installed!\r\n");
 		}
