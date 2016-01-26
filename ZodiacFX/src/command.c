@@ -53,6 +53,7 @@ extern int charcount, charcount_last;
 extern struct ofp_flow_mod flow_match[MAX_FLOWS];
 extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
+extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
 extern int iLastFlow;
@@ -850,6 +851,10 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 			if( OF_Version == 4)
 			{
 				int match_size;
+				int inst_size;
+				int act_size;
+				struct ofp13_instruction *inst_ptr; 
+				struct ofp13_instruction_actions *inst_actions;
 				struct oxm_header13 oxm_header;
 				uint16_t oxm_value16;
 				uint32_t oxm_value32;
@@ -883,6 +888,53 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i].priority), totaltime - flow_counters[i].duration);
 					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match13[i].hard_timeout), ntohs(flow_match13[i].idle_timeout));
 					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
+					if (ofp13_oxm_inst[i] != NULL)
+					{
+						printf("\r Instructions:\r\n");
+						inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
+						inst_size = ntohs(inst_ptr->len);
+						if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
+						{
+							printf("  Apply Actions:\r\n");
+							struct ofp13_action_header *act_hdr;
+							act_size = 0;
+							while (act_size < (inst_size - sizeof(struct ofp13_instruction_actions)))
+							{
+								inst_actions  = ofp13_oxm_inst[i] + act_size;
+								act_hdr = &inst_actions->actions;
+								if (htons(act_hdr->type) == OFPAT13_OUTPUT)
+								{
+									struct ofp13_action_output *act_output = act_hdr;
+									if (htonl(act_output->port) < OFPP13_MAX)
+									{
+										printf("   Output Port: %d\r\n", htonl(act_output->port));
+									} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
+									{
+										printf("   Output: CONTROLLER \r\n");
+									} else if (htonl(act_output->port) == OFPP13_FLOOD)
+									{
+										printf("   Output: FLOOD \r\n");
+									}
+									act_output = NULL;
+								}
+								if (htons(act_hdr->type) == OFPAT13_SET_FIELD)
+								{
+									struct ofp13_action_set_field *act_set_field = act_hdr;
+									memcpy(&oxm_header, act_set_field->field,4);
+									oxm_header.oxm_field = oxm_header.oxm_field >> 1;		
+									switch(oxm_header.oxm_field)
+									{
+										case OFPXMT_OFB_VLAN_VID:
+										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+										printf("   Set VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
+										break;
+									};													
+								}
+								
+								act_size += htons(act_hdr->len);
+							}
+						}
+					}
 				}
 				printf("\r\n-------------------------------------------------------------------------\r\n\n");				
 			}

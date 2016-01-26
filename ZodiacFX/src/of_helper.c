@@ -34,6 +34,11 @@
 #include "openflow.h"
 #include "of_helper.h"
 #include "lwip/tcp.h"
+#include "ipv4/lwip/ip.h"
+#include "ipv4/lwip/inet_chksum.h"
+#include "ipv4/lwip/ip_addr.h"
+#include "lwip/tcp_impl.h"
+#include "lwip/udp.h"
 #include "switch.h"
 
 // Global variables
@@ -42,6 +47,7 @@ extern int OF_Version;
 extern struct ofp_flow_mod flow_match[MAX_FLOWS];
 extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
+extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
 extern int totaltime;
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
@@ -52,6 +58,50 @@ static uint16_t VLAN_VID_MASK = 0x0fff;
 static inline uint64_t (htonll)(uint64_t n)
 {
 	return HTONL(1) == 1 ? n : ((uint64_t) HTONL(n) << 32) | HTONL(n >> 32);
+}
+
+/*
+*	Updates the IP Checksum after a SET FIELD operation.
+*	Returns the flow number if it matches.
+*
+*	@param *p_uc_data - Pointer to the buffer that contains the packet to be updated.
+*	@param packet_size - The size of the packet.
+*	@param iphdr_offset - IP Header offset.
+*	
+*/
+void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
+{
+	struct ip_hdr *iphdr;
+	struct tcp_hdr *tcphdr;
+	struct udp_hdr *udphdr;
+	int payload_offset;
+	
+	iphdr = p_uc_data + iphdr_offset;
+	payload_offset = iphdr_offset + IPH_HL(iphdr)*4;
+	struct pbuf *p = pbuf_alloc(PBUF_RAW, packet_size - payload_offset, PBUF_ROM);
+	p->payload = p_uc_data + payload_offset;
+	if (IPH_PROTO(iphdr) == IP_PROTO_TCP) {
+		tcphdr = (struct tcp_hdr*)(p_uc_data + payload_offset);
+		tcphdr->chksum = 0;
+		tcphdr->chksum = inet_chksum_pseudo(p,
+		(ip_addr_t*)&(iphdr->src),
+		(ip_addr_t*)&(iphdr->dest),
+		IP_PROTO_TCP,
+		packet_size - payload_offset);
+	}
+	if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
+		udphdr = (struct udp_hdr*)(p_uc_data + payload_offset);
+		udphdr->chksum = 0;
+		udphdr->chksum = inet_chksum_pseudo(p,
+		(ip_addr_t*)&(iphdr->src),
+		(ip_addr_t*)&(iphdr->dest),
+		IP_PROTO_UDP,
+		packet_size - payload_offset);
+	}
+	pbuf_free(p);
+	
+	IPH_CHKSUM_SET(iphdr, 0);
+	IPH_CHKSUM_SET(iphdr, inet_chksum(iphdr, IPH_HL(iphdr)*4));
 }
 
 /*
@@ -149,14 +199,14 @@ void nnOF_timer(void)
 }
 
 /*
-*	Matches packet headers against the installed flows.
+*	Matches packet headers against the installed flows for OpenFlow v1.0 (0x01).
 *	Returns the flow number if it matches.
 *
 *	@param *pBuffer - pointer to the buffer that contains the packet to be macthed.
 *	@param port - The port that the packet was received on.
 *	
 */
-int flowmatch(uint8_t *pBuffer, int port)
+int flowmatch10(uint8_t *pBuffer, int port)
 {
 	int matched_flow = -1;
 	int i;
@@ -263,6 +313,117 @@ int flowmatch(uint8_t *pBuffer, int port)
 		}
 	}
 
+	return matched_flow;
+}
+
+/*
+*	Matches packet headers against the installed flows for OpenFlow v1.3 (0x04).
+*	Returns the flow number if it matches.
+*
+*	@param *pBuffer - pointer to the buffer that contains the packet to be macthed.
+*	@param port - The port that the packet was received on.
+*	
+*/
+int flowmatch13(uint8_t *pBuffer, int port)
+{
+	int matched_flow = -1;	
+	uint8_t eth_src[6];
+	uint8_t eth_dst[6];
+	uint16_t eth_prot;
+	uint16_t vlanid;
+	uint32_t ip_src;
+	uint32_t ip_dst;
+	uint8_t ip_prot;
+	uint16_t tcp_src;
+	uint16_t tcp_dst;
+	bool vtag = false;
+	int match_size;
+	struct oxm_header13 oxm_header;
+	uint16_t oxm_value16;
+	uint32_t oxm_value32;
+		
+	memcpy(&eth_dst, pBuffer, 6);
+	memcpy(&eth_src, pBuffer + 6, 6);
+	memcpy(&eth_prot, pBuffer + 12, 2);
+
+	if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
+	{
+		//printf("0x21 error\r\n");
+		return -2;
+	}
+
+	// VLAN tagged
+	if (ntohs(eth_prot) == 0x8100)
+	{
+		memcpy(&vlanid, pBuffer + 14, 2);
+		memcpy(&eth_prot, pBuffer + 16, 2);	// Add 4 bytes to the offset
+		vtag = true;
+	}
+	// IP packets
+	if (ntohs(eth_prot) == 0x0800)
+	{
+		if (vtag == true)	// Add 4 bytes to the offset
+		{
+			memcpy(&ip_src, pBuffer + 30, 4);
+			memcpy(&ip_dst, pBuffer + 34, 4);
+			memcpy(&ip_prot, pBuffer + 27, 1);
+			} else {
+			memcpy(&ip_src, pBuffer + 26, 4);
+			memcpy(&ip_dst, pBuffer + 30, 4);
+			memcpy(&ip_prot, pBuffer + 23, 1);
+		}
+		// TCP / UDP
+		if (ip_prot == 6 || ip_prot == 17)
+		{
+			if (vtag == true)	// Add 4 bytes to the offset
+			{
+				memcpy(&tcp_src, pBuffer + 38, 2);
+				memcpy(&tcp_dst, pBuffer + 40, 2);
+				} else {
+				memcpy(&tcp_src, pBuffer + 34, 2);
+				memcpy(&tcp_dst, pBuffer + 36, 2);
+			}
+		}
+	}
+	
+
+	for (int i=0;i<iLastFlow;i++)
+	{
+		// Make sure its an active flow
+		if (flow_counters[i].active == false)
+		{
+			continue;
+		}
+		
+		match_size = 0;
+		while (match_size < (ntohs(flow_match13[i].match.length)-4))
+		{
+			memcpy(&oxm_header, ofp13_oxm_match[i] + match_size,4);
+			oxm_header.oxm_field = oxm_header.oxm_field >> 1;
+			switch(oxm_header.oxm_field)
+			{
+				case OFPXMT_OFB_IN_PORT:
+				memcpy(&oxm_value32, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+				if ( port == ntohl(oxm_value32))
+				{
+					if (matched_flow > -1)
+					{
+						if(ntohs(flow_match[i].priority) > ntohs(flow_match[matched_flow].priority)) matched_flow = i;
+					} else {
+						matched_flow = i;
+					}
+				}
+				break;
+							
+	// 			case OFPXMT_OFB_VLAN_VID:
+	// 			memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+	// 			printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
+	// 			break;
+							
+			};
+			match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+		}
+	}
 	return matched_flow;
 }
 
@@ -404,7 +565,9 @@ int flow_stats_msg13(char *buffer, int first, int last)
 	struct ofp13_flow_stats flow_stats;
 	int stats_size = 0;
 	char *buffer_ptr = buffer;
-	int len = 0;
+	int len;
+	int inst_size;
+	int stats_len;
 		
 	for(int k = first; k<last;k++)
 	{
@@ -425,16 +588,26 @@ int flow_stats_msg13(char *buffer, int first, int last)
 		{		
 			len = stats_size + (htons(flow_match13[k].match.length)-4);
 			if (len % 8 != 0) len += (8-(len % 8));
-			flow_stats.length = htons(len);
-			memcpy(buffer_ptr, &flow_stats, stats_size);
+			stats_len = len;
 			memcpy(buffer_ptr + (stats_size - 4), ofp13_oxm_match[k], htons(flow_match13[k].match.length)-4);
-			buffer_ptr += len;
 		} else {
-			flow_stats.length = htons(stats_size);
-			memcpy(buffer_ptr, &flow_stats, stats_size);
-			buffer_ptr += stats_size;
+			stats_len = stats_size;
 		}
-
+		buffer_ptr += stats_len;
+		if (ofp13_oxm_inst[k] != NULL)
+		{
+			if (htons(flow_match13[k].match.length) > 4)
+			{
+				inst_size = ntohs(flow_match13[k].header.length) - len;
+			} else {
+				inst_size = ntohs(flow_match13[k].header.length) - (stats_size + (htons(flow_match13[k].match.length)-4));
+			}
+			memcpy(buffer_ptr, ofp13_oxm_inst[k], inst_size);
+			stats_len += inst_size;		
+			buffer_ptr += inst_size;
+		}
+		flow_stats.length = htons(stats_len);
+		memcpy(buffer_ptr - stats_len, &flow_stats, stats_size);
 	}
 	return (buffer_ptr - buffer);
 	

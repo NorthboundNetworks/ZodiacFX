@@ -43,8 +43,10 @@ extern int iLastFlow;
 extern int totaltime;
 extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
+extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
 extern struct ofp13_port_stats phys13_port_stats[4];
+extern struct table_counter table_counters;
 extern uint8_t port_status[4];
 extern struct ofp_switch_config Switch_config;
 extern uint8_t shared_buffer[2048];
@@ -80,13 +82,128 @@ static inline uint64_t (htonll)(uint64_t n)
 
 void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 {
+	uint16_t eth_prot;
+	memcpy(&eth_prot, p_uc_data + 12, 2);
 	uint16_t packet_size;
 	memcpy(&packet_size, ul_size, 2);
-		
+	uint16_t vlantag = htons(0x8100);
+			
 	if (Zodiac_Config.OFEnabled == OF_ENABLED && iLastFlow == 0) // Check to if the flow table is empty
 	{
 		packet_in13 (p_uc_data, packet_size, port, OFPR13_NO_MATCH); // Packet In if there are no flows in the table
 		return;
+	}
+	
+	if (Zodiac_Config.OFEnabled == OF_ENABLED && iLastFlow > 0) // Main lookup
+	{
+		int i = -1;
+		// Check if packet matches an existing flow
+		i = flowmatch13(p_uc_data, port);
+		if (i == -2) return;	// Error packet
+		if (i == -1)	// No match
+		{
+			packet_in13 (p_uc_data, packet_size, port, OFPR13_NO_MATCH); // Packet In if there are no flows in the table
+			return;
+		}
+		
+		if ( i > -1)
+		{
+			flow_counters[i].hitCount++; // Increment flow hit count
+			flow_counters[i].bytes += packet_size;
+			flow_counters[i].lastmatch = totaltime; // Increment flow hit count
+			table_counters.matched_count++;
+			
+			struct ofp13_instruction_actions *inst_actions;
+			struct ofp13_action_header *act_hdr;
+			struct ofp13_instruction *inst_ptr; 
+			inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
+			int inst_size = ntohs(inst_ptr->len);
+			if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
+			{
+				int act_size = 0;
+				while (act_size < (inst_size - sizeof(struct ofp13_instruction_actions)))
+				{
+					inst_actions  = ofp13_oxm_inst[i] + act_size;
+					act_hdr = &inst_actions->actions;
+					if (htons(act_hdr->type) == OFPAT13_OUTPUT)
+					{
+						struct ofp13_action_output *act_output = act_hdr;
+						if (htonl(act_output->port) < OFPP13_MAX)
+						{
+							int outport = (1<< (ntohl(act_output->port)-1));
+							gmac_write(p_uc_data, packet_size, outport);
+						} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
+						{
+							int pisize = ntohs(act_output->max_len);
+							if (pisize > packet_size) pisize = packet_size;
+							packet_in13(p_uc_data, pisize, port, OFPR_ACTION);
+						} else if (htonl(act_output->port) == OFPP13_FLOOD)
+						{
+							int outport = 7 - (1<< (ntohl(act_output->port)-1));	// Need to fix this, may also send out the Non-OpenFlow port
+							gmac_write(p_uc_data, packet_size, outport);
+						}
+					}
+					if (htons(act_hdr->type) == OFPAT13_SET_FIELD)
+					{
+						struct ofp13_action_set_field *act_set_field = act_hdr;
+						struct oxm_header13 oxm_header;
+						uint16_t oxm_value16;
+						uint32_t oxm_value32;
+						memcpy(&oxm_header, act_set_field->field,4);
+						oxm_header.oxm_field = oxm_header.oxm_field >> 1;		
+						switch(oxm_header.oxm_field)
+						{
+							case OFPXMT_OFB_VLAN_VID:
+							memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+							//uint16_t vlan_vid = (ntohs(oxm_value16) - 0x1000);
+							uint16_t vlan_vid = (oxm_value16 - 0x10);
+							//printf("   Set VLAN ID: %d\r\n", vlan_vid);
+					
+							uint16_t action_vlanid  = act_hdr;
+							uint16_t pcp;
+							uint16_t vlanid;
+							uint16_t vlanid_mask = htons(0x0fff);
+						
+							if (eth_prot == vlantag)
+							{
+								memcpy(pcp, p_uc_data + 14, 2);
+							} else {
+								pcp = 0;
+							}
+							if (vlan_vid == 0xffff)
+							{
+								vlanid = pcp & ~vlanid_mask;
+							} else {
+									vlanid = (vlan_vid & vlanid_mask) | (pcp & ~vlanid_mask);
+							}						
+							// Does the packet have a VLAN header?
+							if (eth_prot == vlantag)
+							{
+								if (vlan_vid == 0)	// If the packet has a tag but the action is to set it to 0 then remove it
+								{
+									memmove(p_uc_data + 12, p_uc_data + 16, packet_size - 16);
+									packet_size -= 4;
+									memcpy(ul_size, &packet_size, 2);
+								} else {
+									memcpy(p_uc_data + 14, &vlanid, 2);
+								}
+							} else {
+								if (vlan_vid > 0)		// Only add the tag if the VLAN ID is greater then 0
+								{
+									memmove(p_uc_data + 16, p_uc_data + 12, packet_size - 12);
+									memcpy(p_uc_data + 12, &vlantag,2);
+									memcpy(p_uc_data + 14, &vlanid, 2);
+									packet_size += 4;
+									memcpy(ul_size, &packet_size, 2);
+								}
+							}				
+							break;
+						};													
+					}								
+					act_size += htons(act_hdr->len);
+				}
+			}
+		}
 	}
 	return;
 }
@@ -340,7 +457,6 @@ int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	reply->type = htons(OFPMP13_FLOW);
 	
 	if(iLastFlow > 12) iLastFlow = 12;	// Need to fix this! LWIP won't send buffers bigger then 1 packet (1460 bytes)
-	//int len = flow_stats_msg13(&statsbuffer, 0, 3);
 	int len = flow_stats_msg13(&statsbuffer, 0, iLastFlow);
 
 	memcpy(reply->body, &statsbuffer, len);
@@ -472,6 +588,7 @@ void flow_mod13(struct ofp_header *msg)
 */
 void flow_add13(struct ofp_header *msg)
 {
+	
 	if (iLastFlow > (MAX_FLOWS-1))
 	{
 		of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
@@ -488,8 +605,18 @@ void flow_add13(struct ofp_header *msg)
 	} else {
 		ofp13_oxm_match[iLastFlow] = NULL;
 	}
-
-		
+	int mod_size = (sizeof(struct ofp13_flow_mod) + (htons(ptr_fm->match.length)-4));
+	if (mod_size % 8 != 0) mod_size += (8-(mod_size % 8));
+	int instruction_size = htons(ptr_fm->header.length) - mod_size;
+	if (instruction_size > 0)
+	{
+		ofp13_oxm_inst[iLastFlow] = malloc(instruction_size);	// Allocate a space to store instructions and actions
+		uint8_t *inst_ptr = (uint8_t *)ptr_fm + mod_size;
+		memcpy(ofp13_oxm_inst[iLastFlow], inst_ptr, instruction_size);
+	} else {
+		ofp13_oxm_inst[iLastFlow] = NULL;
+	}	
+			
 	flow_counters[iLastFlow].duration = totaltime;
 	flow_counters[iLastFlow].lastmatch = totaltime;
 	flow_counters[iLastFlow].active = true;
