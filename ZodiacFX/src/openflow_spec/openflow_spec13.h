@@ -55,6 +55,31 @@
 
 #define OFP13_ETH_ALEN 6          /* Bytes in an Ethernet address. */
 
+/* Port numbering. Ports are numbered starting from 1. */
+enum ofp_port_no {
+    /* Maximum number of physical and logical switch ports. */
+    OFPP13_MAX        = 0xffffff00,
+
+    /* Reserved OpenFlow Port (fake output "ports"). */
+    OFPP13_IN_PORT    = 0xfffffff8,  /* Send the packet out the input port.  This
+                                      reserved port must be explicitly used
+                                      in order to send back out of the input
+                                      port. */
+    OFPP13_TABLE      = 0xfffffff9,  /* Submit the packet to the first flow table
+                                      NB: This destination port can only be
+                                      used in packet-out messages. */
+    OFPP13_NORMAL     = 0xfffffffa,  /* Process with normal L2/L3 switching. */
+    OFPP13_FLOOD      = 0xfffffffb,  /* All physical ports in VLAN, except input
+                                      port and those blocked or link down. */
+    OFPP13_ALL        = 0xfffffffc,  /* All physical ports except input port. */
+    OFPP13_CONTROLLER = 0xfffffffd,  /* Send to controller. */
+    OFPP13_LOCAL      = 0xfffffffe,  /* Local openflow "port". */
+    OFPP13_ANY        = 0xffffffff   /* Wildcard port used only for flow mod
+                                      (delete) and flow stats requests. Selects
+                                      all flows regardless of output port
+                                      (including flows with no output port). */
+};
+
 enum ofp13_type {
 	/* Immutable messages. */
 	OFPT13_HELLO              = 0,  /* Symmetric message */
@@ -380,26 +405,26 @@ enum ofp13_flow_mod_failed_code {
 /* ## ----------------- ## */
 
 enum ofp13_action_type {
-    OFPAT_OUTPUT       = 0,  /* Output to switch port. */
-    OFPAT_COPY_TTL_OUT = 11, /* Copy TTL "outwards" -- from next-to-outermost
+    OFPAT13_OUTPUT       = 0,  /* Output to switch port. */
+    OFPAT13_COPY_TTL_OUT = 11, /* Copy TTL "outwards" -- from next-to-outermost
                                 to outermost */
-    OFPAT_COPY_TTL_IN  = 12, /* Copy TTL "inwards" -- from outermost to
+    OFPAT13_COPY_TTL_IN  = 12, /* Copy TTL "inwards" -- from outermost to
                                next-to-outermost */
-    OFPAT_SET_MPLS_TTL = 15, /* MPLS TTL */
-    OFPAT_DEC_MPLS_TTL = 16, /* Decrement MPLS TTL */
+    OFPAT13_SET_MPLS_TTL = 15, /* MPLS TTL */
+    OFPAT13_DEC_MPLS_TTL = 16, /* Decrement MPLS TTL */
 
-    OFPAT_PUSH_VLAN    = 17, /* Push a new VLAN tag */
-    OFPAT_POP_VLAN     = 18, /* Pop the outer VLAN tag */
-    OFPAT_PUSH_MPLS    = 19, /* Push a new MPLS tag */
-    OFPAT_POP_MPLS     = 20, /* Pop the outer MPLS tag */
-    OFPAT_SET_QUEUE    = 21, /* Set queue id when outputting to a port */
-    OFPAT_GROUP        = 22, /* Apply group. */
-    OFPAT_SET_NW_TTL   = 23, /* IP TTL. */
-    OFPAT_DEC_NW_TTL   = 24, /* Decrement IP TTL. */
-    OFPAT_SET_FIELD    = 25, /* Set a header field using OXM TLV format. */
-    OFPAT_PUSH_PBB     = 26, /* Push a new PBB service tag (I-TAG) */
-    OFPAT_POP_PBB      = 27, /* Pop the outer PBB service tag (I-TAG) */
-    OFPAT_EXPERIMENTER = 0xffff
+    OFPAT13_PUSH_VLAN    = 17, /* Push a new VLAN tag */
+    OFPAT13_POP_VLAN     = 18, /* Pop the outer VLAN tag */
+    OFPAT13_PUSH_MPLS    = 19, /* Push a new MPLS tag */
+    OFPAT13_POP_MPLS     = 20, /* Pop the outer MPLS tag */
+    OFPAT13_SET_QUEUE    = 21, /* Set queue id when outputting to a port */
+    OFPAT13_GROUP        = 22, /* Apply group. */
+    OFPAT13_SET_NW_TTL   = 23, /* IP TTL. */
+    OFPAT13_DEC_NW_TTL   = 24, /* Decrement IP TTL. */
+    OFPAT13_SET_FIELD    = 25, /* Set a header field using OXM TLV format. */
+    OFPAT13_PUSH_PBB     = 26, /* Push a new PBB service tag (I-TAG) */
+    OFPAT13_POP_PBB      = 27, /* Pop the outer PBB service tag (I-TAG) */
+    OFPAT13_EXPERIMENTER = 0xffff
 };
 
 /* Action header that is common to all actions.  The length includes the
@@ -502,18 +527,18 @@ struct ofp13_action_experimenter_header {
 /* ## ---------------------- ## */
 
 enum ofp13_instruction_type {
-    OFPIT_GOTO_TABLE = 1,       /* Setup the next table in the lookup
+    OFPIT13_GOTO_TABLE = 1,       /* Setup the next table in the lookup
                                    pipeline */
-    OFPIT_WRITE_METADATA = 2,   /* Setup the metadata field for use later in
+    OFPIT13_WRITE_METADATA = 2,   /* Setup the metadata field for use later in
                                    pipeline */
-    OFPIT_WRITE_ACTIONS = 3,    /* Write the action(s) onto the datapath action
+    OFPIT13_WRITE_ACTIONS = 3,    /* Write the action(s) onto the datapath action
                                    set */
-    OFPIT_APPLY_ACTIONS = 4,    /* Applies the action(s) immediately */
-    OFPIT_CLEAR_ACTIONS = 5,    /* Clears all actions from the datapath
+    OFPIT13_APPLY_ACTIONS = 4,    /* Applies the action(s) immediately */
+    OFPIT13_CLEAR_ACTIONS = 5,    /* Clears all actions from the datapath
                                    action set */
-    OFPIT_METER = 6,            /* Apply meter (rate limiter) */
+    OFPIT13_METER = 6,            /* Apply meter (rate limiter) */
 
-    OFPIT_EXPERIMENTER = 0xFFFF  /* Experimenter instruction */
+    OFPIT13_EXPERIMENTER = 0xFFFF  /* Experimenter instruction */
 };
 
 /* Generic ofp_instruction structure */

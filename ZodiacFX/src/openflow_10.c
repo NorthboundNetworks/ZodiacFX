@@ -33,10 +33,11 @@
 #include "command.h"
 #include "openflow.h"
 #include "switch.h"
+#include "of_helper.h"
 #include "lwip/tcp.h"
 #include "ipv4/lwip/ip.h"
-#include "ipv4/lwip/inet_chksum.h"
-#include "ipv4/lwip/ip_addr.h"
+//#include "ipv4/lwip/inet_chksum.h"
+//#include "ipv4/lwip/ip_addr.h"
 #include "lwip/tcp_impl.h"
 #include "lwip/udp.h"
 
@@ -88,41 +89,6 @@ static inline uint64_t (htonll)(uint64_t n)
 	return HTONL(1) == 1 ? n : ((uint64_t) HTONL(n) << 32) | HTONL(n >> 32);
 }
 
-static void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
-{
-	struct ip_hdr *iphdr;
-	struct tcp_hdr *tcphdr;
-	struct udp_hdr *udphdr;
-	int payload_offset;
-	
-	iphdr = p_uc_data + iphdr_offset;
-	payload_offset = iphdr_offset + IPH_HL(iphdr)*4;
-	struct pbuf *p = pbuf_alloc(PBUF_RAW, packet_size - payload_offset, PBUF_ROM);
-	p->payload = p_uc_data + payload_offset;
-	if (IPH_PROTO(iphdr) == IP_PROTO_TCP) {
-		tcphdr = (struct tcp_hdr*)(p_uc_data + payload_offset);
-		tcphdr->chksum = 0;
-		tcphdr->chksum = inet_chksum_pseudo(p,
-		(ip_addr_t*)&(iphdr->src),
-		(ip_addr_t*)&(iphdr->dest),
-		IP_PROTO_TCP,
-		packet_size - payload_offset);
-	}
-	if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
-		udphdr = (struct udp_hdr*)(p_uc_data + payload_offset);
-		udphdr->chksum = 0;
-		udphdr->chksum = inet_chksum_pseudo(p,
-		(ip_addr_t*)&(iphdr->src),
-		(ip_addr_t*)&(iphdr->dest),
-		IP_PROTO_UDP,
-		packet_size - payload_offset);
-	}
-	pbuf_free(p);
-	
-	IPH_CHKSUM_SET(iphdr, 0);
-	IPH_CHKSUM_SET(iphdr, inet_chksum(iphdr, IPH_HL(iphdr)*4));
-}
-
 /*
 *	Main OpenFlow flow processing function
 *
@@ -169,7 +135,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	{
 		int i = -1;
 		// Check if packet matches an existing flow
-		i = flowmatch(p_uc_data, port);
+		i = flowmatch10(p_uc_data, port);
 		if (i == -2) return;	// Error packet
 		if (i == -1)	// No match
 		{
