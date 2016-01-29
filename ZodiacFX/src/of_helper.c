@@ -326,11 +326,12 @@ int flowmatch10(uint8_t *pBuffer, int port)
 */
 int flowmatch13(uint8_t *pBuffer, int port)
 {
-	int matched_flow = -1;	
+	int matched_flow = -1;
+	int priority_match = -1;
 	uint8_t eth_src[6];
 	uint8_t eth_dst[6];
 	uint16_t eth_prot;
-	uint16_t vlanid;
+	uint16_t vlanid = 0;
 	uint32_t ip_src;
 	uint32_t ip_dst;
 	uint8_t ip_prot;
@@ -339,9 +340,13 @@ int flowmatch13(uint8_t *pBuffer, int port)
 	bool vtag = false;
 	int match_size;
 	struct oxm_header13 oxm_header;
+	uint8_t oxm_value8;
 	uint16_t oxm_value16;
 	uint32_t oxm_value32;
-		
+	uint8_t oxm_eth[6];
+	uint8_t oxm_ipv4[4];
+	uint16_t oxm_ipv6[8];
+						
 	memcpy(&eth_dst, pBuffer, 6);
 	memcpy(&eth_src, pBuffer + 6, 6);
 	memcpy(&eth_prot, pBuffer + 12, 2);
@@ -386,16 +391,24 @@ int flowmatch13(uint8_t *pBuffer, int port)
 		}
 	}
 	
-
 	for (int i=0;i<iLastFlow;i++)
 	{
 		// Make sure its an active flow
 		if (flow_counters[i].active == false)
 		{
 			continue;
+		}		
+		// If the flow has no match fields (full wild) it is an automatic match	
+		if (ofp13_oxm_match[i] ==  NULL)
+		{
+			if ((ntohs(flow_match13[i].priority) > ntohs(flow_match13[matched_flow].priority)) || matched_flow == -1) matched_flow = i;
+			continue;
 		}
+		// If this flow is of a lower priority then one that is already match then there is no point going through a check.
+		if (matched_flow > -1 && (ntohs(flow_match13[matched_flow].priority) > ntohs(flow_match13[i].priority))) continue;
 		
-		match_size = 0;
+		// Main flow match loop			
+		match_size = 0;				
 		while (match_size < (ntohs(flow_match13[i].match.length)-4))
 		{
 			memcpy(&oxm_header, ofp13_oxm_match[i] + match_size,4);
@@ -406,21 +419,172 @@ int flowmatch13(uint8_t *pBuffer, int port)
 				memcpy(&oxm_value32, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
 				if ( port == ntohl(oxm_value32))
 				{
-					if (matched_flow > -1)
-					{
-						if(ntohs(flow_match[i].priority) > ntohs(flow_match[matched_flow].priority)) matched_flow = i;
-					} else {
-						matched_flow = i;
-					}
+					priority_match = i;
+				} else {
+					priority_match = -1;
+					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					continue;
 				}
 				break;
-							
-	// 			case OFPXMT_OFB_VLAN_VID:
-	// 			memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-	// 			printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
-	// 			break;
-							
+
+				case OFPXMT_OFB_ETH_DST:
+				memcpy(&oxm_eth, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 6);
+				if (memcmp(eth_dst, oxm_eth, 6) == 0)
+				{
+					priority_match = i;
+				} else {
+					priority_match = -1;
+					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					continue;
+				}
+				break;
+				
+				case OFPXMT_OFB_ETH_SRC:
+				memcpy(&oxm_eth, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 6);
+				if (memcmp(eth_dst, oxm_eth, 6) == 0)
+				{
+					priority_match = i;
+				} else {
+					priority_match = -1;
+					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					continue;
+				}
+				break;
+
+				case OFPXMT_OFB_ETH_TYPE:
+				memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+				if (eth_prot == oxm_value16)
+				{
+					priority_match = i;
+				} else {
+					priority_match = -1;
+					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					continue;
+				}			
+				break;
+				
+				case OFPXMT_OFB_IP_PROTO:
+				memcpy(&oxm_value8, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 1);
+				if (ip_prot == oxm_value8)
+				{
+					priority_match = i;
+				} else {
+					priority_match = -1;
+					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					continue;
+				}			
+				break;
+
+				case OFPXMT_OFB_IPV4_SRC:
+				memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+				if (memcmp(ip_src, oxm_eth, 4) == 0)
+				{
+					priority_match = i;
+					} else {
+					priority_match = -1;
+					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					continue;
+				}
+				break;
+				
+				case OFPXMT_OFB_IPV4_DST:
+				memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+				if (memcmp(ip_dst, oxm_eth, 4) == 0)
+				{
+					priority_match = i;
+					} else {
+					priority_match = -1;
+					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					continue;
+				}
+				break;
+
+// 				case OFPXMT_OFB_IPV6_SRC:
+// 				memcpy(&oxm_ipv6, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 16);
+// 				if (memcmp(ip_src, oxm_eth, 16) == 0)
+// 				{
+// 					priority_match = i;
+// 					} else {
+// 					priority_match = -1;
+// 					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+// 					continue;
+// 				}
+// 				break;
+// 				
+// 				case OFPXMT_OFB_IPV6_DST:
+// 				memcpy(&oxm_ipv6, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 16);
+// 				if (memcmp(ip_dst, oxm_eth, 16) == 0)
+// 				{
+// 					priority_match = i;
+// 					} else {
+// 					priority_match = -1;
+// 					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+// 					continue;
+// 				}
+// 				break;
+
+				case OFPXMT_OFB_TCP_SRC:
+				memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+				if (tcp_src == oxm_value16)
+				{
+					priority_match = i;
+					} else {
+					priority_match = -1;
+					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					continue;
+				}
+				break;
+
+				case OFPXMT_OFB_TCP_DST:
+				memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+				if (tcp_dst == oxm_value16)
+				{
+					priority_match = i;
+					} else {
+					priority_match = -1;
+					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					continue;
+				}
+				break;
+
+				case OFPXMT_OFB_UDP_SRC:
+				memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+				if (tcp_src == oxm_value16)
+				{
+					priority_match = i;
+					} else {
+					priority_match = -1;
+					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					continue;
+				}
+				break;
+
+				case OFPXMT_OFB_UDP_DST:
+				memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+				if (tcp_dst == oxm_value16)
+				{
+					priority_match = i;
+					} else {
+					priority_match = -1;
+					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					continue;
+				}
+				break;
+										
+	 			case OFPXMT_OFB_VLAN_VID:
+	 			memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+				oxm_value16 -= 0x10;
+				if (vtag == true && vlanid == oxm_value16)
+				{
+					priority_match = i;
+				} else {
+					priority_match = -1;
+					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+					continue;
+				}
+				break;			
 			};
+			matched_flow = priority_match;
 			match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
 		}
 	}
@@ -565,10 +729,11 @@ int flow_stats_msg13(char *buffer, int first, int last)
 	struct ofp13_flow_stats flow_stats;
 	int stats_size = 0;
 	char *buffer_ptr = buffer;
-	int len;
 	int inst_size;
 	int stats_len;
-		
+	int len;
+	int pad = 0;	
+	
 	for(int k = first; k<last;k++)
 	{
 		stats_size = sizeof(flow_stats);
@@ -586,10 +751,15 @@ int flow_stats_msg13(char *buffer, int first, int last)
 		
 		if (htons(flow_match13[k].match.length) > 4)
 		{		
-			len = stats_size + (htons(flow_match13[k].match.length)-4);
-			if (len % 8 != 0) len += (8-(len % 8));
+			len = stats_size + (htons(flow_match13[k].match.length)-8);
+			if (len % 8 != 0)
+			{				
+				pad = (8-(len % 8));
+				len += pad;
+			}
 			stats_len = len;
 			memcpy(buffer_ptr + (stats_size - 4), ofp13_oxm_match[k], htons(flow_match13[k].match.length)-4);
+			memset(buffer_ptr + (len-pad), 0, pad);		//Pad the match fields with zero to a multiple of 8
 		} else {
 			stats_len = stats_size;
 		}

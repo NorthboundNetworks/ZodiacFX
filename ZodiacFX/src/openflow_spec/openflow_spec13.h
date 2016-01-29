@@ -1356,8 +1356,8 @@ struct ofp13_packet_in {
      * The padding bytes preceding the Ethernet frame ensure that the IP
      * header (if any) following the Ethernet header is 32-bit aligned.
      */
-    uint8_t pad[2];       /* Align to 64 bit + 16 bit */
-    uint8_t data[0];      /* Ethernet frame */
+    //uint8_t pad[2];       /* Align to 64 bit + 16 bit */
+    //uint8_t data[0];      /* Ethernet frame */
 };
 
 #endif /* OPENFLOW_13_H_ */
