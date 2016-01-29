@@ -70,7 +70,8 @@ static void afec_temp_sensor_end_conversion(void)
 	* According to datasheet, The output voltage VT = 1.44V at 27C
 	* and the temperature slope dVT/dT = 4.7 mV/C
 	*/
-	ul_temp = (ul_vol - 1440)  * 100 / 470 + 27;
+	//ul_temp = (ul_vol - 1440)  * 100 / 470 + 27;
+	ul_temp = (ul_vol - 1405)  * 100 / 470 + 27;
 }
 
 /*
