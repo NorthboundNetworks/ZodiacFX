@@ -301,13 +301,27 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 					printf(" VLAN ID: %d\r\n", Zodiac_Config.vlan_list[x].uVlanID);
 				}
 			}
-			printf(" RX Bytes: %" PRIu64 "\r\n", phys10_port_stats[i].rx_bytes);
-			printf(" TX Bytes: %" PRIu64 "\r\n", phys10_port_stats[i].tx_bytes);
-			if (Zodiac_Config.of_port[i] == 1) printf(" RX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].rx_packets);
-			if (Zodiac_Config.of_port[i] == 1) printf(" TX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].tx_packets);
-			printf(" RX Dropped Packets: %" PRIu64 "\r\n", phys10_port_stats[i].rx_dropped);
-			printf(" TX Dropped Packets: %" PRIu64 "\r\n", phys10_port_stats[i].tx_dropped);
-			printf(" RX CRC Errors: %" PRIu64 "\r\n", phys10_port_stats[i].rx_crc_err);
+			if( OF_Version == 1)
+			{			
+				printf(" RX Bytes: %" PRIu64 "\r\n", phys10_port_stats[i].rx_bytes);
+				printf(" TX Bytes: %" PRIu64 "\r\n", phys10_port_stats[i].tx_bytes);
+				if (Zodiac_Config.of_port[i] == 1) printf(" RX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].rx_packets);
+				if (Zodiac_Config.of_port[i] == 1) printf(" TX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].tx_packets);
+				printf(" RX Dropped Packets: %" PRIu64 "\r\n", phys10_port_stats[i].rx_dropped);
+				printf(" TX Dropped Packets: %" PRIu64 "\r\n", phys10_port_stats[i].tx_dropped);
+				printf(" RX CRC Errors: %" PRIu64 "\r\n", phys10_port_stats[i].rx_crc_err);
+			}
+			if( OF_Version == 4)
+			{
+				printf(" RX Bytes: %" PRIu64 "\r\n", phys13_port_stats[i].rx_bytes);
+				printf(" TX Bytes: %" PRIu64 "\r\n", phys13_port_stats[i].tx_bytes);
+				if (Zodiac_Config.of_port[i] == 1) printf(" RX Packets: %" PRIu64 "\r\n", phys13_port_stats[i].rx_packets);
+				if (Zodiac_Config.of_port[i] == 1) printf(" TX Packets: %" PRIu64 "\r\n", phys13_port_stats[i].tx_packets);
+				printf(" RX Dropped Packets: %" PRIu64 "\r\n", phys13_port_stats[i].rx_dropped);
+				printf(" TX Dropped Packets: %" PRIu64 "\r\n", phys13_port_stats[i].tx_dropped);
+				printf(" RX CRC Errors: %" PRIu64 "\r\n", phys13_port_stats[i].rx_crc_err);
+			}
+			
 		}
 		printf("\r\n-------------------------------------------------------------------------\r\n\n");
 		

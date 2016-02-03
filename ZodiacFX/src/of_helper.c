@@ -41,6 +41,8 @@
 #include "lwip/udp.h"
 #include "switch.h"
 
+#define ALIGN8(x) (x+7)/8*8
+
 // Global variables
 extern int iLastFlow;
 extern int OF_Version;
@@ -278,6 +280,9 @@ int flowmatch10(uint8_t *pBuffer, int port)
 			continue;
 		}
 		
+		// If this flow is of a lower priority then one that is already match then there is no point going through a check.	
+		if(ntohs(flow_match[i].priority) <= ntohs(flow_match[matched_flow].priority)) continue;
+		
 		port_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_IN_PORT) || ntohs(flow_match[i].match.in_port) == port;
 		eth_src_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_DL_SRC) || memcmp(eth_src, flow_match[i].match.dl_src, 6) == 0;
 		eth_dst_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_DL_DST) || memcmp(eth_dst, flow_match[i].match.dl_dst, 6) == 0;
@@ -339,11 +344,9 @@ int flowmatch13(uint8_t *pBuffer, int port)
 	uint16_t tcp_dst;
 	bool vtag = false;
 	int match_size;
-	struct oxm_header13 oxm_header;
 	uint8_t oxm_value8;
 	uint16_t oxm_value16;
 	uint32_t oxm_value32;
-	uint8_t oxm_eth[6];
 	uint8_t oxm_ipv4[4];
 	uint16_t oxm_ipv6[8];
 						
@@ -353,7 +356,7 @@ int flowmatch13(uint8_t *pBuffer, int port)
 
 	if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
 	{
-		//printf("0x21 error\r\n");
+		// Not sure exactly why this happens but it causes a lot of issues
 		return -2;
 	}
 
@@ -401,191 +404,187 @@ int flowmatch13(uint8_t *pBuffer, int port)
 		// If the flow has no match fields (full wild) it is an automatic match	
 		if (ofp13_oxm_match[i] ==  NULL)
 		{
-			if ((ntohs(flow_match13[i].priority) > ntohs(flow_match13[matched_flow].priority)) || matched_flow == -1) matched_flow = i;
+			if ( matched_flow == -1 || (ntohs(flow_match13[i].priority) > ntohs(flow_match13[matched_flow].priority)) ) matched_flow = i;
 			continue;
 		}
 		// If this flow is of a lower priority then one that is already match then there is no point going through a check.
-		if (matched_flow > -1 && (ntohs(flow_match13[matched_flow].priority) > ntohs(flow_match13[i].priority))) continue;
+		if (matched_flow > -1 && (ntohs(flow_match13[matched_flow].priority) >= ntohs(flow_match13[i].priority))) continue;
 		
-		// Main flow match loop			
-		match_size = 0;				
-		while (match_size < (ntohs(flow_match13[i].match.length)-4))
+		// Main flow match loop
+		priority_match = 0;
+		uint8_t *hdr = ofp13_oxm_match[i];
+		while (hdr < ofp13_oxm_match[i] + ntohs(flow_match13[i].match.length) - 4 )
 		{
-			memcpy(&oxm_header, ofp13_oxm_match[i] + match_size,4);
-			oxm_header.oxm_field = oxm_header.oxm_field >> 1;
-			switch(oxm_header.oxm_field)
+			uint32_t field = ntohl(*(uint32_t*)(hdr));
+			uint8_t *oxm_value = hdr + 4;
+			hdr += 4 + OXM_LENGTH(field);
+
+			switch(field)
 			{
-				case OFPXMT_OFB_IN_PORT:
-				memcpy(&oxm_value32, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
-				if ( port == ntohl(oxm_value32))
+				case OXM_OF_IN_PORT:
+				memcpy(&oxm_value32, oxm_value, 4);
+				if ( port != ntohl(oxm_value32))
 				{
-					priority_match = i;
-				} else {
 					priority_match = -1;
-					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-					continue;
 				}
 				break;
 
-				case OFPXMT_OFB_ETH_DST:
-				memcpy(&oxm_eth, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 6);
-				if (memcmp(eth_dst, oxm_eth, 6) == 0)
+				case OXM_OF_ETH_DST:
+				if (memcmp(eth_dst, oxm_value, 6) != 0)
 				{
-					priority_match = i;
-				} else {
 					priority_match = -1;
-					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-					continue;
 				}
 				break;
 				
-				case OFPXMT_OFB_ETH_SRC:
-				memcpy(&oxm_eth, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 6);
-				if (memcmp(eth_dst, oxm_eth, 6) == 0)
+				case OXM_OF_ETH_DST_W:
+				for( int j=0; j<6; j++ )
 				{
-					priority_match = i;
-				} else {
-					priority_match = -1;
-					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-					continue;
+					if (oxm_value[j] != eth_dst[j] & oxm_value[6+j]){
+						priority_match = -1;
+					}
 				}
 				break;
 
-				case OFPXMT_OFB_ETH_TYPE:
-				memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-				if (eth_prot == oxm_value16)
+				case OXM_OF_ETH_SRC:
+				if (memcmp(eth_src, oxm_value, 6) != 0)
 				{
-					priority_match = i;
-				} else {
 					priority_match = -1;
-					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-					continue;
+				}
+				break;
+
+				case OXM_OF_ETH_SRC_W:
+				for( int j=0; j<6; j++ )
+				{
+					if (oxm_value[j] != eth_src[j] & oxm_value[6+j]){
+						priority_match = -1;
+					}
+				}
+				break;
+
+				case OXM_OF_ETH_TYPE:
+				memcpy(&oxm_value16, oxm_value, 2);
+				if (eth_prot != oxm_value)
+				{
+					priority_match = -1;
 				}			
 				break;
 				
-				case OFPXMT_OFB_IP_PROTO:
-				memcpy(&oxm_value8, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 1);
-				if (ip_prot == oxm_value8)
+				case OXM_OF_IP_PROTO:
+				if (ip_prot != *oxm_value)
 				{
-					priority_match = i;
-				} else {
 					priority_match = -1;
-					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-					continue;
 				}			
 				break;
 
-				case OFPXMT_OFB_IPV4_SRC:
-				memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
-				if (memcmp(ip_src, oxm_eth, 4) == 0)
+				case OXM_OF_IPV4_SRC:
+				memcpy(oxm_ipv4, &ip_src, 4);
+				if (memcmp(oxm_ipv4, oxm_value, 4) != 0)
 				{
-					priority_match = i;
-					} else {
 					priority_match = -1;
-					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-					continue;
 				}
 				break;
 				
-				case OFPXMT_OFB_IPV4_DST:
-				memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
-				if (memcmp(ip_dst, oxm_eth, 4) == 0)
+				case OXM_OF_IPV4_SRC_W:
+				memcpy(oxm_ipv4, &ip_src, 4);
+				for (int j=0; j<4; j++)
 				{
-					priority_match = i;
-					} else {
+					oxm_ipv4[j] &= oxm_value[4+j];
+				}
+				if (memcmp(oxm_ipv4, oxm_value, 4) != 0)
+				{
 					priority_match = -1;
-					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-					continue;
 				}
 				break;
 
-// 				case OFPXMT_OFB_IPV6_SRC:
-// 				memcpy(&oxm_ipv6, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 16);
-// 				if (memcmp(ip_src, oxm_eth, 16) == 0)
-// 				{
-// 					priority_match = i;
-// 					} else {
-// 					priority_match = -1;
-// 					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-// 					continue;
-// 				}
-// 				break;
-// 				
-// 				case OFPXMT_OFB_IPV6_DST:
-// 				memcpy(&oxm_ipv6, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 16);
-// 				if (memcmp(ip_dst, oxm_eth, 16) == 0)
-// 				{
-// 					priority_match = i;
-// 					} else {
-// 					priority_match = -1;
-// 					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-// 					continue;
-// 				}
-// 				break;
-
-				case OFPXMT_OFB_TCP_SRC:
-				memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-				if (tcp_src == oxm_value16)
+				case OXM_OF_IPV4_DST:
+				memcpy(oxm_ipv4, &ip_dst, 4);
+				if (memcmp(oxm_ipv4, oxm_value, 4) != 0)
 				{
-					priority_match = i;
-					} else {
 					priority_match = -1;
-					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-					continue;
 				}
 				break;
 
-				case OFPXMT_OFB_TCP_DST:
-				memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-				if (tcp_dst == oxm_value16)
+				case OXM_OF_IPV4_DST_W:
+				memcpy(oxm_ipv4, &ip_dst, 4);
+				for (int j=0; j<4; j++ )
 				{
-					priority_match = i;
-					} else {
+					oxm_ipv4[j] &= oxm_value[4+j];
+				}
+				if (memcmp(oxm_ipv4, oxm_value, 4) != 0)
+				{
 					priority_match = -1;
-					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-					continue;
 				}
 				break;
 
-				case OFPXMT_OFB_UDP_SRC:
-				memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-				if (tcp_src == oxm_value16)
+				case OXM_OF_TCP_SRC:
+				memcpy(&oxm_value16, oxm_value, 2);
+				if (tcp_src != oxm_value16)
 				{
-					priority_match = i;
-					} else {
 					priority_match = -1;
-					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-					continue;
 				}
 				break;
 
-				case OFPXMT_OFB_UDP_DST:
-				memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-				if (tcp_dst == oxm_value16)
+				case OXM_OF_TCP_DST:
+				memcpy(&oxm_value16, oxm_value, 2);
+				if (tcp_dst != oxm_value16)
 				{
-					priority_match = i;
-					} else {
 					priority_match = -1;
-					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-					continue;
+				}
+				break;
+
+				case OXM_OF_UDP_SRC:
+				memcpy(&oxm_value16, oxm_value, 2);
+				if (tcp_src != oxm_value16)
+				{
+					priority_match = -1;
+				}
+				break;
+
+				case OXM_OF_UDP_DST:
+				memcpy(&oxm_value16, oxm_value, 2);
+				if (tcp_dst != oxm_value16)
+				{
+					priority_match = -1;
 				}
 				break;
 										
-	 			case OFPXMT_OFB_VLAN_VID:
-	 			memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-				oxm_value16 -= 0x10;
-				if (vtag == true && vlanid == oxm_value16)
+				case OXM_OF_VLAN_VID:
+				if (vtag)
 				{
-					priority_match = i;
-				} else {
+					oxm_value16 = htons(OFPVID_PRESENT | ntohs(vlanid));
+				}else{
+					oxm_value16 = htons(OFPVID_NONE);
+				}
+				if (oxm_value16 != *(uint16_t*)oxm_value)
+				{
 					priority_match = -1;
-					match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
-					continue;
 				}
 				break;			
-			};
-			matched_flow = priority_match;
-			match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+
+				case OXM_OF_VLAN_VID_W:
+				if (vtag)
+				{
+					oxm_value16 = htons(OFPVID_PRESENT | ntohs(vlanid));
+				}else{
+					oxm_value16 = htons(OFPVID_NONE);
+				}
+				oxm_value16 &= *(uint16_t*)(oxm_value+2);
+				if (oxm_value16 != *(uint16_t*)oxm_value)
+				{
+					priority_match = -1;
+				}
+				break;
+				
+			} // switch
+			
+			if ( priority_match == -1 )
+			{
+				break;
+			}
+		}
+		if ( priority_match != -1 )
+		{
+			matched_flow = i;
 		}
 	}
 	return matched_flow;
@@ -626,6 +625,384 @@ int field_match10(struct ofp_match *match_a, struct ofp_match *match_b)
 	return 0;
 }
 
+#define PREREQ_INVALID 1<<0
+#define PREREQ_VLAN 1<<1
+#define PREREQ_IPV4 1<<2
+#define PREREQ_IPV6 1<<3
+#define PREREQ_ARP 1<<4
+#define PREREQ_TCP 1<<5
+#define PREREQ_UDP 1<<6
+#define PREREQ_SCTP 1<<7
+#define PREREQ_ICMPV4 1<<8
+#define PREREQ_ICMPV6 1<<9
+#define PREREQ_ND_SLL 1<<10
+#define PREREQ_ND_TLL 1<<11
+#define PREREQ_MPLS 1<<12
+#define PREREQ_PBB 1<<13
+#define PREREQ_ETH_TYPE_MASK (PREREQ_IPV4 | PREREQ_IPV6 | PREREQ_ARP | PREREQ_MPLS | PREREQ_PBB)
+#define PREREQ_IP_PROTO_MASK (PREREQ_TCP | PREREQ_UDP | PREREQ_SCTP | PREREQ_ICMPV4 | PREREQ_ICMPV6)
+#define PREREQ_IP_MASK (PREREQ_IPV4 | PREREQ_IPV6)
+#define PREREQ_ND_MASK (PREREQ_ND_SLL | PREREQ_ND_TLL)
+
+static uint32_t match_prereq(uint8_t *oxm, int length)
+{
+	uint32_t ret = 0;
+	uint8_t *hdr = oxm;
+	while(hdr < oxm+length){
+		uint16_t eth_type;
+		uint32_t field = ntohl(*(uint32_t*)(hdr));
+		switch(field){
+			case OXM_OF_VLAN_PCP:
+				ret |= PREREQ_VLAN;
+				break;
+			case OXM_OF_ETH_TYPE:
+				eth_type = ntohl(*(uint16_t*)(hdr+4));
+				switch(eth_type){
+					case 0x0800:
+						if (ret & PREREQ_IP_MASK == PREREQ_IPV6){
+							ret |= PREREQ_INVALID;
+						}
+						ret = (ret & ~PREREQ_IP_MASK) | PREREQ_IPV4;
+						break;
+					case 0x86dd:
+						if (ret & PREREQ_IP_MASK == PREREQ_IPV4){
+							ret |= PREREQ_INVALID;
+						}
+						ret = (ret & ~PREREQ_IP_MASK) | PREREQ_IPV6;
+						break;
+					case 0x0806:
+						ret |= PREREQ_ARP;
+						break;
+					case 0x8847:
+					case 0x8848:
+						ret |= PREREQ_MPLS;
+						break;
+					case 0x88e7:
+						ret |= PREREQ_PBB;
+						break;
+				}
+				break;
+			case OXM_OF_IP_PROTO:
+				switch(hdr[4]){
+					case 1:
+						ret |= PREREQ_ICMPV4;
+						break;
+					case 6:
+						ret |= PREREQ_TCP;
+						break;
+					case 17:
+						ret |= PREREQ_UDP;
+						break;
+					case 58:
+						ret |= PREREQ_ICMPV6;
+						break;
+					case 132:
+						ret |= PREREQ_SCTP;
+						break;
+				}
+				if (ret & PREREQ_IP_MASK == 0 ){
+					ret |= PREREQ_IP_MASK;
+				}
+				break;
+			case OXM_OF_ICMPV6_TYPE:
+				switch(hdr[4]){
+					case 135:
+						if (ret & PREREQ_ND_MASK == PREREQ_ND_TLL){
+							ret |= PREREQ_INVALID;
+						}
+						ret = (ret & ~PREREQ_ND_MASK) | PREREQ_ND_SLL;
+						break;
+					case 136:
+						if (ret & PREREQ_ND_MASK == PREREQ_ND_SLL){
+							ret |= PREREQ_INVALID;
+						}
+						ret = (ret & ~PREREQ_ND_MASK) | PREREQ_ND_TLL;
+						break;
+				}
+				ret |= PREREQ_ICMPV6;
+				if (ret & PREREQ_IP_MASK == PREREQ_IPV4){
+					ret |= PREREQ_INVALID;
+				}
+				ret = (ret & ~PREREQ_IP_MASK) | PREREQ_IPV6;
+				break;
+			case OXM_OF_IP_DSCP:
+			case OXM_OF_IP_ECN:
+				if (ret & PREREQ_IP_MASK == 0 ){
+					ret |= PREREQ_IP_MASK;
+				}
+				break;
+			case OXM_OF_ICMPV4_TYPE:
+			case OXM_OF_ICMPV4_CODE:
+				ret |= PREREQ_ICMPV4;
+			case OXM_OF_IPV4_DST:
+			case OXM_OF_IPV4_DST_W:
+			case OXM_OF_IPV4_SRC:
+			case OXM_OF_IPV4_SRC_W:
+				if (ret & PREREQ_IP_MASK == PREREQ_IPV6){
+					ret |= PREREQ_INVALID;
+				}
+				ret = (ret & ~PREREQ_IP_MASK) | PREREQ_IPV4;
+				break;
+			case OXM_OF_TCP_SRC:
+			case OXM_OF_TCP_DST:
+				ret |= PREREQ_TCP;
+				if (ret & PREREQ_IP_MASK == 0 ){
+					ret |= PREREQ_IP_MASK;
+				}
+				break;
+			case OXM_OF_UDP_SRC:
+			case OXM_OF_UDP_DST:
+				ret |= PREREQ_UDP;
+				if (ret & PREREQ_IP_MASK == 0 ){
+					ret |= PREREQ_IP_MASK;
+				}
+				break;
+			case OXM_OF_SCTP_SRC:
+			case OXM_OF_SCTP_DST:
+				ret |= PREREQ_SCTP;
+				if (ret & PREREQ_IP_MASK == 0 ){
+					ret |= PREREQ_IP_MASK;
+				}
+				break;
+			case OXM_OF_ARP_OP:
+			case OXM_OF_ARP_SPA:
+			case OXM_OF_ARP_SPA_W:
+			case OXM_OF_ARP_TPA:
+			case OXM_OF_ARP_TPA_W:
+			case OXM_OF_ARP_SHA:
+			case OXM_OF_ARP_THA:
+				ret |= PREREQ_ARP;
+				break;
+			case OXM_OF_ICMPV6_CODE:
+				ret |= PREREQ_ICMPV6;
+			case OXM_OF_IPV6_SRC:
+			case OXM_OF_IPV6_SRC_W:
+			case OXM_OF_IPV6_DST:
+			case OXM_OF_IPV6_DST_W:
+			case OXM_OF_IPV6_FLABEL:
+			case OXM_OF_IPV6_EXTHDR:
+			case OXM_OF_IPV6_EXTHDR_W:
+				if (ret & PREREQ_IP_MASK == PREREQ_IPV4){
+					ret |= PREREQ_INVALID;
+				}
+				ret = (ret & ~PREREQ_IP_MASK) | PREREQ_IPV6;
+				break;
+			case OXM_OF_IPV6_ND_TARGET:
+				if (ret & PREREQ_ND_MASK == 0){
+					ret |= PREREQ_ND_MASK;
+				}
+				ret |= PREREQ_ICMPV6;
+				if (ret & PREREQ_IP_MASK == PREREQ_IPV4){
+					ret |= PREREQ_INVALID;
+				}
+				ret = (ret & ~PREREQ_IP_MASK) | PREREQ_IPV6;
+				break;
+			case OXM_OF_IPV6_ND_SLL:
+				if (ret & PREREQ_ND_MASK == PREREQ_ND_TLL){
+					ret |= PREREQ_INVALID;
+				}
+				ret = (ret & ~PREREQ_ND_MASK) | PREREQ_ND_SLL;
+				ret |= PREREQ_ICMPV6;
+				if (ret & PREREQ_IP_MASK == PREREQ_IPV4){
+					ret |= PREREQ_INVALID;
+				}
+				ret = (ret & ~PREREQ_IP_MASK) | PREREQ_IPV6;
+				break;
+			case OXM_OF_IPV6_ND_TLL:
+				if (ret & PREREQ_ND_MASK == PREREQ_ND_SLL){
+					ret |= PREREQ_INVALID;
+				}
+				ret = (ret & ~PREREQ_ND_MASK) | PREREQ_ND_TLL;
+				ret |= PREREQ_ICMPV6;
+				if (ret & PREREQ_IP_MASK == PREREQ_IPV4){
+					ret |= PREREQ_INVALID;
+				}
+				ret = (ret & ~PREREQ_IP_MASK) | PREREQ_IPV6;
+				break;
+			case OXM_OF_MPLS_LABEL:
+			case OXM_OF_MPLS_BOS:
+			case OXM_OF_MPLS_TC:
+				ret |= PREREQ_MPLS;
+				break;
+			case OXM_OF_PBB_ISID:
+				ret |= PREREQ_PBB;
+				break;
+		}
+		hdr += 4 + OXM_LENGTH(field);
+	}
+	uint32_t flags = 0;
+	flags = ret & PREREQ_ETH_TYPE_MASK;
+	if (flags!=0 && flags!=PREREQ_IPV4 && flags!=PREREQ_IPV6 && flags!=PREREQ_IP_MASK && flags!=PREREQ_ARP && flags!=PREREQ_MPLS && flags!=PREREQ_PBB){
+		ret |= PREREQ_INVALID;
+	}
+	flags = ret & PREREQ_IP_PROTO_MASK;
+	if (flags!=0 && flags!=PREREQ_TCP && flags!=PREREQ_UDP && flags!=PREREQ_SCTP && flags!=PREREQ_ICMPV4 && flags!=PREREQ_ICMPV6){
+		ret |= PREREQ_INVALID;
+	}
+	return ret;
+}
+
+/*
+*	Compares 2 match oxms
+*	Return 1 if a matches for b (b is wider than a)
+*
+*	@param *match_a - pointer to the first match field
+*	@param *match_b - pointer to the second match field
+*
+*/
+int field_match13(uint8_t *oxm_a, int len_a, uint8_t *oxm_b, int len_b)
+{
+	uint32_t prereq_a = match_prereq(oxm_a, len_a);
+	if (prereq_a & PREREQ_INVALID != 0){
+		return 0;
+	}
+	uint8_t *bhdr = oxm_b;
+	while(bhdr < oxm_b + len_b){
+		uint32_t bfield = *(uint32_t*)(bhdr);
+		uint8_t *ahdr = oxm_a;
+		while(ahdr < oxm_a + len_a){
+			uint32_t afield = *(uint32_t*)(ahdr);
+			if(bfield == afield) {
+				if(OXM_HASMASK(bfield)){
+					int length = OXM_LENGTH(bfield)/2;
+					if(OXM_HASMASK(afield)){
+						for(int i=0; i<length; i++){
+							if (~ahdr[4+length+i] & bhdr[4+length+i] != 0){
+								return 0;
+							}
+						}
+					}
+					for(int i=0; i<length; i++){
+						if (ahdr[4+i] & bhdr[4+length+i] != bhdr[4+i]){
+							return 0;
+						}
+					}
+					break;
+				}else if (memcpy(ahdr+4, bhdr+4, OXM_LENGTH(bfield))==0){
+					break;
+				}else{
+					return 0;
+				}
+			}
+			switch(bfield){
+				uint16_t eth_type;
+				case OXM_OF_ETH_TYPE:
+					eth_type = ntohs(*(uint16_t*)(bhdr+4));
+					switch (eth_type){
+						case 0x0800:
+							if (prereq_a & (PREREQ_ARP | PREREQ_MPLS | PREREQ_PBB) != 0){
+								return 0;
+							}
+							if (prereq_a & PREREQ_ETH_TYPE_MASK == PREREQ_IPV6){
+								return 0;
+							}
+							break;
+						case 0x86dd:
+							if (prereq_a & (PREREQ_ARP | PREREQ_MPLS | PREREQ_PBB) != 0){
+								return 0;
+							}
+							if (prereq_a & PREREQ_ETH_TYPE_MASK == PREREQ_IPV4){
+								return 0;
+							}
+							break;
+						case 0x0806:
+							if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_ARP != 0) {
+								return 0;
+							}
+							break;
+						case 0x8847:
+						case 0x8848:
+							if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_MPLS != 0) {
+								return 0;
+							}
+							break;
+						case 0x88e7:
+							if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_PBB != 0) {
+								return 0;
+							}
+							break;
+					}
+					break;
+				case OXM_OF_IP_PROTO:
+					switch(bhdr[4]){
+						case 1:
+							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_ICMPV4 != 0) {
+								return 0;
+							}
+							break;
+						case 6:
+							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_TCP != 0) {
+								return 0;
+							}
+							break;
+						case 17:
+							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_UDP != 0){
+								return 0;
+							}
+							break;
+						case 58:
+							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_ICMPV6 != 0){
+								return 0;
+							}
+							break;
+						case 132:
+							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_SCTP != 0){
+								return 0;
+							}
+							break;
+					}
+					break;
+				case OXM_OF_ICMPV6_TYPE:
+					switch(bhdr[4]){
+						case 135:
+							if (prereq_a & PREREQ_ND_MASK & ~PREREQ_ND_SLL != 0){
+								return 0;
+							}
+							break;
+						case 136:
+							if (prereq_a & PREREQ_ND_MASK & ~PREREQ_ND_TLL != 0){
+								return 0;
+							}
+							break;
+					}
+					break;
+			}
+			ahdr += 4 + OXM_LENGTH(afield);
+		}
+		bhdr += 4 + OXM_LENGTH(bfield);
+	}
+
+	uint32_t prereq_b = match_prereq(oxm_b, len_b);
+	if (prereq_b & PREREQ_INVALID != 0){
+		return 0;
+	}
+	if (prereq_a & PREREQ_ETH_TYPE_MASK & ~(prereq_b & PREREQ_ETH_TYPE_MASK) != 0){
+		return 0;
+	}
+	if (prereq_a & PREREQ_ND_MASK & ~(prereq_b & PREREQ_ND_MASK) != 0){
+		return 0;
+	}
+	if (prereq_b & PREREQ_VLAN != 0) {
+		uint8_t *ahdr = oxm_a;
+		while(ahdr < oxm_a + len_a){
+			uint32_t afield = *(uint32_t*)(ahdr);
+			switch(afield){
+				case OXM_OF_VLAN_VID_W:
+					if (ntohs(*(uint16_t*)(ahdr+6)) & OFPVID_PRESENT != 0){
+						break;
+					}
+				case OXM_OF_VLAN_VID:
+					if (ntohs(*(uint16_t*)(ahdr+4)) == OFPVID_NONE){
+						return 0;
+					}
+					break;
+			}
+			ahdr += 4 + OXM_LENGTH(afield);
+		}
+	}
+	return 1;
+}
+
 /*
 *	Clears the flow table
 *	
@@ -661,6 +1038,7 @@ int flow_stats_msg10(char *buffer, int first, int last)
 	int len = sizeof(struct ofp10_stats_reply);
 	int stats_size = 0;
 	int actionsize = 0;
+	if ((last - first) > 20) last = first + 20;	// Only show first 20 flows to conserve memory
 	
 	for(int k=first; k<last;k++)
 	{
@@ -736,48 +1114,32 @@ int flow_stats_msg13(char *buffer, int first, int last)
 	
 	for(int k = first; k<last;k++)
 	{
-		stats_size = sizeof(flow_stats);
-		flow_stats.table_id = 100;
-		memcpy(&flow_stats.cookie, &flow_match13[k].cookie, sizeof(uint64_t));
-		memcpy(&flow_stats.priority, &flow_match13[k].priority, sizeof(uint16_t));
-		memcpy(&flow_stats.idle_timeout, &flow_match13[k].idle_timeout, sizeof(uint16_t));
-		memcpy(&flow_stats.hard_timeout, &flow_match13[k].hard_timeout, sizeof(uint16_t));
-		memcpy(&flow_stats.match, &flow_match13[k].match, sizeof(struct ofp13_match));
-		flow_stats.duration_sec = htonl(totaltime - flow_counters[k].duration);				
-		flow_stats.duration_nsec = 0;
+		// ofp_flow_stats fixed fields are the same length with ofp_flow_mod
+		flow_stats.length = flow_match13[k].header.length;
+		flow_stats.table_id = flow_match13[k].table_id;
+		flow_stats.duration_sec = htonl(totaltime - flow_counters[k].duration);
+		flow_stats.duration_nsec = htonl(0);
+		flow_stats.priority = flow_match13[k].priority;
+		flow_stats.idle_timeout = flow_match13[k].idle_timeout;
+		flow_stats.hard_timeout = flow_match13[k].hard_timeout;
+		flow_stats.flags = flow_match13[k].flags;
+		flow_stats.cookie = flow_match13[k].cookie;
 		flow_stats.packet_count = htonll(flow_counters[k].hitCount);
 		flow_stats.byte_count = htonll(flow_counters[k].bytes);
-		flow_stats.flags = 0;
-		
-		if (htons(flow_match13[k].match.length) > 4)
-		{		
-			len = stats_size + (htons(flow_match13[k].match.length)-8);
-			if (len % 8 != 0)
-			{				
-				pad = (8-(len % 8));
-				len += pad;
-			}
-			stats_len = len;
-			memcpy(buffer_ptr + (stats_size - 4), ofp13_oxm_match[k], htons(flow_match13[k].match.length)-4);
-			memset(buffer_ptr + (len-pad), 0, pad);		//Pad the match fields with zero to a multiple of 8
-		} else {
-			stats_len = stats_size;
+		flow_stats.match = flow_match13[k].match;
+		// buffer must be shorter than 2048
+		if(buffer_ptr + ntohs(flow_stats.length) > buffer + 2048){
+			break; // XXX: should provide multipart OFPMPF_REPLY_MORE flow
 		}
-		buffer_ptr += stats_len;
-		if (ofp13_oxm_inst[k] != NULL)
-		{
-			if (htons(flow_match13[k].match.length) > 4)
-			{
-				inst_size = ntohs(flow_match13[k].header.length) - len;
-			} else {
-				inst_size = ntohs(flow_match13[k].header.length) - (stats_size + (htons(flow_match13[k].match.length)-4));
-			}
-			memcpy(buffer_ptr, ofp13_oxm_inst[k], inst_size);
-			stats_len += inst_size;		
-			buffer_ptr += inst_size;
-		}
-		flow_stats.length = htons(stats_len);
-		memcpy(buffer_ptr - stats_len, &flow_stats, stats_size);
+		// struct ofp13_flow_stats(including ofp13_match)
+		memcpy(buffer_ptr, &flow_stats, sizeof(struct ofp13_flow_stats));
+		// oxm_fields
+		len = offsetof(struct ofp13_flow_stats, match) + offsetof(struct ofp13_match, oxm_fields);
+		memcpy(buffer_ptr + len, ofp13_oxm_match[k], ntohs(flow_stats.match.length) - 4);
+		// instructions
+		len = offsetof(struct ofp13_flow_stats, match) + ALIGN8(ntohs(flow_stats.match.length));
+		memcpy(buffer_ptr + len, ofp13_oxm_inst[k], ntohs(flow_stats.length) - len);
+		buffer_ptr += ntohs(flow_stats.length);
 	}
 	return (buffer_ptr - buffer);
 	

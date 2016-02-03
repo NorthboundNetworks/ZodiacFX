@@ -78,7 +78,6 @@ err_t TCPready(void *arg, struct tcp_pcb *tpcb, err_t err);
 void tcp_error(void * arg, err_t err);
 static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
 
-
 /*
 *	Converts a 64bit value from host to network format
 *
@@ -122,7 +121,6 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
         pbuf_free(p);	//Free the packet buffer	
 		
 		struct ofp_header *ofph;
-		struct ofp_stats_request *stats_req;
 		int size = 0;
 		int plen = 0;
 		
@@ -130,6 +128,9 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 		{
 			ofph = &packetbuffer[size];
 			if (size == 0) multi_pos = 0;
+			if (ofph->length == 0){
+				return ERR_OK;	//Not an OpenFlow packet
+			}
 			plen = htons(ofph->length);
 			size = size + plen;
 			switch(ofph->type)
@@ -234,15 +235,15 @@ void echo_request(void)
 */
 void sendtcp(const void *buffer, u16_t len)
 {	
+	err_t err;
 	if( tcp_pcb != tcp_pcb_check)
 	{
 		tcp_con_state = -1;
 		tcp_pcb = NULL;
 		return;
 	}
-	tcp_write(tcp_pcb, buffer, len, TCP_WRITE_FLAG_COPY);
-	//tcp_sent(tcp_pcb, NULL);
-	tcp_output(tcp_pcb);
+	err = tcp_write(tcp_pcb, buffer, len, TCP_WRITE_FLAG_COPY);
+	if (err == ERR_OK) tcp_output(tcp_pcb);
 	return;
 }
 

@@ -36,6 +36,7 @@
 int flowmatch10(uint8_t *pBuffer, int port);
 int flowmatch13(uint8_t *pBuffer, int port);
 int field_match10(struct ofp_match *match_a, struct ofp_match *match_b);
+int field_match13(uint8_t *oxm_a, int len_a, uint8_t *oxm_b, int len_b);
 void nnOF_timer(void);
 void clear_flows(void);
 int flow_stats_msg10(char *buffer, int first, int last);

@@ -35,6 +35,8 @@
 #include "switch.h"
 #include "lwip/tcp.h"
 
+#define ALIGN8(x) (x+7)/8*8
+
 // Global variables
 extern struct zodiac_config Zodiac_Config;
 extern struct tcp_pcb *tcp_pcb;
@@ -58,15 +60,19 @@ extern int multi_pos;
 void features_reply13(uint32_t xid);
 void of_error13(struct ofp_header *msg, uint16_t type, uint16_t code);
 void set_config13(struct ofp_header * msg);
+void config_reply13(uint32_t xid);
+void role_reply13(struct ofp_header *msg);
 void flow_mod13(struct ofp_header *msg);
 void flow_add13(struct ofp_header *msg);
+void flow_delete13(struct ofp_header *msg);
 void flow_delete_strict13(struct ofp_header *msg);
 int multi_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
+int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *req);
 int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
 int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
-void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason, uint16_t flow_id);
+void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason);
 void packet_out13(struct ofp_header *msg);
 
 /*
@@ -87,24 +93,16 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	uint16_t packet_size;
 	memcpy(&packet_size, ul_size, 2);
 	uint16_t vlantag = htons(0x8100);
-			
-	if (Zodiac_Config.OFEnabled == OF_ENABLED && iLastFlow == 0) // Check to if the flow table is empty
+				
+	if (Zodiac_Config.OFEnabled == OF_ENABLED) // Main lookup
 	{
-		packet_in13 (p_uc_data, packet_size, port, OFPR13_NO_MATCH, 0xffff); // Packet In if there are no flows in the table
-		return;
-	}
-	
-	if (Zodiac_Config.OFEnabled == OF_ENABLED && iLastFlow > 0) // Main lookup
-	{
+		table_counters.lookup_count++;
+		
 		int i = -1;
 		// Check if packet matches an existing flow
 		i = flowmatch13(p_uc_data, port);
 		if (i == -2) return;	// Error packet
-		if (i == -1)	// No match
-		{
-			packet_in13 (p_uc_data, packet_size, port, OFPR13_NO_MATCH, 0xffff); // Packet In if there are no flows in the table
-			return;
-		}
+		if (i == -1) return;	// No match
 		
 		if ( i > -1)
 		{
@@ -136,7 +134,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						{
 							int pisize = ntohs(act_output->max_len);
 							if (pisize > packet_size) pisize = packet_size;
-							packet_in13(p_uc_data, pisize, port, OFPR_ACTION, i);
+							packet_in13(p_uc_data, pisize, port, OFPR_ACTION);
 						} else if (htonl(act_output->port) == OFPP13_FLOOD)
 						{
 							int outport = 7 - (1<< (ntohl(act_output->port)-1));	// Need to fix this, may also send out the Non-OpenFlow port
@@ -155,10 +153,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						{
 							case OFPXMT_OFB_VLAN_VID:
 							memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
-							//uint16_t vlan_vid = (ntohs(oxm_value16) - 0x1000);
 							uint16_t vlan_vid = (oxm_value16 - 0x10);
-							//printf("   Set VLAN ID: %d\r\n", vlan_vid);
-					
 							uint16_t action_vlanid  = act_hdr;
 							uint16_t pcp;
 							uint16_t vlanid;
@@ -198,6 +193,8 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 								}
 							}				
 							break;
+							
+							
 						};													
 					}								
 					act_size += htons(act_hdr->len);
@@ -220,29 +217,47 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 		case OFPT13_SET_CONFIG:
 		set_config13(ofph);
 		break;
+		
+		case OFPT13_GET_CONFIG_REQUEST:
+		config_reply13(ofph->xid);
+		break;
 
+		case OFPT13_ROLE_REQUEST:
+		role_reply13(ofph);
+		break;
+				
 		case OFPT13_FLOW_MOD:
 		flow_mod13(ofph);
 		break;
 				
 		case OFPT13_MULTIPART_REQUEST:
 		multi_req  = (struct ofp13_multipart_request *) ofph;
-		if ( HTONS(multi_req->type) == OFPMP13_DESC )
+		if ( ntohs(multi_req->type) == OFPMP13_DESC )
 		{
 			multi_pos += multi_desc_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 		
-		if ( HTONS(multi_req->type) == OFPMP13_PORT_DESC )
+		if ( ntohs(multi_req->type) == OFPMP13_PORT_STATS )
+		{
+			multi_pos += multi_portstats_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+		
+		if ( ntohs(multi_req->type) == OFPMP13_PORT_DESC )
 		{
 			multi_pos += multi_portdesc_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 
-		if ( HTONS(multi_req->type) == OFPMP13_TABLE_FEATURES )
+		if ( htons(multi_req->type) == OFPMP13_TABLE_FEATURES )
 		{
 			multi_pos += multi_tablefeat_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 		
-		if ( HTONS(multi_req->type) == 	OFPMP13_FLOW )
+		if ( ntohs(multi_req->type) == OFPMP13_TABLE )
+		{
+			multi_pos += multi_table_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+
+		if ( ntohs(multi_req->type) == 	OFPMP13_FLOW )
 		{
 			multi_pos += multi_flow_reply13(&shared_buffer[multi_pos], multi_req);
 		}		
@@ -319,6 +334,40 @@ void set_config13(struct ofp_header *msg)
 }
 
 /*
+*	OpenFlow CONFIG Reply message function
+*
+*	@param xid - transaction ID
+*
+*/
+void config_reply13(uint32_t xid)
+{
+	struct ofp13_switch_config cfg_reply;
+	cfg_reply.header.version = OF_Version;
+	cfg_reply.header.type = OFPT13_GET_CONFIG_REPLY;
+	cfg_reply.header.xid = xid;
+	cfg_reply.header.length = HTONS(sizeof(cfg_reply));
+	cfg_reply.flags = OFPC13_FRAG_NORMAL;
+	cfg_reply.miss_send_len = htons(256);	// Only sending the first 256 bytes
+	sendtcp(&cfg_reply, sizeof(cfg_reply));
+	return;
+}
+
+/*
+*	OpenFlow SET CONFIG message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+void role_reply13(struct ofp_header *msg)
+{
+	struct ofp13_role_request role_request;
+	memcpy(&role_request, msg, sizeof(struct ofp13_role_request));
+	role_request.header.type = OFPT13_ROLE_REPLY;
+	sendtcp(&role_request, sizeof(struct ofp13_role_request));
+	return;
+}
+
+/*
 *	OpenFlow Multi-part DESCRIPTION reply message function
 *
 *	@param *msg - pointer to the OpenFlow message.
@@ -373,7 +422,8 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	reply->type = htons(OFPMP13_PORT_DESC);
 	 
 	uint8_t mac[] = {0x00,0x00,0x00,0x00,0x00,0x00};
-
+	update_port_status();		//update port status
+	
 	for(int l = 0; l< 4; l++)
 	{
 		if(Zodiac_Config.of_port[l] == 1)
@@ -389,9 +439,8 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 			sprintf(portname, "eth%d",l);
 			strcpy(phys_port[j].name, portname);
 			phys_port[j].config = 0;
-			phys_port[j].state = htonl(OFPPS13_LIVE);
-			if (port_status[l] == 1) phys_port[j].state = htonl(OFPPS13_LIVE);
-			if (port_status[l] == 0) phys_port[j].state = htonl(OFPPS13_LINK_DOWN);
+			if (port_status[j] == 1) phys_port[j].state = htonl(OFPPS13_LIVE);
+			if (port_status[j] == 0) phys_port[j].state = htonl(OFPPS13_LINK_DOWN);
 			phys_port[j].curr = htonl(OFPPF13_100MB_FD + OFPPF13_COPPER);
 			phys_port[j].advertised = 0;
 			phys_port[j].supported = 0;
@@ -406,6 +455,38 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	return len;	
 }
 
+
+/*
+*	OpenFlow Multi-part TABLE reply message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
+{
+	// XXX: no multi table support for now
+	int len = offsetof(struct ofp13_multipart_reply, body) + sizeof(struct ofp13_table_stats);
+	struct ofp13_multipart_reply *reply = buffer;
+	reply->header.version = OF_Version;
+	reply->header.type = OFPT13_MULTIPART_REPLY;
+	reply->header.length = htons(len);
+	reply->header.xid = msg->header.xid;
+	reply->type = htons(OFPMP13_TABLE);
+	reply->flags = 0;
+	struct ofp13_table_stats *stats = reply->body;
+	stats->table_id = 0;
+	uint32_t active = 0;
+	for(int i=0; i<iLastFlow; i++) {
+		if (flow_counters[i].active == false){
+			active++;
+		}
+	}
+	stats->active_count = htonl(active);
+	stats->matched_count = htonll(table_counters.matched_count);
+	stats->lookup_count = htonll(table_counters.lookup_count);
+	return len;
+}
+
 /*
 *	OpenFlow Multi-part TABLE Features reply message function
 *
@@ -416,18 +497,19 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 {
 	struct ofp13_multipart_reply *reply;
 	struct ofp13_table_features tbl_feats;
-	int len = sizeof(struct ofp13_multipart_reply) + sizeof(struct ofp13_table_features);
-	char tablename[OFP13_MAX_TABLE_NAME_LEN];
-		
+	struct ofp13_table_feature_prop_instructions inst_prop;
+	struct ofp13_instruction inst;
+	struct oxm_header13 oxm_header;
+	int prop_size = (14*8);
+
+	char tablename[OFP13_MAX_TABLE_NAME_LEN];		
 	reply = (struct ofp13_multipart_reply *) buffer;
 	reply->header.version = OF_Version;
 	reply->header.type = OFPT13_MULTIPART_REPLY;
-	reply->header.length = htons(len);
 	reply->header.xid = msg->header.xid;
 	reply->flags = 0;
 	reply->type = htons(OFPMP13_TABLE_FEATURES);
 	
-	tbl_feats.length = htons(sizeof(struct ofp13_table_features));
 	tbl_feats.table_id = 100;
 	sprintf(tablename, "table_100");
 	strcpy(tbl_feats.name, tablename);	
@@ -435,7 +517,84 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 	tbl_feats.metadata_write = 0;
 	tbl_feats.config = 0;
 	tbl_feats.max_entries = htonl(MAX_FLOWS);
+	int len = sizeof(struct ofp13_multipart_reply) + sizeof(struct ofp13_table_features) + prop_size; 
+	reply->header.length = htons(len);
+	tbl_feats.length = htons(sizeof(struct ofp13_table_features) + prop_size);
 	memcpy(reply->body, &tbl_feats, sizeof(struct ofp13_table_features));
+			
+	// Instruction Property	
+ 	inst_prop.type = htons(OFPTFPT_INSTRUCTIONS);
+ 	inst_prop.length = htons(8);
+ 	inst.type = htons(OFPIT13_APPLY_ACTIONS);
+ 	inst.len = htons(4);
+	memcpy(buffer + (len-(prop_size)), &inst_prop, 4);
+	memcpy(buffer + (len-(prop_size-4)), &inst, 4);	 
+	// Next Table Property
+	inst_prop.type = htons(OFPTFPT_NEXT_TABLES);
+	inst_prop.length = htons(4);
+	memcpy(buffer + (len-(prop_size-8)), &inst_prop, 4);
+	// Write Actions Property
+	inst_prop.type = htons(OFPTFPT_WRITE_ACTIONS);
+	inst_prop.length = htons(4);
+	memcpy(buffer + (len-(prop_size-16)), &inst_prop, 4);
+	// Apply Actions Property
+	inst_prop.type = htons(OFPTFPT_APPLY_ACTIONS);
+	inst_prop.length = htons(8);
+ 	inst.type = htons(OFPAT13_OUTPUT);
+ 	inst.len = htons(4);
+	memcpy(buffer + (len-(prop_size-24)), &inst_prop, 4);
+	memcpy(buffer + (len-(prop_size-28)), &inst, 4);	
+	// Match Property
+	inst_prop.type = htons(OFPTFPT_MATCH);
+	inst_prop.length = htons(52);
+	oxm_header.oxm_class = htons(0x8000);
+	oxm_header.oxm_len = 4;
+	memcpy(buffer + (len-(prop_size-32)), &inst_prop, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_IN_PORT << 1;		
+	memcpy(buffer + (len-(prop_size-36)), &oxm_header, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_ETH_DST << 1;
+	memcpy(buffer + (len-(prop_size-40)), &oxm_header, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_ETH_SRC << 1;
+	memcpy(buffer + (len-(prop_size-44)), &oxm_header, 4);	
+	oxm_header.oxm_field = OFPXMT_OFB_ETH_TYPE << 1;
+	memcpy(buffer + (len-(prop_size-48)), &oxm_header, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_VLAN_VID << 1;
+	memcpy(buffer + (len-(prop_size-52)), &oxm_header, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_IP_PROTO << 1;
+	memcpy(buffer + (len-(prop_size-56)), &oxm_header, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_IPV4_SRC << 1;
+	memcpy(buffer + (len-(prop_size-60)), &oxm_header, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_IPV4_DST << 1;
+	memcpy(buffer + (len-(prop_size-64)), &oxm_header, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_TCP_SRC << 1;
+	memcpy(buffer + (len-(prop_size-68)), &oxm_header, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_TCP_DST << 1;
+	memcpy(buffer + (len-(prop_size-72)), &oxm_header, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_UDP_SRC << 1;
+	memcpy(buffer + (len-(prop_size-76)), &oxm_header, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_UDP_DST << 1;
+	memcpy(buffer + (len-(prop_size-80)), &oxm_header, 4);
+	// Wildcard Property
+	inst_prop.type = htons(OFPTFPT_WILDCARDS);
+	inst_prop.length = htons(8);
+	oxm_header.oxm_class = htons(0x8000);
+	oxm_header.oxm_len = 4;
+	memcpy(buffer + (len-(prop_size-88)), &inst_prop, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_IN_PORT << 1;
+	memcpy(buffer + (len-(prop_size-92)), &oxm_header, 4);			
+	// Write set field Property
+	inst_prop.type = htons(OFPTFPT_WRITE_SETFIELD);
+	inst_prop.length = htons(4);
+	memcpy(buffer + (len-(prop_size-96)), &inst_prop, 4);
+	// Apply set field Property
+	inst_prop.type = htons(OFPTFPT_APPLY_SETFIELD);
+	inst_prop.length = htons(8);
+	oxm_header.oxm_class = htons(0x8000);
+	oxm_header.oxm_len = 4;
+	memcpy(buffer + (len-(prop_size-104)), &inst_prop, 4);
+	oxm_header.oxm_field = OFPXMT_OFB_VLAN_VID << 1;		
+	memcpy(buffer + (len-(prop_size-108)), &oxm_header, 4);		
+
 	return len;
 }
 
@@ -454,11 +613,8 @@ int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	reply->header.type = OFPT13_MULTIPART_REPLY;
 	reply->header.xid = msg->header.xid;
 	reply->flags = 0;
-	reply->type = htons(OFPMP13_FLOW);
-	
-	if(iLastFlow > 12) iLastFlow = 12;	// Need to fix this! LWIP won't send buffers bigger then 1 packet (1460 bytes)
+	reply->type = htons(OFPMP13_FLOW);	
 	int len = flow_stats_msg13(&statsbuffer, 0, iLastFlow);
-
 	memcpy(reply->body, &statsbuffer, len);
 	len += 	sizeof(struct ofp13_multipart_reply);
 	reply->header.length = htons(len);		
@@ -479,9 +635,9 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 	struct ofp13_port_stats_request *port_req = msg->body;
 	int stats_size = 0;
 	int k, len;
-	int port = ntohs(port_req->port_no);
+	uint32_t port = ntohl(port_req->port_no);
 
-	if (port == OFPP_NONE)
+	if (port == OFPP13_ANY)
 	{
 		stats_size = (sizeof(struct ofp13_port_stats) * 3);	// Assumes 3 ports
 		len = sizeof(struct ofp13_multipart_reply) + stats_size;
@@ -495,7 +651,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 		
 		for(k=0; k<3;k++)
 		{
-			zodiac_port_stats[k].port_no = htons(k+1);
+			zodiac_port_stats[k].port_no = htonl(k+1);
 			zodiac_port_stats[k].rx_packets = htonll(phys13_port_stats[k].rx_packets);
 			zodiac_port_stats[k].tx_packets = htonll(phys13_port_stats[k].tx_packets);
 			zodiac_port_stats[k].rx_bytes = htonll(phys13_port_stats[k].rx_bytes);
@@ -511,9 +667,8 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 			
 		}
 		memcpy(buffer, &reply, sizeof(struct ofp13_multipart_reply));
-		memcpy(buffer[sizeof(struct ofp13_multipart_reply)], &zodiac_port_stats[0],stats_size);
-	} else
-	{
+		memcpy(buffer+sizeof(struct ofp13_multipart_reply), &zodiac_port_stats[0], stats_size);
+	} else if (port <= OFPP13_MAX) {
 		stats_size = sizeof(struct ofp13_port_stats);
 		len = sizeof(struct ofp13_multipart_reply) + stats_size;
 		
@@ -524,7 +679,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 		reply.type = htons(OFPMP13_PORT_STATS);
 		reply.flags = 0;
 
-		zodiac_port_stats[port].port_no = htons(port);
+		zodiac_port_stats[port].port_no = htonl(port);
 		zodiac_port_stats[port].rx_packets = htonll(phys13_port_stats[port-1].rx_packets);
 		zodiac_port_stats[port].tx_packets = htonll(phys13_port_stats[port-1].tx_packets);
 		zodiac_port_stats[port].rx_bytes = htonll(phys13_port_stats[port-1].rx_bytes);
@@ -539,7 +694,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 		zodiac_port_stats[port].collisions = 0;
 
 		memcpy(buffer, &reply, sizeof(struct ofp13_multipart_reply));
-		memcpy(buffer[sizeof(struct ofp13_multipart_reply)], &zodiac_port_stats[port],stats_size);
+		memcpy(buffer+sizeof(struct ofp13_multipart_reply), &zodiac_port_stats[port], stats_size);
 	}
 	return len;
 }
@@ -570,7 +725,7 @@ void flow_mod13(struct ofp_header *msg)
 		break;
 		
 		case OFPFC13_DELETE:
-		//flow_delete13(msg);
+		flow_delete13(msg);
 		break;
 		
 		case OFPFC13_DELETE_STRICT:
@@ -598,16 +753,15 @@ void flow_add13(struct ofp_header *msg)
 	struct ofp13_flow_mod * ptr_fm;
 	ptr_fm = (struct ofp13_flow_mod *) msg;
 	memcpy(&flow_match13[iLastFlow], ptr_fm, sizeof(struct ofp13_flow_mod));
-	if (htons(ptr_fm->match.length) > 4)
+	if (ntohs(ptr_fm->match.length) > 4)
 	{
-		ofp13_oxm_match[iLastFlow] = malloc(htons(flow_match13[iLastFlow].match.length)-4);	// Allocate a space to store match fields
-		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, htons(flow_match13[iLastFlow].match.length)-4);
+		ofp13_oxm_match[iLastFlow] = malloc(ntohs(flow_match13[iLastFlow].match.length)-4);	// Allocate a space to store match fields
+		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, ntohs(flow_match13[iLastFlow].match.length)-4);
 	} else {
 		ofp13_oxm_match[iLastFlow] = NULL;
 	}
-	int mod_size = (sizeof(struct ofp13_flow_mod) + (htons(ptr_fm->match.length)-8));
-	if (mod_size % 8 != 0) mod_size += (8-(mod_size % 8));
-	int instruction_size = htons(ptr_fm->header.length) - mod_size;
+	int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
+	int instruction_size = ntohs(ptr_fm->header.length) - mod_size;
 	if (instruction_size > 0)
 	{
 		ofp13_oxm_inst[iLastFlow] = malloc(instruction_size);	// Allocate a space to store instructions and actions
@@ -622,7 +776,115 @@ void flow_add13(struct ofp_header *msg)
 	flow_counters[iLastFlow].active = true;
 	iLastFlow++;
 	return;
+}
+
+void flow_delete13(struct ofp_header *msg)
+{
+	struct ofp13_flow_mod *ptr_fm = msg;
+	for(int q=0;q<iLastFlow;q++)
+	{
+		if(flow_counters[q].active == true)
+		{
+			if (ptr_fm->table_id != OFPTT_ALL && ptr_fm->table_id != flow_match13[q].table_id)
+				{
+						continue;
+				}
+				if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q].cookie & ptr_fm->cookie_mask)
+				{
+						continue;
+				}
+				if (ptr_fm->out_port != OFPP13_ANY)
+				{
+						bool out_port_match = false;
+						int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
+						int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+						struct ofp13_instruction *inst;
+						for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
+						{
+								if(inst->type == OFPIT13_APPLY_ACTIONS || inst->type == OFPIT13_WRITE_ACTIONS)
+								{
+									struct ofp13_instruction_actions *ia = inst;
+									struct ofp13_action_header *action;
+									for(action=ia->actions; action<inst+inst->len; action+=action->len)
+									{
+										if(action->type==OFPAT13_OUTPUT)
+										{
+											struct ofp13_action_output *output = action;
+											if (output->port == ptr_fm->out_port)
+											{
+												out_port_match = true;
+											}
+									}
+								}
+						}
+				}
+					if(out_port_match==false)
+					{
+						continue;
+					}
+				}
+				if (ptr_fm->out_group != OFPG13_ANY)
+				{
+					bool out_group_match = false;
+					int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
+					int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+					struct ofp13_instruction *inst;
+					for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
+					{
+						if(inst->type == OFPIT13_APPLY_ACTIONS || inst->type == OFPIT13_WRITE_ACTIONS)
+						{
+							struct ofp13_instruction_actions *ia = inst;
+							struct ofp13_action_header *action;
+							for(action=ia->actions; action<inst+inst->len; action+=action->len)
+							{
+								if(action->type==OFPAT13_GROUP)
+								{
+									struct ofp13_action_group *group = action;
+									if (group->group_id == ptr_fm->out_group)
+									{
+										out_group_match = true;
+									}
+								}
+							}
+						}
+								}
+								if(out_group_match==false)
+								{
+										continue;
+								}
+						}
+						if(field_match13(ofp13_oxm_match[q], ntohs(flow_match13[q].match.length)-4, ptr_fm->match.oxm_fields, ntohs(ptr_fm->match.length)-4) == 0)
+						{
+								continue;
+						}
+						if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
+						// Clear the counters and action
+						memset(&flow_counters[q], 0, sizeof(struct flows_counter));
+						if(ofp13_oxm_match[q] != NULL)
+						{
+								free(ofp13_oxm_match[q]);
+						}
+						if(ofp13_oxm_inst[q] != NULL)
+						{
+								free(ofp13_oxm_inst[q]);
+						}
+				}
+		}
 	
+		int flow_count = 0;
+		for(int q=0;q<iLastFlow;q++)
+		{
+			if (flow_counters[q].active){
+			if (flow_count != q) {
+			memcpy(&flow_counters[flow_count], &flow_counters[q], sizeof(struct flows_counter));
+			ofp13_oxm_match[flow_count] = ofp13_oxm_match[q];
+			ofp13_oxm_inst[flow_count] = ofp13_oxm_inst[q];
+			}
+			flow_count++;
+		}
+	}
+	iLastFlow = flow_count;
+	return;
 }
 
 /*
@@ -644,20 +906,32 @@ void flow_delete_strict13(struct ofp_header *msg)
 			if((memcmp(&flow_match13[q].match, &ptr_fm->match, sizeof(struct ofp13_match)) == 0) && (memcmp(&flow_match13[q].cookie, &ptr_fm->cookie,4) == 0))
 			{
 				if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
-				// Clear flow counters and actions
+				// Clear the counters and action
 				memset(&flow_counters[q], 0, sizeof(struct flows_counter));
-				// Copy the last flow to here to fill the gap
-				memcpy(&flow_match13[q], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));
-				// If there are OXM match fields move them too
-				ofp13_oxm_match[q] = ofp13_oxm_match[iLastFlow-1];
-				ofp13_oxm_match[iLastFlow-1] = NULL;
-				memcpy(&flow_counters[q], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-				// Clear the counters and action from the last flow that was moved
-				memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-				iLastFlow --;
+				if(ofp13_oxm_match[q] != NULL)
+				{
+						free(ofp13_oxm_match[q]);
+				}
+				if(ofp13_oxm_inst[q] != NULL)
+				{
+						free(ofp13_oxm_inst[q]);
+				}
 			}
 		}
 	}
+	int flow_count = 0;
+	for(int q=0;q<iLastFlow;q++)
+	{
+		if (flow_counters[q].active){
+			if (flow_count != q) {
+				memcpy(&flow_counters[flow_count], &flow_counters[q], sizeof(struct flows_counter));
+				ofp13_oxm_match[flow_count] = ofp13_oxm_match[q];
+				ofp13_oxm_inst[flow_count] = ofp13_oxm_inst[q];
+			}
+			flow_count++;
+		}
+	}
+	iLastFlow = flow_count;
 	return;
 }
 
@@ -670,48 +944,38 @@ void flow_delete_strict13(struct ofp_header *msg)
 *	@param reason - reason for the packet in.
 *
 */
-void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason, uint16_t flow_id)
+void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason)
 {
 	uint16_t size = 0;
 	struct ofp13_packet_in * pi;	
 	uint16_t send_size = ul_size;
+	struct oxm_header13 oxm_header;	
+	uint32_t in_port = ntohl(port);
 	
-	if (send_size > 128) send_size = 128;	
 	if(tcp_sndbuf(tcp_pcb) < (send_size + 34)) return;
 
-	//memset(shared_buffer, 0, size);
 	pi = (struct ofp13_packet_in *) shared_buffer;
 	pi->header.version = OF_Version;
 	pi->header.type = OFPT13_PACKET_IN;
 	pi->header.xid = 0;
 	pi->buffer_id = -1;
 	pi->reason = reason;
+	pi->table_id = 0;
+	pi->cookie = -1;
 
-	if (reason == OFPR_ACTION && flow_id != 0xffff)	
-	{
-		pi->table_id = 100;
-		pi->cookie = flow_match13[flow_id].cookie;
-		if (ofp13_oxm_match[flow_id] != 0)
-		{
-			memcpy(pi->match.type, ofp13_oxm_match[flow_id], htons(flow_match13[flow_id].match.length)-4);
-			size = sizeof(struct ofp13_packet_in) + (htons(flow_match13[flow_id].match.length)-4) + 2 + send_size;
-		} else {
-			pi->match.type = htons(OFPMT_OXM);
-			pi->match.length = htons(4);
-			size = sizeof(struct ofp13_packet_in) + 2 + send_size;
-		}
-
-	} else {
-		pi->table_id = 100;
-		pi->cookie = 0;
-		pi->match.type = htons(OFPMT_OXM);
-		pi->match.length = htons(4);
-		size = sizeof(struct ofp13_packet_in) + 2 + send_size;
-	}
+	pi->match.type = htons(OFPMT_OXM);
+	pi->match.length = htons(12);
+	oxm_header.oxm_class = ntohs(0x8000);
+	oxm_header.oxm_field = OFPXMT_OFB_IN_PORT;
+	oxm_header.oxm_len = 4;
+	memcpy(shared_buffer + sizeof(struct ofp13_packet_in)-4, &oxm_header, 4);
+	memcpy(shared_buffer + sizeof(struct ofp13_packet_in), &in_port, 4);
+ 	size = sizeof(struct ofp13_packet_in) + 10 + send_size;	
 	pi->header.length = HTONS(size);
 	pi->total_len = HTONS(send_size);
 	memcpy(shared_buffer + (size-send_size), buffer, send_size);
 	sendtcp(&shared_buffer, size);
+	tcp_output(tcp_pcb);
 	return;
 }
 
@@ -723,19 +987,22 @@ void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason
 */
 void packet_out13(struct ofp_header *msg)
 {
+	uint32_t outPort;
 	struct ofp13_packet_out * po;
 	po = (struct ofp13_packet_out *) msg;
-	uint8_t * ptr = (uint8_t *) po;
-	uint16_t *iport;
-	iport = ptr + 12;
-	ptr += sizeof(struct ofp13_packet_out) + NTOHS(po->actions_len);
-	int size = NTOHS(po->header.length) - ((sizeof(struct ofp13_packet_out) + NTOHS(po->actions_len)));
-	uint16_t *eport;
-	eport = ptr - 4;
-	int outPort = NTOHS(*eport);
-	int inPort = NTOHS(*iport);
+	uint32_t inPort = htonl(po->in_port);
+	uint8_t *ptr = (uint8_t *) po;
+	int size = ntohs(po->header.length) - ((sizeof(struct ofp13_packet_out) + ntohs(po->actions_len)));	
+	ptr += sizeof(struct ofp13_packet_out) + ntohs(po->actions_len);
+	if (size < 0) return; // Corrupt packet!
+	struct ofp13_action_header *act_hdr = po->actions;
+	if (ntohs(act_hdr->type) == OFPAT13_OUTPUT)	
+	{
+		struct ofp13_action_output *act_out = act_hdr;
+		outPort = htonl(act_out->port);
+	}
 	
-	if (outPort == OFPP_FLOOD)
+	if (outPort == OFPP13_FLOOD)
 	{
 		outPort = 7 - (1 << (inPort-1));	// Need to fix this, may also send out the Non-OpenFlow port
 		} else {

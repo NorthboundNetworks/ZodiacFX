@@ -132,6 +132,15 @@ enum ofp13_type {
 	OFPT13_METER_MOD          = 29, /* Controller/switch message */
 };
 
+/* Table numbering. Tables can use any number up to OFPT_MAX. */
+enum ofp_table {
+		/* Last usable table number. */
+		OFPTT_MAX = 0xfe,
+	
+		/* Fake tables. */
+		OFPTT_ALL = 0xff /* Wildcard table used for table config, flow stats and flow deletes. */
+};
+
 enum ofp13_multipart_types {
     /* Description of this OpenFlow switch.
      * The request body is empty.
@@ -248,6 +257,23 @@ struct ofp13_desc {
 	char dp_desc[DESC_STR_LEN];        /* Human readable description of datapath. */
 };
 
+enum ofp13_config_flags {
+	/* Handling of IP fragments. */
+	OFPC13_FRAG_NORMAL   = 0,       /* No special handling for fragments. */
+	OFPC13_FRAG_DROP     = 1 << 0,  /* Drop fragments. */
+	OFPC13_FRAG_REASM    = 1 << 1,  /* Reassemble (only if OFPC_IP_REASM set). */
+	OFPC13_FRAG_MASK     = 3,
+};
+
+/* Switch configuration. */
+struct ofp13_switch_config {
+    struct ofp_header header;
+    uint16_t flags;             /* OFPC_* flags. */
+    uint16_t miss_send_len;     /* Max bytes of packet that datapath
+                                   should send to the controller. See
+                                   ofp_controller_max_len for valid values.
+                                   */
+};
 /* Switch features. */
 struct ofp13_switch_features {
     struct ofp_header header;
@@ -855,7 +881,7 @@ enum oxm13_ofb_match_fields {
     OFPXMT_OFB_IPV6_ND_TLL    = 33, /* Target link-layer for ND. */
     OFPXMT_OFB_MPLS_LABEL     = 34, /* MPLS label. */
     OFPXMT_OFB_MPLS_TC        = 35, /* MPLS TC. */
-    OFPXMT_OFP_MPLS_BOS       = 36, /* MPLS BoS bit. */
+    OFPXMT_OFB_MPLS_BOS       = 36, /* MPLS BoS bit. */
     OFPXMT_OFB_PBB_ISID       = 37, /* PBB I-SID. */
     OFPXMT_OFB_TUNNEL_ID      = 38, /* Logical Port Metadata. */
     OFPXMT_OFB_IPV6_EXTHDR    = 39, /* IPv6 Extension Header pseudo-field */
@@ -935,8 +961,9 @@ enum ofp_vlan_id {
     OFPVID_NONE    = 0x0000, /* No VLAN id was set. */
 };
 /* Define for compatibility */
+#ifndef OFP_VLAN_NONE
 #define OFP_VLAN_NONE      OFPVID_NONE
-
+#endif
 /* 802.1Q VID.
  *
  * For a packet with an 802.1Q header, this is the VLAN-ID (VID) from the
@@ -1270,6 +1297,8 @@ enum ofp_vlan_id {
 #define OXM_OF_IPV6_EXTHDR   OXM_HEADER  (0x8000, OFPXMT_OFB_IPV6_EXTHDR, 2)
 #define OXM_OF_IPV6_EXTHDR_W OXM_HEADER_W(0x8000, OFPXMT_OFB_IPV6_EXTHDR, 2)
 
+/* Special buffer-id to indicate no buffer */
+#define OFP_NO_BUFFER 0xffffffff
 		
 /* Why is this packet being sent to the controller? */
 enum ofp13_packet_in_reason {
@@ -1327,6 +1356,14 @@ struct ofp13_flow_mod {
     //struct ofp_instruction instructions[0]; /* Instruction set */
 };
 
+enum ofp_group {
+		/* Last usable group number. */
+		OFPG13_MAX = 0xffffff00,
+		/* Fake groups. */
+		OFPG13_ALL = 0xfffffffc, /* Represents all groups for group delete commands. */
+		OFPG13_ANY = 0xffffffff  /* Special wildcard: no group specified. */
+};
+
 /* Send packet (controller -> datapath). */
 struct ofp13_packet_out {
     struct ofp_header header;
@@ -1360,4 +1397,39 @@ struct ofp13_packet_in {
     //uint8_t data[0];      /* Ethernet frame */
 };
 
+/* Configures the "role" of the sending controller.  The default role is:
+ *
+ *    - Equal (NX_ROLE_EQUAL), which allows the controller access to all
+ *      OpenFlow features. All controllers have equal responsibility.
+ *
+ * The other possible roles are a related pair:
+ *
+ *    - Master (NX_ROLE_MASTER) is equivalent to Equal, except that there may
+ *      be at most one Master controller at a time: when a controller
+ *      configures itself as Master, any existing Master is demoted to the
+ *      Slave role.
+ *
+ *    - Slave (NX_ROLE_SLAVE) allows the controller read-only access to
+ *      OpenFlow features.  In particular attempts to modify the flow table
+ *      will be rejected with an OFPBRC_EPERM error.
+ *
+ *      Slave controllers do not receive OFPT_PACKET_IN or OFPT_FLOW_REMOVED
+ *      messages, but they do receive OFPT_PORT_STATUS messages.
+ */
+
+/* Controller roles. */
+enum ofp13_controller_role {
+    OFPCR_ROLE_NOCHANGE = 0,    /* Don't change current role. */
+    OFPCR_ROLE_EQUAL    = 1,    /* Default role, full access. */
+    OFPCR_ROLE_MASTER   = 2,    /* Full access, at most one master. */
+    OFPCR_ROLE_SLAVE    = 3,    /* Read-only access. */
+};
+
+/* Role request and reply message. */
+struct ofp13_role_request {
+    struct ofp_header header;   /* Type OFPT_ROLE_REQUEST/OFPT_ROLE_REPLY. */
+    uint32_t role;              /* One of NX_ROLE_*. */
+    uint8_t pad[4];             /* Align to 64 bits. */
+    uint64_t generation_id;     /* Master Election Generation Id */
+};
 #endif /* OPENFLOW_13_H_ */
