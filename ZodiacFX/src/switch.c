@@ -42,6 +42,7 @@
 gmac_device_t gs_gmac_dev;
 extern struct tcp_conn tcp_conn;
 extern struct zodiac_config Zodiac_Config;
+extern int OF_Version;
 uint8_t gmacbuffer[1536];
 struct ofp10_port_stats phys10_port_stats[4];
 struct ofp13_port_stats phys13_port_stats[4];
@@ -297,11 +298,23 @@ void update_port_stats(void)
 {	
 	for (int c=0;c<4;c++)
 	{
-		phys10_port_stats[c].tx_bytes += readtxbytes(c+1);
-		phys10_port_stats[c].rx_bytes += readrxbytes(c+1);
-		phys10_port_stats[c].tx_dropped += readtxdrop(c+1);
-		phys10_port_stats[c].rx_dropped += readrxdrop(c+1);
-		phys10_port_stats[c].rx_crc_err += readrxdrop(c+1);
+		if (OF_Version == 1)
+		{
+			phys10_port_stats[c].tx_bytes += readtxbytes(c+1);
+			phys10_port_stats[c].rx_bytes += readrxbytes(c+1);
+			phys10_port_stats[c].tx_dropped += readtxdrop(c+1);
+			phys10_port_stats[c].rx_dropped += readrxdrop(c+1);
+			phys10_port_stats[c].rx_crc_err += readrxdrop(c+1);
+		}
+		
+		if (OF_Version == 4)
+		{
+			phys13_port_stats[c].tx_bytes += readtxbytes(c+1);
+			phys13_port_stats[c].rx_bytes += readrxbytes(c+1);
+			phys13_port_stats[c].tx_dropped += readtxdrop(c+1);
+			phys13_port_stats[c].rx_dropped += readrxdrop(c+1);
+			phys13_port_stats[c].rx_crc_err += readrxdrop(c+1);
+		}
 	}
 }
 
@@ -417,6 +430,10 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
 	if (port & 2) phys10_port_stats[1].tx_packets++;
 	if (port & 4) phys10_port_stats[2].tx_packets++;
 	if (port & 8) phys10_port_stats[3].tx_packets++;
+	if (port & 1) phys13_port_stats[0].tx_packets++;
+	if (port & 2) phys13_port_stats[1].tx_packets++;
+	if (port & 4) phys13_port_stats[2].tx_packets++;
+	if (port & 8) phys13_port_stats[3].tx_packets++;
 	// Add padding
 	if (ul_size < 60) 
 	{
@@ -433,10 +450,11 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
 		*last_byte = port;
 		gmac_dev_write(&gs_gmac_dev, &gmacbuffer, (ul_size + 1), NULL);
 	}
+	return;
 }
 
 /*
-*	GMAC handler fucntion
+*	GMAC handler function
 *
 */
 void GMAC_Handler(void)
@@ -497,8 +515,7 @@ void switch_init(void)
 		
 		if (Zodiac_Config.OFEnabled == OF_ENABLED) enableOF();
 		//if (Zodiac_Config.OFEnabled == OF_DISABLED) disableOF();
-		
-
+		return;
 }
 /*
 *	Main switching loop
@@ -511,7 +528,6 @@ void task_switch(struct netif *netif)
 	uint32_t ul_frm_size = 0;
 
 	/* Main packet processing loop */
-
 	if (GMAC_OK == gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_frm_size))
 	{
 		if (ul_frm_size > 0)
@@ -521,6 +537,7 @@ void task_switch(struct netif *netif)
 			if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[tag-1] == 1)
 			{
 				phys10_port_stats[tag-1].rx_packets++;
+				phys13_port_stats[tag-1].rx_packets++;
 				ul_frm_size--; // remove the tail first
 				nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_frm_size, tag);
 				return;

@@ -167,29 +167,22 @@ uint8_t ethernet_phy_set_link(Gmac *p_gmac, uint8_t uc_phy_addr,
 	UNUSED(uc_phy_addr);
 	UNUSED(uc_apply_setting_flag);
 
-	//printf("Disabling Switch\r");
 	switch_write(1,144);
 	gmac_enable_transmit(GMAC, false);
 	gmac_enable_receive(GMAC, false);
 	
-	//printf("Setting switch registers\r");
 	switch_write(86,232);
 	
 	gmac_set_speed(p_gmac, true);
 	gmac_enable_full_duplex(p_gmac, true);
 	gmac_enable_copy_all(p_gmac, true);
 	gmac_disable_broadcast(p_gmac, false);
-	//gmac_enable_ignore_rx_fcs(GMAC, true);
 
 	/* Select Media Independent Interface type*/ 
 	gmac_select_mii_mode(p_gmac, ETH_PHY_MODE);
-
 	gmac_enable_transmit(GMAC, true);
 	gmac_enable_receive(GMAC, true);
-
-	//printf("Enabling Switch\r");
 	switch_write(1,145);
-	
 	ethernet_phy_reset(GMAC,uc_phy_addr);
 
 	return GMAC_OK;

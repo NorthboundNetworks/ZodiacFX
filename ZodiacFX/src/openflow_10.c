@@ -36,8 +36,6 @@
 #include "of_helper.h"
 #include "lwip/tcp.h"
 #include "ipv4/lwip/ip.h"
-//#include "ipv4/lwip/inet_chksum.h"
-//#include "ipv4/lwip/ip_addr.h"
 #include "lwip/tcp_impl.h"
 #include "lwip/udp.h"
 
@@ -590,8 +588,6 @@ void stats_flow_reply(struct ofp_stats_request *msg)
 	reply->header.type = OFPT10_STATS_REPLY;
 	reply->header.xid = msg->header.xid;
 	reply->type = htons(OFPST_FLOW);
-
-	if(iLastFlow > 12) iLastFlow = 12;	// Need to fix this! LWIP won't send buffers bigger then 1 packet (1460 bytes)
 	int len = flow_stats_msg10(&statsbuffer, 0, iLastFlow);
 	reply->header.length = htons(len);
 	reply->flags = 0;
@@ -676,7 +672,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 			
 		}
 		memcpy(buf, &reply, sizeof(struct ofp10_stats_reply));
-		memcpy(buf + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[0],stats_size);
+		memcpy(buf + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[0], stats_size);
 		
 	} else
 	{
@@ -705,7 +701,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 		zodiac_port_stats[port].collisions = 0;
 
 		memcpy(buf, &reply, sizeof(struct ofp10_stats_reply));
-		memcpy(buf + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[port],stats_size);
+		memcpy(buf + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[port], stats_size);
 	}
 	sendtcp(&buf, len);
 	return;
@@ -752,11 +748,8 @@ void packet_out(struct ofp_header *msg)
 */
 void packet_in(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason)
 {
-	uint16_t send_size = ul_size;
-	if (send_size > 128) send_size = 128;
-	
+	uint16_t send_size = ul_size;	
 	if(tcp_sndbuf(tcp_pcb) < (send_size + 18)) return;
-
 	uint16_t size = 0;
 	struct ofp_packet_in * pi;
 

@@ -36,7 +36,6 @@
 #define TWI_CLK     100000
 /** Address of AT24C chips */
 #define AT24C_ADDRESS           0x50
-//#define EEPROM_MEM_ADDR         0
 #define EEPROM_MEM_ADDR_LENGTH  1
 /** Data to be sent */
 
