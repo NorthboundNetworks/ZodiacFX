@@ -717,11 +717,11 @@ void flow_mod13(struct ofp_header *msg)
 		break;
 		
 		case OFPFC_MODIFY:
-		//flow_modify(msg);
+		//flow_modify13(msg);
 		break;
 		
 		case OFPFC_MODIFY_STRICT:
-		//flow_modify_strict(msg);
+		//flow_modify_strict13(msg);
 		break;
 		
 		case OFPFC13_DELETE:

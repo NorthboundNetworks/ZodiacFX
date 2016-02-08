@@ -55,6 +55,8 @@ extern int totaltime;
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
 extern struct table_counter table_counters;
 
+// Local Variables
+uint8_t timer_alt;
 static uint16_t VLAN_VID_MASK = 0x0fff;
 
 static inline uint64_t (htonll)(uint64_t n)
@@ -115,87 +117,16 @@ void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
 void nnOF_timer(void)
 {
 	totaltime++;
-	update_port_stats();
-	update_port_status();
-	
-	// Check flow timeouts
-	int i;
-	for (i=0;i<iLastFlow;i++)
-	{
-		if (flow_counters[i].active == true) // Make sure its an active flow
-		{
-			if (OF_Version == 1)
-			{
-				if (flow_match[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && (totaltime - flow_counters[i].lastmatch) >= ntohs(flow_match[i].idle_timeout))
-				{
-					if (flow_match[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_IDLE_TIMEOUT);
-					// Clear flow counters and actions
-					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
-					memset(&flow_actions[i], 0, sizeof(struct flow_tbl_actions));
-					// Copy the last flow to here to fill the gap
-					memcpy(&flow_match[i], &flow_match[iLastFlow-1], sizeof(struct ofp_flow_mod));
-					memcpy(&flow_actions[i], &flow_actions[iLastFlow-1], sizeof(struct flow_tbl_actions));
-					memcpy(&flow_counters[i], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-					// Clear the counters and action from the last flow that was moved
-					memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-					memset(&flow_actions[iLastFlow-1], 0, sizeof(struct flow_tbl_actions));
-					iLastFlow --;
-					return;
-				}
-			
-				if (flow_match[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && (totaltime - flow_counters[i].duration) >= ntohs(flow_match[i].hard_timeout))
-				{
-					if (flow_match[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
-					// Clear flow counters and actions
-					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
-					memset(&flow_actions[i], 0, sizeof(struct flow_tbl_actions));
-					// Copy the last flow to here to fill the gap
-					memcpy(&flow_match[i], &flow_match[iLastFlow-1], sizeof(struct ofp_flow_mod));
-					memcpy(&flow_actions[i], &flow_actions[iLastFlow-1], sizeof(struct flow_tbl_actions));
-					memcpy(&flow_counters[i], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-					// Clear the counters and action from the last flow that was moved
-					memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-					memset(&flow_actions[iLastFlow-1], 0, sizeof(struct flow_tbl_actions));
-					iLastFlow --;
-					return;
-				}
-			} else if (OF_Version == 4)
-			{
-				if (flow_match13[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && (totaltime - flow_counters[i].lastmatch) >= ntohs(flow_match13[i].idle_timeout))
-				{
-					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_IDLE_TIMEOUT);
-					// Clear flow counters
-					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
-					// Copy the last flow to here to fill the gap
-					memcpy(&flow_match13[i], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));					
-					// If there are OXM match fields move them too
-					ofp13_oxm_match[i] = ofp13_oxm_match[iLastFlow-1];
-					ofp13_oxm_match[iLastFlow-1] = NULL;
-					memcpy(&flow_counters[i], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-					// Clear the counters from the last flow that was moved
-					memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-					iLastFlow --;
-					return;
-				}
-			
-				if (flow_match13[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && (totaltime - flow_counters[i].duration) >= ntohs(flow_match13[i].hard_timeout))
-				{
-					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
-					// Clear flow counters
-					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
-					// Copy the last flow to here to fill the gap
-					memcpy(&flow_match13[i], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));
-					// If there are OXM match fields move them too
-					ofp13_oxm_match[i] = ofp13_oxm_match[iLastFlow-1];
-					ofp13_oxm_match[iLastFlow-1] = NULL;
-					memcpy(&flow_counters[i], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-					// Clear the counters from the last flow that was moved
-					memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-					iLastFlow --;
-					return;
-				}
-			}
-		}
+	// Round robin the timer events so they don't have such a big impact on switching	
+	if (timer_alt == 0){
+		update_port_stats();
+		timer_alt = 1;
+	} else if (timer_alt == 1){
+		update_port_status();
+		timer_alt = 2;
+	} else if (timer_alt == 2){
+		flow_timeouts();
+		timer_alt = 0;	
 	}
 	return;
 }
@@ -1001,6 +932,92 @@ int field_match13(uint8_t *oxm_a, int len_a, uint8_t *oxm_b, int len_b)
 		}
 	}
 	return 1;
+}
+
+/*
+*	Processes flow timeouts
+*
+*/
+void flow_timeouts()
+{
+	for (int i=0;i<iLastFlow;i++)
+	{
+		if (flow_counters[i].active == true) // Make sure its an active flow
+		{
+			if (OF_Version == 1)
+			{
+				if (flow_match[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && (totaltime - flow_counters[i].lastmatch) >= ntohs(flow_match[i].idle_timeout))
+				{
+					if (flow_match[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_IDLE_TIMEOUT);
+					// Clear flow counters and actions
+					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
+					memset(&flow_actions[i], 0, sizeof(struct flow_tbl_actions));
+					// Copy the last flow to here to fill the gap
+					memcpy(&flow_match[i], &flow_match[iLastFlow-1], sizeof(struct ofp_flow_mod));
+					memcpy(&flow_actions[i], &flow_actions[iLastFlow-1], sizeof(struct flow_tbl_actions));
+					memcpy(&flow_counters[i], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
+					// Clear the counters and action from the last flow that was moved
+					memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
+					memset(&flow_actions[iLastFlow-1], 0, sizeof(struct flow_tbl_actions));
+					iLastFlow --;
+					return;
+				}
+					
+				if (flow_match[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && (totaltime - flow_counters[i].duration) >= ntohs(flow_match[i].hard_timeout))
+				{
+					if (flow_match[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
+					// Clear flow counters and actions
+					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
+					memset(&flow_actions[i], 0, sizeof(struct flow_tbl_actions));
+					// Copy the last flow to here to fill the gap
+					memcpy(&flow_match[i], &flow_match[iLastFlow-1], sizeof(struct ofp_flow_mod));
+					memcpy(&flow_actions[i], &flow_actions[iLastFlow-1], sizeof(struct flow_tbl_actions));
+					memcpy(&flow_counters[i], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
+					// Clear the counters and action from the last flow that was moved
+					memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
+					memset(&flow_actions[iLastFlow-1], 0, sizeof(struct flow_tbl_actions));
+					iLastFlow --;
+					return;
+				}
+			} else if (OF_Version == 4)
+			{
+				if (flow_match13[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && (totaltime - flow_counters[i].lastmatch) >= ntohs(flow_match13[i].idle_timeout))
+				{
+					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_IDLE_TIMEOUT);
+					// Clear flow counters
+					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
+					// Copy the last flow to here to fill the gap
+					memcpy(&flow_match13[i], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));
+					// If there are OXM match fields move them too
+					ofp13_oxm_match[i] = ofp13_oxm_match[iLastFlow-1];
+					ofp13_oxm_match[iLastFlow-1] = NULL;
+					memcpy(&flow_counters[i], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
+					// Clear the counters from the last flow that was moved
+					memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
+					iLastFlow --;
+					return;
+				}
+					
+				if (flow_match13[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && (totaltime - flow_counters[i].duration) >= ntohs(flow_match13[i].hard_timeout))
+				{
+					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
+					// Clear flow counters
+					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
+					// Copy the last flow to here to fill the gap
+					memcpy(&flow_match13[i], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));
+					// If there are OXM match fields move them too
+					ofp13_oxm_match[i] = ofp13_oxm_match[iLastFlow-1];
+					ofp13_oxm_match[iLastFlow-1] = NULL;
+					memcpy(&flow_counters[i], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
+					// Clear the counters from the last flow that was moved
+					memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
+					iLastFlow --;
+					return;
+				}
+			}
+		}
+	}
+	return;
 }
 
 /*
