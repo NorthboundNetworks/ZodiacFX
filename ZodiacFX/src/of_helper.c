@@ -809,7 +809,7 @@ int field_match13(uint8_t *oxm_a, int len_a, uint8_t *oxm_b, int len_b)
 						}
 					}
 					break;
-				}else if (memcpy(ahdr+4, bhdr+4, OXM_LENGTH(bfield))==0){
+				}else if (memcmp(ahdr+4, bhdr+4, OXM_LENGTH(bfield))==0){
 					break;
 				}else{
 					return 0;
