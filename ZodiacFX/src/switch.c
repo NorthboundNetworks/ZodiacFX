@@ -72,6 +72,8 @@ static uint32_t gs_ul_spi_clock = 500000;
 /* Delay between consecutive transfers. */
 #define SPI_DLYBCT 0x10
 
+uint8_t stats_rr = 0;
+
 // Internal functions
 int readtxbytes(int port);
 int readrxbytes(int port);
@@ -293,29 +295,30 @@ void enableOF(void)
 /*
 *	Update the port stats counters
 *
+*	Getting the port stats can has a significant impact on performance.
+*	It can take over 100ms to get a response so we only query one port per call
 */
 void update_port_stats(void)
 {	
-	for (int c=0;c<4;c++)
+	if (OF_Version == 1)
 	{
-		if (OF_Version == 1)
-		{
-			phys10_port_stats[c].tx_bytes += readtxbytes(c+1);
-			phys10_port_stats[c].rx_bytes += readrxbytes(c+1);
-			phys10_port_stats[c].tx_dropped += readtxdrop(c+1);
-			phys10_port_stats[c].rx_dropped += readrxdrop(c+1);
-			phys10_port_stats[c].rx_crc_err += readrxdrop(c+1);
-		}
-		
-		if (OF_Version == 4)
-		{
-			phys13_port_stats[c].tx_bytes += readtxbytes(c+1);
-			phys13_port_stats[c].rx_bytes += readrxbytes(c+1);
-			phys13_port_stats[c].tx_dropped += readtxdrop(c+1);
-			phys13_port_stats[c].rx_dropped += readrxdrop(c+1);
-			phys13_port_stats[c].rx_crc_err += readrxdrop(c+1);
-		}
+		phys10_port_stats[stats_rr].tx_bytes += readtxbytes(stats_rr+1);
+		phys10_port_stats[stats_rr].rx_bytes += readrxbytes(stats_rr+1);
+		phys10_port_stats[stats_rr].tx_dropped += readtxdrop(stats_rr+1);
+		phys10_port_stats[stats_rr].rx_dropped += readrxdrop(stats_rr+1);
+		phys10_port_stats[stats_rr].rx_crc_err += readrxdrop(stats_rr+1);
 	}
+		
+	if (OF_Version == 4)
+	{
+		phys13_port_stats[stats_rr].tx_bytes += readtxbytes(stats_rr+1);
+		phys13_port_stats[stats_rr].rx_bytes += readrxbytes(stats_rr+1);
+		phys13_port_stats[stats_rr].tx_dropped += readtxdrop(stats_rr+1);
+		phys13_port_stats[stats_rr].rx_dropped += readrxdrop(stats_rr+1);
+		phys13_port_stats[stats_rr].rx_crc_err += readrxdrop(stats_rr+1);
+	}
+	stats_rr++;
+	if (stats_rr == 4) stats_rr = 0;
 }
 
 /*

@@ -80,7 +80,7 @@ void sys_init_timing(void)
 	/* Configure and enable interrupt on RC compare. */
 	NVIC_EnableIRQ((IRQn_Type)ID_TC0);
 	tc_enable_interrupt(TC0, 0, TC_IER_CPCS);
-
+	
 	/* Start timer. */
 	tc_start(TC0, 0);
 }

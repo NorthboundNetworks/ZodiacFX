@@ -171,7 +171,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						action_out = act_hdr;
 						if (ntohs(action_out->port) <= 255) // physical port
 						{
-							outport = (1<< (ntohs(action_out->port)-1));	//outport += (1<< (ntohs(action_out->port)-1));
+							outport = (1<< (ntohs(action_out->port)-1));
 							gmac_write(p_uc_data, packet_size, outport);
 						}
 						

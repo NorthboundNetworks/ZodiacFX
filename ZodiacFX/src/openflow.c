@@ -128,7 +128,8 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 		{
 			ofph = &packetbuffer[size];
 			if (size == 0) multi_pos = 0;
-			if (ofph->length == 0){
+			if (ofph->length == 0 || ofph->version == 0){
+				//printf("Corrupt OF packet! version = %d : length = %d\r\n", ofph->version, ofph->length);
 				return ERR_OK;	//Not an OpenFlow packet
 			}
 			plen = htons(ofph->length);
@@ -292,14 +293,14 @@ void task_openflow(void)
 	}
 
 	
-	if((sys_get_ms() - fast_of_timer) > 1000) // every 1000 ms (1 sec)
+	if((sys_get_ms() - fast_of_timer) > 500) // every 500 ms (0.5 secs)
 	{
 		fast_of_timer = sys_get_ms();
 		nnOF_timer();
 		
-		if (heartbeat > 3 && tcp_con_state == 1) echo_request();	//If we haven't heard anything from the controller for over 3 seconds send an echo request
+		if (heartbeat > 6 && tcp_con_state == 1) echo_request();	//If we haven't heard anything from the controller for over 3 seconds send an echo request
 		heartbeat++;	// Increment number of seconds since last response
-		if (heartbeat > HB_TIMEOUT && tcp_con_state == 1)	// If there is no response from the controller for HB_TIMEOUT seconds reset the connection 
+		if (heartbeat > (HB_TIMEOUT * 2) && tcp_con_state == 1)	// If there is no response from the controller for HB_TIMEOUT seconds reset the connection 
 		{
 			tcp_con_state = -1;
 			if(Zodiac_Config.failstate == 0) clear_flows();		// Clear the flow if in secure mode
