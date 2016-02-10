@@ -31,6 +31,7 @@
 #define COMMANDS_H_
 
 #include "config_zodiac.h"
+#include <arch/cc.h>
 
 enum of_status{
 	OF_DISABLED,
@@ -44,6 +45,7 @@ enum cli_context{
 	CLI_DEBUG
 	};
 
+PACK_STRUCT_BEGIN
 struct virtlan {
 	int uVlanID;
 	char cVlanName[16];
@@ -51,8 +53,10 @@ struct virtlan {
 	int uTagged;
 	uint8_t portmap[4];		// If the port is assigned to this VLAN
 	int uActive;
-};
+} PACK_STRUCT_STRUCT;
+PACK_STRUCT_END
 
+PACK_STRUCT_BEGIN
 struct zodiac_config {
 	char device_name[16];
 	uint8_t MAC_address[6];
@@ -66,7 +70,8 @@ struct zodiac_config {
 	uint8_t of_port[4];		// If the port is assigned to a VLAN
 	uint8_t failstate;
 	uint8_t of_version;
-};
+} PACK_STRUCT_STRUCT;
+PACK_STRUCT_END
 
 typedef struct arp_header {
 	uint8_t et_dest[6];  /**< Destination node */
