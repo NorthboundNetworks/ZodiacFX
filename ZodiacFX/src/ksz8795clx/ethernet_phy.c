@@ -286,7 +286,16 @@ err_t ethernetif_init(struct netif *netif)
 
 static err_t gmac_low_level_output(struct netif *netif, struct pbuf *p)
 {
-	gmac_write(p->payload, p->len, 128);
+	if(p->tot_len == p->len){
+		gmac_write(p->payload, p->len, 128);
+	} else if (p->tot_len < GMAC_FRAME_LENTGH_MAX) {
+		char frame[GMAC_FRAME_LENTGH_MAX];
+		pbuf_copy_partial(p, frame, p->tot_len, 0);
+		gmac_write(frame, p->tot_len, 128);
+	} else {
+		return ERR_MEM;
+	}
+	return ERR_OK;
 }
 
 

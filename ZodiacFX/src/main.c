@@ -103,7 +103,9 @@ void temp_init(void)
 */
 void HardFault_Handler(void)
 {
-	while(1);
+	while(1){
+		printf("hoge");
+	}
 }
 
 /*
@@ -164,7 +166,7 @@ int main (void)
 	netif_set_default(&gs_net_if);
 
 	netif_set_up(&gs_net_if);
-
+	
 	/* Initialize timer. */
 	sys_init_timing();
 	
@@ -190,11 +192,13 @@ int main (void)
 		}
 	}	
 	
+	openflow_init();
 	while(1)
 	{
 		task_switch(&gs_net_if);
 		task_command(cCommand, cCommand_last);	
 		sys_check_timeouts();
-		task_openflow();
+		openflow_task();
+//		task_openflow();
 	}
 }

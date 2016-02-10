@@ -67,9 +67,9 @@ struct oxm_header13
 
 
 void task_openflow(void);
-void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
-void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
-void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
+void nnOF_tablelookup(char *p_uc_data, uint32_t *ul_size, int port);
+void nnOF10_tablelookup(char *p_uc_data, uint32_t *ul_size, int port);
+void nnOF13_tablelookup(char *p_uc_data, uint32_t *ul_size, int port);
 void of10_message(struct ofp_header *ofph, int size, int len);
 void of13_message(struct ofp_header *ofph, int size, int len);
 void barrier10_reply(uint32_t xid);
@@ -84,5 +84,51 @@ void flowrem_notif(int flowid, uint8_t reason);
 (((x) & 0xff0000UL) >> 8) | \
 (((x) & 0xff000000UL) >> 24))
 #define NTOHL(x) HTONL(x)
+
+/* ---- kwi version ---- */
+
+#define ALIGN8(x) (x+7)/8*8
+
+enum ofp_pcb_status {
+	OFP_OK, // successfully processed
+	OFP_NOOP, // precondition not satisfied
+	OFP_CLOSE, // connection closed
+};
+
+#define RECV_BUFLEN 4096U
+#define MP_UNIT_MAXSIZE 512U
+
+struct ofp_pcb {
+	struct tcp_pcb *tcp;
+	struct pbuf *rbuf; // controller may send very long message
+	int rskip;
+	uint32_t txlen;
+	bool negotiated;
+	bool mpreq_on; // processing multipart
+	uint16_t mpreq_pos; // multipart processing position.
+	char mpreq_hdr[16]; // multipart request data header
+	char mp_in[MP_UNIT_MAXSIZE]; // table_features would be the largest
+	int mp_out_index; // output index
+	uint32_t xid;
+	uint32_t sleep_until;
+	uint32_t alive_until;
+	uint32_t next_ping;
+};
+
+void openflow_init(void);
+void openflow_task(void);
+uint16_t ofp_rx_length(struct ofp_pcb*);
+uint16_t ofp_rx_read(struct ofp_pcb*, char*, uint16_t);
+uint16_t ofp_tx_room(struct ofp_pcb*);
+uint16_t ofp_rx_write(struct ofp_pcb*, char*, uint16_t);
+uint16_t ofp_set_error(const char*, uint16_t, uint16_t);
+
+uint16_t mod_ofp13_flow(struct ofp13_flow_mod*);
+
+bool field_cmp13(const char*, int, const char*, int);
+int field_match13(const char*, int, const char*, int);
+
+enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self);
+enum ofp_pcb_status ofp10_handle(struct ofp_pcb *self);
 
 #endif /* OPENFLOW_H_ */

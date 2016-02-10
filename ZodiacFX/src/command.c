@@ -889,76 +889,76 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						oxm_header.oxm_field = oxm_header.oxm_field >> 1;
 						switch(oxm_header.oxm_field)
 						{
-							case OFPXMT_OFB_IN_PORT:
+							case OFPXMT13_OFB_IN_PORT:
 							memcpy(&oxm_value32, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
 							printf("  In Port: %d\r\n",ntohl(oxm_value32));
 							break;
 							
-							case OFPXMT_OFB_ETH_DST:
+							case OFPXMT13_OFB_ETH_DST:
 							memcpy(&oxm_eth, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 6);
 							printf("  Destination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
 							break;
 				
-							case OFPXMT_OFB_ETH_SRC:
+							case OFPXMT13_OFB_ETH_SRC:
 							memcpy(&oxm_eth, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 6);
 							printf("  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
 							break;
 
-							case OFPXMT_OFB_ETH_TYPE:
+							case OFPXMT13_OFB_ETH_TYPE:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 							if (ntohs(oxm_value16) == 0x0806 )printf("  ETH Type: ARP\r\n");
 							if (ntohs(oxm_value16) == 0x0800 )printf("  ETH Type: IPv4\r\n");
 							if (ntohs(oxm_value16) == 0x86dd )printf("  ETH Type: IPv6\r\n");
 							break;
 
-							case OFPXMT_OFB_IP_PROTO:
+							case OFPXMT13_OFB_IP_PROTO:
 							memcpy(&oxm_value8, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 1);
 							if (oxm_value8 == 1 )printf("  IP Protocol: ICMP\r\n");
 							if (oxm_value8 == 6 )printf("  IP Protocol: TCP\r\n");
 							if (oxm_value8 == 17 )printf("  IP Protocol: UDP\r\n");
 							break;
 
-							case OFPXMT_OFB_IPV4_SRC:
+							case OFPXMT13_OFB_IPV4_SRC:
 							memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
 							printf("  Source IP: %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
 							break;
 							
-							case OFPXMT_OFB_IPV4_DST:
+							case OFPXMT13_OFB_IPV4_DST:
 							memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
 							printf("  Destination IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
 							break;
 
-							case OFPXMT_OFB_IPV6_SRC:
+							case OFPXMT13_OFB_IPV6_SRC:
 							memcpy(&oxm_ipv6, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 16);
 							printf("  Source IP: %.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X\r\n", oxm_ipv6[0], oxm_ipv6[1], oxm_ipv6[2], oxm_ipv6[3], oxm_ipv6[4], oxm_ipv6[5], oxm_ipv6[6], oxm_ipv6[7]);
 							break;
 							
-							case OFPXMT_OFB_IPV6_DST:
+							case OFPXMT13_OFB_IPV6_DST:
 							memcpy(&oxm_ipv6, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 16);
 							printf("  Destination IP:  %.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X\r\n", oxm_ipv6[0], oxm_ipv6[1], oxm_ipv6[2], oxm_ipv6[3], oxm_ipv6[4], oxm_ipv6[5], oxm_ipv6[6], oxm_ipv6[7]);
 							break;
 																					
-							case OFPXMT_OFB_TCP_SRC:
+							case OFPXMT13_OFB_TCP_SRC:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 							printf("  Source TCP Port: %d\r\n",ntohs(oxm_value16));
 							break;
 
-							case OFPXMT_OFB_TCP_DST:
+							case OFPXMT13_OFB_TCP_DST:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 							printf("  Destination TCP Port: %d\r\n",ntohs(oxm_value16));
 							break;
 
-							case OFPXMT_OFB_UDP_SRC:
+							case OFPXMT13_OFB_UDP_SRC:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 							printf("  Source UDP Port: %d\r\n",ntohs(oxm_value16));
 							break;
 
-							case OFPXMT_OFB_UDP_DST:
+							case OFPXMT13_OFB_UDP_DST:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 							printf("  Destination UDP Port: %d\r\n",ntohs(oxm_value16));
 							break;
 																																		
-							case OFPXMT_OFB_VLAN_VID:
+							case OFPXMT13_OFB_VLAN_VID:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 							printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
 							break;
@@ -1006,7 +1006,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 									oxm_header.oxm_field = oxm_header.oxm_field >> 1;		
 									switch(oxm_header.oxm_field)
 									{
-										case OFPXMT_OFB_VLAN_VID:
+										case OFPXMT13_OFB_VLAN_VID:
 										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 										printf("   Set VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
 										break;

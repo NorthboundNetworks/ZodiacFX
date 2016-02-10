@@ -48,9 +48,6 @@ extern struct ofp13_port_stats phys13_port_stats[4];
 // Local Variables
 struct ofp_switch_config Switch_config;
 struct ofp_flow_mod flow_match[MAX_FLOWS];
-struct ofp13_flow_mod flow_match13[MAX_FLOWS];
-uint8_t *ofp13_oxm_match[MAX_FLOWS];
-uint8_t *ofp13_oxm_inst[MAX_FLOWS];
 struct flows_counter flow_counters[MAX_FLOWS];
 struct flow_tbl_actions flow_actions[MAX_FLOWS];
 struct table_counter table_counters;
@@ -78,6 +75,588 @@ err_t TCPready(void *arg, struct tcp_pcb *tpcb, err_t err);
 void tcp_error(void * arg, err_t err);
 static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
 
+// --- kwi ---
+
+static bool switch_negotiated(void);
+
+/*
+ * `ofp_buffer` len is a globally shared buffer,
+ * which is only for temporary use.
+ * Use cases:
+ *  * Look ahead ofp_header with pbuf_partial_copy
+ *  * Flatten pbuf and pass it to tcp_write()
+ *    with TCP_WRITE_FLAG_COPY
+ */
+#define OFP_BUFFER_LEN 2048
+char ofp_buffer[OFP_BUFFER_LEN];
+
+static void ofp_unreach(void){
+	while(1);
+}
+
+uint16_t ofp_rx_length(struct ofp_pcb *self){
+	if(self->rbuf == NULL) return 0;
+	return self->rbuf->tot_len - self->rskip;
+}
+
+/*
+ * `ofp_rx_read` pops bytes from ofp_pcb rx buffer
+ * @return written length
+ */
+uint16_t ofp_rx_read(struct ofp_pcb *self, char *buf, uint16_t capacity){
+	if(ofp_rx_length(self) < capacity){
+		capacity = ofp_rx_length(self);
+	}
+	if(capacity == 0){
+		return 0;
+	}
+	uint16_t ret = pbuf_copy_partial(self->rbuf, buf, capacity, self->rskip);
+	self->rskip += ret;
+	return ret;
+}
+
+uint16_t ofp_tx_room(struct ofp_pcb *pcb){
+	return tcp_sndbuf(pcb->tcp);
+}
+
+/*
+ * `ofp_tx_write` writes into underlying tcp buffer.
+ * writes ALL or NOTHING.
+ * `data` will be queued as a single TCP segment, so you should write a
+ * single complete openflow message in one call.
+ */
+static uint16_t ofp_tx_write(struct ofp_pcb *pcb, const char *data, uint16_t length){
+	if(ofp_tx_room(pcb) >= length){
+		if(ERR_OK == tcp_write(pcb->tcp, data, length, TCP_WRITE_FLAG_COPY)){
+			pcb->txlen += length;
+			return length;
+		}
+	}
+	return 0;
+}
+
+#define CONNECT_RETRY_INTERVAL 3000U /* 1 sec */
+#define OFP_PING_INTERVAL 7000U // 7sec
+#define OFP_TIMEOUT 60000U // 1 min
+
+static err_t ofp_close(struct ofp_pcb *self, uint32_t sleep){
+	struct tcp_pcb *tcp = self->tcp;
+	while(self->rbuf != NULL){
+		struct pbuf *head = self->rbuf;
+		self->rbuf = pbuf_dechain(head);
+		pbuf_free(head);
+	}
+	memset(self, 0, sizeof(struct ofp_pcb));
+	self->sleep_until = sys_get_ms() + sleep;
+	if(tcp != NULL){
+		return tcp_close(tcp);
+	}
+	return ERR_OK;
+}
+
+// tcp_err_fn
+static void ofp_err_cb(void *arg, err_t err){
+	if(arg == NULL) return;
+	struct ofp_pcb *self = arg;
+	if(err==ERR_RST){
+		while(self->rbuf != NULL){
+			struct pbuf *head = self->rbuf;
+			self->rbuf = pbuf_dechain(head);
+			pbuf_free(head);
+		}
+		memset(self, 0, sizeof(struct ofp_pcb));
+		self->sleep_until = sys_get_ms() + CONNECT_RETRY_INTERVAL;
+	} else if(err==ERR_ABRT){
+		// tcp_abort will only be called outside of ofp context
+	} else {
+		ofp_unreach();
+	}
+}
+
+/*
+ * prepares ofp_error_msg in ofp_buffer
+ */
+uint16_t ofp_set_error(const char *req, uint16_t ofpet, uint16_t ofpec){
+	struct ofp_header hdr;
+	memcpy(&hdr, req, 8);
+	uint16_t length = ntohs(hdr.length);
+	if(length > 64){
+		length = 64;
+	}
+	struct ofp_error_msg err;
+	err.header = hdr;
+	err.header.type = OFPT10_ERROR;
+	err.header.length = htons(12+length);
+	err.type = htons(ofpet);
+	err.code = htons(ofpec);
+	memmove(ofp_buffer+12, req, length);
+	memcpy(ofp_buffer, &err, 12);
+	return 12+length;
+}
+
+/*
+ * `ofp_write_error` use look ahead ofp_header, and consumes entire request message from ofp_pcb rx buffer.
+ */
+static enum ofp_pcb_status ofp_write_error(struct ofp_pcb *self, struct ofp_header req, uint16_t ofpet, uint16_t ofpec){
+	uint16_t length = ntohs(req.length);
+	if(ofp_rx_length(self) < length || ofp_tx_room(self) < 12+64){
+		return OFP_NOOP;
+	} else {
+		ofp_rx_read(self, ofp_buffer, length);
+	}
+	ofp_set_error(ofp_buffer, ofpet, ofpec);
+	ofp_tx_write(self, ofp_buffer, 12+length);
+	return OFP_OK;
+}
+
+static enum ofp_pcb_status ofp_negotiation(struct ofp_pcb *self){
+	if(self->negotiated){
+		return OFP_OK;
+	}
+	if(ofp_rx_length(self) < 8){
+		return OFP_NOOP;
+	}
+	struct ofp_header req;
+	pbuf_copy_partial(self->rbuf, &req, 8, self->rskip);
+	if (req.type != OFPT10_HELLO){
+		uint16_t length = ntohs(req.length);
+		if(length > 64){
+			length = 64; // at least 64 bytes from request by spec.
+		}
+		ofp_write_error(self, req, OFPET10_BAD_REQUEST, OFPBRC10_BAD_VERSION);
+		return OFP_CLOSE;
+	}
+	// we want to process this at one time
+	uint16_t length = ntohs(req.length);
+	if(ofp_rx_length(self) < length){
+		return OFP_NOOP;
+	} else {
+		length = ofp_rx_read(self, ofp_buffer, length);
+	}
+	bool has_versionbitmap = false;
+	uint32_t versionbitmap = 0;
+	if(length > 8){
+		uint16_t pos = 8;
+		struct ofp13_hello_elem_header element = {0};
+		while(pos < length){
+			memcpy(&element, ofp_buffer+pos, 4);
+			if(ntohs(element.type) == OFPHET13_VERSIONBITMAP){
+				// 1 or 4 is in the first bitmap
+				has_versionbitmap = true;
+				memcpy(&versionbitmap, ofp_buffer+pos+4, 4);
+				versionbitmap = ntohl(versionbitmap);
+				break;
+			}
+			pos += ALIGN8(ntohs(element.length));
+		}
+	}
+	int fixed_of_version = 0;
+	if(switch_negotiated()){
+		fixed_of_version = OF_Version;
+	} else {
+		fixed_of_version = Zodiac_Config.of_version;
+	}
+	if(fixed_of_version != 0){
+		if(has_versionbitmap && (versionbitmap & (1<<fixed_of_version)) == 0){
+			// no good
+		}else if(req.version >= fixed_of_version){
+			self->negotiated = true;
+			OF_Version = fixed_of_version;
+			return OFP_OK;
+		}
+	} else if(req.version == 4 || (has_versionbitmap && ((versionbitmap&0x10) != 0))){
+		self->negotiated = true;
+		OF_Version = 4;
+		return OFP_OK;
+	} else if(req.version == 1 || (has_versionbitmap && ((versionbitmap&0x02) != 0))){
+		self->negotiated = true;
+		OF_Version = 1;
+		return OFP_OK;
+	}
+	// may add reason ASCII string as payload by spec
+	ofp_write_error(self, req, OFPET10_HELLO_FAILED, OFPHFC_INCOMPATIBLE);
+	return OFP_CLOSE;
+}
+
+static enum ofp_pcb_status ofp_handle(struct ofp_pcb *self){
+	enum ofp_pcb_status ret = ofp_negotiation(self);
+	if(OFP_OK != ret){
+		return ret;
+	}
+	while(ofp_rx_length(self) >= 8){
+		uint16_t length;
+		if(self->mpreq_pos != 0){
+			struct ofp13_multipart_request mpreq = {};
+			memcpy(&mpreq, self->mpreq_hdr, 16);
+			length = ntohs(mpreq.header.length);
+			switch(ntohs(mpreq.type)){
+				case OFPMP13_FLOW:
+				if(self->mp_out_index < 0){
+					if(ofp_rx_length(self) < 40){
+						return OFP_NOOP;
+					}
+					struct ofp13_flow_stats_request unit;
+					pbuf_copy_partial(self->rbuf, &unit, 40, self->rskip);
+					uint16_t unitreqlen = offsetof(struct ofp13_flow_stats_request, match) + ALIGN8(ntohs(unit.match.length));
+					if(ofp_rx_length(self) < unitreqlen){
+						return OFP_NOOP;
+					}
+					self->mpreq_pos += ofp_rx_read(self, self->mp_in, unitreqlen);
+					self->mp_out_index = 0;
+				}
+				{
+					struct ofp13_flow_stats_request hint;
+					memcpy(&hint, self->mp_in, 40);
+					char unit[MP_UNIT_MAXSIZE];
+					memcpy(&unit, self->mp_in, offsetof(struct ofp13_flow_stats_request, match) + ALIGN8(ntohs(hint.match.length)));
+					struct ofp13_multipart_reply rep = {};
+					rep.header = mpreq.header;
+					rep.header.type = OFPT13_MULTIPART_REPLY;
+					rep.flags = htons(0);
+					rep.type = htons(OFPMP13_FLOW);
+					uint16_t unitlength = fill_ofp13_flow_stats(
+						(struct ofp13_flow_stats_request*)unit,
+						&self->mp_out_index, ofp_buffer+16, ofp_tx_room(self)-16);
+					if(self->mp_out_index >= 0){
+						rep.flags = htons(OFPMPF13_REPLY_MORE);
+					} else if(self->mpreq_pos >= length){
+						self->mpreq_pos = 0;
+					}
+					rep.header.length = htons(16+unitlength);
+					memcpy(ofp_buffer, &rep, 16);
+					ofp_tx_write(self, ofp_buffer, 16+unitlength);
+				}
+				break;
+				
+				default:
+				{
+					if(ofp_rx_length(self) < length-16 || ofp_tx_room(self) < 12+64){
+						return OFP_NOOP;
+					}
+					memcpy(ofp_buffer, self->mpreq_hdr, 16);
+					ofp_rx_read(self, ofp_buffer+16, length-16);
+					
+					if (length > 64){
+						length = 64;
+					}
+					char reply[12+64];
+					struct ofp_error_msg err = {};
+					err.header.version = mpreq.header.version;
+					err.header.type = OFPT13_ERROR;
+					err.header.length = htons(12+length);
+					err.header.xid = mpreq.header.xid;
+					err.type = htons(OFPET13_BAD_REQUEST);
+					err.code = htons(OFPBRC13_BAD_MULTIPART);
+					memcpy(reply, &err, 12);
+					memcpy(reply+12, ofp_buffer, length);
+					ofp_tx_write(self, reply, 12+length);
+					self->mpreq_pos = 0;
+				}
+				break;
+			}
+			if (self->mpreq_pos == 0 && (ntohs(mpreq.flags) & OFPMPF13_REQ_MORE) == 0){
+				self->mpreq_on = false;
+			}
+			continue;
+		}
+		ret = OFP_NOOP;
+		struct ofp_header req;
+		pbuf_copy_partial(self->rbuf, &req, 8, self->rskip);
+		length = ntohs(req.length);
+		if(length < 8){
+			ret = ofp_write_error(self, req, OFPET10_BAD_REQUEST, OFPBRC10_BAD_LEN);
+			if(ret == OFP_OK){
+				ofp_rx_read(self, ofp_buffer, length);
+			}
+		} else if(length > OFP_BUFFER_LEN && (req.version != 4 || req.type != OFPT13_MULTIPART_REQUEST)){
+			ofp_write_error(self, req, OFPET10_BAD_REQUEST, OFPBRC10_BAD_LEN);
+			ret = OFP_CLOSE;
+		} else if(req.type == OFPT10_ECHO_REQUEST){
+			// we want to process this at one time
+			if(ofp_rx_length(self) < length || ofp_tx_room(self) < 8){
+				ret = OFP_NOOP;
+			} else {
+				ofp_rx_read(self, ofp_buffer, length);
+				struct ofp_header rep = {0};
+				rep.version = OF_Version;
+				rep.type = OFPT10_ECHO_REPLY;
+				rep.length = htons(8);
+				rep.xid = req.xid;
+				ofp_tx_write(self, (char*)&rep, 8);
+				ret = OFP_OK;
+			}
+		} else if(req.type == OFPT10_ECHO_REPLY){
+			// we want to process this at one time
+			if(ofp_rx_length(self) < length){
+				ret = OFP_NOOP;
+			} else {
+				ofp_rx_read(self, ofp_buffer, length);
+				// TODO: optionally measure the health here
+				ret = OFP_OK;
+			}
+		} else if(req.version == 4){
+			switch(req.type){
+				case OFPT13_BARRIER_REQUEST:
+				if(self->mpreq_on){
+					ret = ofp_write_error(self, req, OFPET13_BAD_REQUEST, OFPBRC13_MULTIPART_BUFFER_OVERFLOW);
+				} else {
+					if(ofp_rx_length(self) < length || ofp_tx_room(self) < 8){
+						ret = OFP_NOOP;
+					} else {
+						ofp_rx_read(self, ofp_buffer, length);
+						struct ofp_header rep = {0};
+						rep.version = 4;
+						rep.type = OFPT13_BARRIER_REPLY;
+						rep.length = htons(8);
+						rep.xid = req.xid;
+						ofp_tx_write(self, (char*)&rep, 8);
+						ret = OFP_OK;
+					}
+				}
+				break;
+				
+				case OFPT13_MULTIPART_REQUEST:
+				{
+					struct ofp13_multipart_request mpreq;
+					memcpy(&mpreq, self->mpreq_hdr, sizeof(struct ofp13_multipart_request));
+					if(self->mpreq_on && req.xid != mpreq.header.xid){
+						ret = ofp_write_error(self, req, OFPET13_BAD_REQUEST, OFPBRC13_MULTIPART_BUFFER_OVERFLOW);
+					} else {
+						if(length < 16 || length > 16+MP_UNIT_MAXSIZE){
+							ofp_write_error(self, req, OFPET13_BAD_REQUEST, OFPBRC13_BAD_LEN);
+							ret = OFP_CLOSE;
+						} else if(ofp_rx_length(self) < length || ofp_tx_room(self) < 16){
+							ret = OFP_NOOP;
+						} else {
+							ofp_rx_read(self, self->mpreq_hdr, 16);
+							self->mpreq_on = true;
+							self->mpreq_pos = 16;
+							self->mp_out_index = -1;
+							ret = OFP_OK;
+						}
+					}
+				}
+				break;
+				
+				// for normal handlers, we expect results are written
+				// in ofp_buffer, and the length is returned.
+				
+				case OFPT13_FLOW_MOD:
+				if(ofp_rx_length(self) < length || ofp_tx_room(self) < 12+64){
+					ret = OFP_NOOP;
+				} else {
+					ofp_rx_read(self, ofp_buffer, length);
+					uint16_t len = mod_ofp13_flow((struct ofp13_flow_mod*)ofp_buffer);
+					if(len > 0){
+						ret = ofp_tx_write(self, ofp_buffer, len);
+					} else {
+						ret = OFP_OK;
+					}
+				}
+				break;
+
+				default:
+					ret = ofp_write_error(self, req, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
+				break;
+			}
+		} else if(req.version == 1){
+			ret = ofp_write_error(self, req, OFPET10_BAD_REQUEST, OFPBRC10_BAD_TYPE);
+			if(OFP_OK != ret){
+				return ret;
+			}
+		} else {
+			ret = ofp_write_error(self, req, OFPET10_BAD_REQUEST, OFPBRC10_BAD_VERSION);
+			if(OFP_OK != ret){
+				return ret;
+			}
+			return ofp_close(self, CONNECT_RETRY_INTERVAL);
+		}
+		if(ret == OFP_NOOP){
+			break;
+		}
+	}
+	while(self->rbuf != NULL && self->rskip >= self->rbuf->len){
+		struct pbuf *head = self->rbuf;
+		self->rskip -= self->rbuf->len;
+		self->rbuf = pbuf_dechain(head);
+		pbuf_free(head);
+	}
+	return OFP_OK;
+}
+
+static err_t ofp_poll_cb(void *arg, struct tcp_pcb *pcb){
+	struct ofp_pcb *ofp = arg;
+	if(ofp->tcp != pcb){
+		tcp_abort(pcb);
+		return ERR_ABRT;
+	}
+	if(ofp->alive_until - sys_get_ms() > 0x80000000U){
+		return ofp_close(ofp, CONNECT_RETRY_INTERVAL);
+	}
+	if(ofp->next_ping - sys_get_ms() > 0x80000000U){
+		ofp->next_ping = sys_get_ms() + OFP_PING_INTERVAL;
+		if(ofp->mpreq_pos == 0 && ofp_tx_room(ofp) > 8) {
+			struct ofp_header hdr;
+			hdr.version = OF_Version;
+			hdr.type = OFPT10_ECHO_REQUEST;
+			hdr.length = htons(8);
+			hdr.xid = htonl(ofp->xid++);
+			ofp_tx_write(ofp, (char*)&hdr, 8);
+			return tcp_output(ofp->tcp);
+		}
+	}
+	return ERR_OK;
+}
+
+static err_t ofp_sent_cb(void *arg, struct tcp_pcb *tcp, u16_t len){
+	struct ofp_pcb *ofp = arg;
+	if(ofp->tcp != tcp){ // maybe manually closed
+		tcp_abort(tcp);
+		return ERR_ABRT;
+	}
+	ofp->txlen -= len;
+	ofp->alive_until = sys_get_ms() + OFP_TIMEOUT;
+	switch(ofp_handle(ofp)){
+		case OFP_OK:
+			return tcp_output(ofp->tcp);
+		case OFP_CLOSE:
+			tcp_output(ofp->tcp);
+			return ofp_close(ofp, CONNECT_RETRY_INTERVAL);
+		default:
+			return ERR_OK;
+	}
+}
+
+static err_t ofp_recv_cb(void *arg, struct tcp_pcb *tcp, struct pbuf *p, err_t err){
+	struct ofp_pcb *ofp = arg;
+	if(ofp->tcp != tcp){ // maybe manually closed
+		if(p != NULL){
+			pbuf_free(p);
+		}
+		tcp_abort(tcp);
+		return ERR_ABRT;
+	}
+	if (p == NULL){
+		return ofp_close(ofp, CONNECT_RETRY_INTERVAL);
+	}
+	if(ERR_IS_FATAL(err)){
+		pbuf_free(p);
+		return ofp_close(ofp, CONNECT_RETRY_INTERVAL);
+	}
+	
+	// TODO: We need some limiter here.
+	tcp_recved(tcp, p->tot_len);
+	if(ofp->rbuf == NULL){
+		ofp->rbuf = p;
+	} else if(ofp->rbuf->tot_len + p->tot_len > RECV_BUFLEN){
+		pbuf_chain(ofp->rbuf, p);
+	}
+
+	ofp->alive_until = sys_get_ms() + OFP_TIMEOUT;
+	switch(ofp_handle(ofp)){
+		case OFP_OK:
+			return tcp_output(ofp->tcp);
+		case OFP_NOOP:
+			return ERR_OK;
+		case OFP_CLOSE:
+			tcp_output(ofp->tcp);
+			return ofp_close(ofp, CONNECT_RETRY_INTERVAL);
+	}
+	return ERR_OK;
+}
+
+static err_t ofp_connected_cb(void *arg, struct tcp_pcb *tcp, err_t err){
+	struct ofp_pcb *ofp = arg;
+	if(ofp->tcp != tcp){
+		tcp_abort(tcp);
+		return ERR_ABRT;
+	}
+	if(ERR_IS_FATAL(err)){
+		memset(ofp, 0, sizeof(struct ofp_pcb));
+		return err;
+	}
+	tcp_poll(tcp, ofp_poll_cb, 1);
+	err_t ret;
+	ofp->alive_until = sys_get_ms() + OFP_TIMEOUT;
+	ofp->next_ping = sys_get_ms() + OFP_PING_INTERVAL;
+	struct ofp_header hdr = {0};
+	if (Zodiac_Config.of_version == 1){
+		hdr.version = 1;
+		hdr.type = OFPT10_HELLO;
+		hdr.length = htons(8);
+		hdr.xid = ofp->xid++;
+		ret = ofp_tx_write(ofp, (char*)&hdr, 8);
+	} else if (Zodiac_Config.of_version == 4){
+		// XXX: add hello elements for negotiation
+		hdr.version = 4;
+		hdr.type = OFPT10_HELLO;
+		hdr.length = htons(8);
+		hdr.xid = ofp->xid++;
+		ret = ofp_tx_write(ofp, (char*)&hdr, 8);
+	} else {
+		// XXX: add hello elements for negotiation
+		hdr.version = MAX_OFP_VERSION;
+		hdr.type = OFPT10_HELLO;
+		hdr.length = htons(8);
+		hdr.xid = ofp->xid++;
+		ret = ofp_tx_write(ofp, (char*)&hdr, 8);
+	}
+	if (ret == OFP_OK){
+		return tcp_output(ofp->tcp);
+	}
+	return ret;
+}
+
+#define MAX_CONTROLLERS 2
+
+struct controller {
+	struct ip_addr addr;
+	struct ofp_pcb ofp;
+};
+static struct controller controllers[MAX_CONTROLLERS] = {};
+
+static bool switch_negotiated(void){
+	for(int i=0; i<MAX_CONTROLLERS; i++){
+		if(controllers[i].ofp.negotiated){
+			return true;
+		}
+	}
+	return false;
+}
+
+void openflow_init(){
+	IP4_ADDR(&controllers[0].addr,
+		Zodiac_Config.OFIP_address[0],
+		Zodiac_Config.OFIP_address[1],
+		Zodiac_Config.OFIP_address[2],
+		Zodiac_Config.OFIP_address[3]);
+	for(int i=0; i<MAX_CONTROLLERS; i++){
+		controllers[i].ofp.sleep_until = sys_get_ms();
+	}
+}
+
+void openflow_task(){
+	for(int i=0; i<MAX_CONTROLLERS; i++){
+		struct controller *c = &controllers[i];
+		if(c->addr.addr ==0 || c->ofp.tcp!= NULL || c->ofp.sleep_until - sys_get_ms() < 0x80000000U) {
+			// no-address, or connected, or sleeping
+			continue;
+		}
+		struct tcp_pcb *tcp = tcp_new();
+		if (tcp == NULL){
+			c->ofp.sleep_until = sys_get_ms() + CONNECT_RETRY_INTERVAL;
+			continue;
+		}
+		tcp_arg(tcp, &(c->ofp));
+		tcp_err(tcp, ofp_err_cb);
+		tcp_recv(tcp, ofp_recv_cb);
+		tcp_sent(tcp, ofp_sent_cb);
+		// tcp_poll must set in connected_callback.
+		tcp_connect(tcp, &(c->addr), Zodiac_Config.OFPort, ofp_connected_cb);
+		c->ofp.tcp = tcp;
+	}
+}
+
 /*
 *	Converts a 64bit value from host to network format
 *
@@ -89,7 +668,7 @@ static inline uint64_t (htonll)(uint64_t n)
 	return HTONL(1) == 1 ? n : ((uint64_t) HTONL(n) << 32) | HTONL(n >> 32);
 }
 
-void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
+void nnOF_tablelookup(char *p_uc_data, uint32_t *ul_size, int port)
 {
 	if (OF_Version == 0x01) nnOF10_tablelookup(p_uc_data, ul_size, port);
 	if (OF_Version == 0x04) nnOF13_tablelookup(p_uc_data, ul_size, port);
