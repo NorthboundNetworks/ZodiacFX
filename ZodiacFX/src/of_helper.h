@@ -32,6 +32,7 @@
 #define OF_HELPER_H_
 
 #include "openflow.h"
+#include <lwip/pbuf.h>
 
 int flowmatch10(const char *pBuffer, uint32_t port);
 int flowmatch13(const char *pBuffer, uint32_t port);
@@ -44,7 +45,7 @@ int flow_stats_msg13(char *buffer, int first, int last);
 void set_ip_checksum(char *p_uc_data, int packet_size, int iphdr_offset);
 
 // --- kwi ---
-
+bool oxm_strict_equals(const char*, int, const char*, int);
 uint16_t fill_ofp13_flow_stats(const struct ofp13_flow_stats_request*, int*, char*, uint16_t);
 
 #endif /* OF_HELPER_H_ */

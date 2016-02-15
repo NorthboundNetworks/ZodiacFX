@@ -297,6 +297,8 @@ void enableOF(void)
 *
 *	Getting the port stats can has a significant impact on performance.
 *	It can take over 100ms to get a response so we only query one port per call
+*
+* Recommendation was read every 30 sec; counters are designed as "read clear".
 */
 void update_port_stats(void)
 {	
@@ -469,7 +471,7 @@ void GMAC_Handler(void)
 *	Switch initialisation function
 *
 */
-void switch_init(void)
+void switch_init_old(void)
 {
 		volatile uint32_t ul_delay;
 		gmac_options_t gmac_option;
@@ -556,5 +558,76 @@ void task_switch(struct netif *netif)
 			}
 		}
 	}
+	return;
+}
+
+// --- kwi ---
+
+void switch_init(){
+	/* Wait for PHY to be ready (CAT811: Max400ms) */
+	volatile uint32_t ul_delay = sysclk_get_cpu_hz() / 1000 / 3 * 400;
+	while (ul_delay--);
+		
+	/* Enable GMAC clock */
+	pmc_enable_periph_clk(ID_GMAC);
+	
+	/* Fill in GMAC options */
+	gmac_options_t gmac_option;
+	gmac_option.uc_copy_all_frame = 1;
+	gmac_option.uc_no_boardcast = 0;
+	gmac_option.uc_mac_addr[0] = Zodiac_Config.MAC_address[0];
+	gmac_option.uc_mac_addr[1] = Zodiac_Config.MAC_address[1];
+	gmac_option.uc_mac_addr[2] = Zodiac_Config.MAC_address[2];
+	gmac_option.uc_mac_addr[3] = Zodiac_Config.MAC_address[3];
+	gmac_option.uc_mac_addr[4] = Zodiac_Config.MAC_address[4];
+	gmac_option.uc_mac_addr[5] = Zodiac_Config.MAC_address[5];
+	gs_gmac_dev.p_hw = GMAC;
+	/* Init GMAC driver structure */
+	gmac_dev_init(GMAC, &gs_gmac_dev, &gmac_option);
+	/* Init KSZ8795 registers */
+	switch_write(86,232);	// Set CPU interface to MII
+	switch_write(12,70);	// Turn on tail tag mode
+	disableOF();
+	/* Enable Interrupt */
+	NVIC_EnableIRQ(GMAC_IRQn);
+	
+	/* Init MAC PHY driver */
+	if(GMAC_OK != ethernet_phy_init(GMAC, BOARD_GMAC_PHY_ADDR, sysclk_get_cpu_hz())){
+		// unreach
+		return;
+	}
+	if(GMAC_OK != ethernet_phy_set_link(GMAC, BOARD_GMAC_PHY_ADDR, 1)){
+		// unreach
+		return;
+	}
+	
+	if(Zodiac_Config.OFEnabled == OF_ENABLED){
+		enableOF();
+	}
+}
+
+
+void switch_task(struct netif *netif){	
+	struct pbuf *frame = pbuf_alloc(PBUF_RAW, GMAC_FRAME_LENTGH_MAX, PBUF_POOL);
+	// PBUF_ROM or PBUF_REF fails with ICMP handling: not yet implemented in LWIP.
+	uint32_t frame_length;
+
+	// XXX: gmac_dev_read as gmac_low_level_input, may return pbuf chain directly here.
+	// XXX: lwip expects frame header structures are all placed in the pbuf first chunk.
+	// XXX: and openflow pipeline will expect this as well.
+	if (GMAC_OK == gmac_dev_read(&gs_gmac_dev, (uint8_t *)frame->payload, GMAC_FRAME_LENTGH_MAX, &frame_length)){
+		// switch is configured to work in tail tag mode
+		frame_length--;
+		uint8_t tag;
+		pbuf_copy_partial(frame, &tag, 1, frame_length);
+		
+		pbuf_realloc(frame, frame_length);
+		if(tag<4 && Zodiac_Config.of_port[tag]==1){ // XXX: port number hardcoded here
+			openflow_pipeline(frame, tag+1);
+		} else{
+			netif->input(frame, netif);
+		}
+	}
+	pbuf_free(frame);
 	return;
 }

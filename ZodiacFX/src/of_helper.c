@@ -771,9 +771,31 @@ static uint32_t match_prereq(const char *oxm, int length)
 	return ret;
 }
 
-bool field_cmp13(const char *oxm_a, int len_a, const char *oxm_b, int len_b){
-	// TODO: implement
-	return true;
+/*
+ *	compares two oxm sequence.
+ */
+bool oxm_strict_equals(const char *oxm_a, int len_a, const char *oxm_b, int len_b){
+	int count_a = 0;
+	for(const char *pos_a=oxm_a; pos_a < oxm_a+len_a; pos_a+=pos_a[3]+4){
+		bool miss = true;
+		for(const char *pos_b=oxm_b; pos_b < oxm_b+len_b; pos_b+=pos_b[3]+4){
+			if(pos_a[3] == pos_b[3] && memcmp(pos_a, pos_b, pos_a[3]) == 0){
+				miss = false;
+				break;
+			}
+		}
+		if(miss){
+			return false;
+		}
+		count_a++;
+	}
+	for(const char *pos_b=oxm_b; pos_b < oxm_b+len_b; pos_b+=pos_b[3]+4){
+		count_a--;
+	}
+	if(count_a==0){
+		return true;
+	}
+	return false;
 }
 
 /*
@@ -791,10 +813,10 @@ int field_match13(const char *oxm_a, int len_a, const char *oxm_b, int len_b){
 	}
 	const char *bhdr = oxm_b;
 	while(bhdr < oxm_b + len_b){
-		uint32_t bfield; memcpy(&bfield, bhdr, 4);
+		uint32_t bfield; memcpy(&bfield, bhdr, 4); bfield=ntohl(bfield);
 		const char *ahdr = oxm_a;
 		while(ahdr < oxm_a + len_a){
-			uint32_t afield; memcpy(&afield, ahdr, 4);
+			uint32_t afield; memcpy(&afield, ahdr, 4); afield=ntohl(afield);
 			if(bfield == afield) {
 				if(OXM_HASMASK(bfield)){
 					int length = OXM_LENGTH(bfield)/2;
@@ -1159,4 +1181,3 @@ int flow_stats_msg13(char *buffer, int first, int last)
 	return (buffer_ptr - buffer);
 	
 }
-

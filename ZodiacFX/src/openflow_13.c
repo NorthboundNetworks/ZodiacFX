@@ -30,10 +30,13 @@
 #include <asf.h>
 #include <string.h>
 #include <stdlib.h>
+#include <lwip/tcp.h>
+#include <lwip/tcp_impl.h>
+#include <lwip/udp.h>
 #include "command.h"
 #include "openflow.h"
 #include "switch.h"
-#include "lwip/tcp.h"
+#include "timers.h"
 
 // Global variables
 extern struct zodiac_config Zodiac_Config;
@@ -476,7 +479,7 @@ int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	stats->table_id = 0;
 	uint32_t active = 0;
 	for(int i=0; i<iLastFlow; i++) {
-		if (flow_counters[i].active == false){
+		if (flow_counters[i].active){
 			active++;
 		}
 	}
@@ -1058,17 +1061,28 @@ void of_error13(struct ofp_header *msg, uint16_t type, uint16_t code)
 
 
 // --- kwi --- //
+extern struct fx_flow fx_flows[MAX_FLOWS];
+extern struct fx_flow_timeout fx_flow_timeouts[MAX_FLOWS];
+extern struct fx_flow_count fx_flow_counts[MAX_FLOWS];
+extern uint32_t fx_buffer_id;
+extern struct fx_packet_in fx_packet_ins[MAX_BUFFERS];
 
+uint16_t send_ofp13_flow_rem(struct ofp_pcb *self){
+	// TODO
+	return 0;
+}
+
+// fields are in host byte order
 struct ofp13_filter {
 	bool strict;
 	uint8_t table_id;
 	uint16_t priority;
 	uint32_t out_port;
 	uint32_t out_group;
-	uint64_t cookie;
-	uint64_t cookie_mask;
-	struct ofp13_match match;
-	char *oxm_fields;
+	uint64_t cookie; // in network byte order
+	uint64_t cookie_mask; // in network byte order
+	uint16_t oxm_length;
+	const char *oxm;
 };
 
 /*
@@ -1076,36 +1090,47 @@ struct ofp13_filter {
  */
 int filter_ofp13_flow(int first, struct ofp13_filter filter){
 	for(int i=first; i<iLastFlow; i++){
-		if (flow_counters[i].active == 0){
+		if(fx_flows[i].active != FX_FLOW_ACTIVE){
 			continue;
 		}
-		if (filter.table_id != OFPTT13_ALL && filter.table_id != flow_match13[i].table_id){
+		if (filter.table_id != OFPTT13_ALL && filter.table_id != fx_flows[i].table_id){
 			continue;
 		}
-		if (filter.cookie_mask != 0 && filter.cookie != (flow_match13[i].cookie & filter.cookie_mask)){
+		if (filter.cookie_mask != 0 && filter.cookie != (fx_flows[i].cookie & filter.cookie_mask)){
 			continue;
 		}
-		if(filter.strict && filter.priority != flow_match13[i].priority){
-			continue;
+		if(filter.strict){
+			if (filter.priority != fx_flows[i].priority){
+				continue;
+			}
+			if(false == oxm_strict_equals(fx_flows[i].oxm, fx_flows[i].oxm_length, filter.oxm, filter.oxm_length)){
+				continue;
+			}
+		} else {
+			if(field_match13(fx_flows[i].oxm, fx_flows[i].oxm_length, filter.oxm, filter.oxm_length) == 0){
+				continue;
+			}
 		}
 		if (filter.out_port != OFPP13_ANY){
 			bool out_port_match = false;
-			int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(flow_match13[i].match.length));
-			int instruction_size = ntohs(flow_match13[i].header.length) - mod_size;
-			struct ofp13_instruction *inst;
-			for(inst=ofp13_oxm_inst[i]; inst<ofp13_oxm_inst[i]+instruction_size; inst+=ntohs(inst->len)){
-				if(ntohs(inst->type) == OFPIT13_APPLY_ACTIONS || ntohs(inst->type) == OFPIT13_WRITE_ACTIONS){
-					struct ofp13_instruction_actions *ia = inst;
-					struct ofp13_action_header *action;
-					for(action=ia->actions; action<inst+ntohs(inst->len); action+=ntohs(action->len)){
-						if(ntohs(action->type)==OFPAT13_OUTPUT){
-							struct ofp13_action_output *output = action;
+			const char *ops = fx_flows[i].ops;
+			while(ops < fx_flows[i].ops+fx_flows[i].ops_length){
+				struct ofp13_instruction *inst = (struct ofp13_instruction*)ops;
+				if(inst->type==htons(OFPIT13_APPLY_ACTIONS) || inst->type==htons(OFPIT13_WRITE_ACTIONS)){
+					struct ofp13_instruction_actions *ia = (struct ofp13_instruction_actions*)inst;
+					const char *act = (const char*)ia->actions;
+					while(act < ops+ntohs(inst->len)){
+						struct ofp13_action_header *action = (struct ofp13_action_header*)act;
+						if(action->type==htons(OFPAT13_OUTPUT)){
+							struct ofp13_action_output *output = (struct ofp13_action_output*)action;
 							if (output->port == filter.out_port){
 								out_port_match = true;
 							}
 						}
+						act += ntohs(action->len);
 					}
 				}
+				ops += ntohs(inst->len);
 			}
 			if(out_port_match==false){
 				continue;
@@ -1113,35 +1138,26 @@ int filter_ofp13_flow(int first, struct ofp13_filter filter){
 		}
 		if (filter.out_group != OFPG13_ANY){
 			bool out_group_match = false;
-			int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(flow_match13[i].match.length));
-			int instruction_size = ntohs(flow_match13[i].header.length) - mod_size;
-			struct ofp13_instruction *inst;
-			for(inst=ofp13_oxm_inst[i]; inst<ofp13_oxm_inst[i]+instruction_size; inst+=ntohs(inst->len)){
-				if(ntohs(inst->type) == OFPIT13_APPLY_ACTIONS || ntohs(inst->type) == OFPIT13_WRITE_ACTIONS){
-					struct ofp13_instruction_actions *ia = inst;
-					struct ofp13_action_header *action;
-					for(action=ia->actions; action<inst+ntohs(inst->len); action+=ntohs(action->len)){
-						if(ntohs(action->type)==OFPAT13_GROUP){
-							struct ofp13_action_group *group = action;
+			const char *ops = fx_flows[i].ops;
+			while(ops < fx_flows[i].ops+fx_flows[i].ops_length){
+				struct ofp13_instruction *inst = (struct ofp13_instruction*)ops;
+				if(inst->type==htons(OFPIT13_APPLY_ACTIONS) || inst->type==htons(OFPIT13_WRITE_ACTIONS)){
+					struct ofp13_instruction_actions *ia = (struct ofp13_instruction_actions*)inst;
+					const char *act = (const char*)ia->actions;
+					while(act < ops+ntohs(inst->len)){
+						struct ofp13_action_header *action = (struct ofp13_action_header*)act;
+						if(action->type==htons(OFPAT13_GROUP)){
+							struct ofp13_action_group *group = (struct ofp13_action_group*)action;
 							if (group->group_id == filter.out_group){
 								out_group_match = true;
 							}
 						}
+						act += ntohs(action->len);
 					}
 				}
+				ops += ntohs(inst->len);
 			}
 			if(out_group_match==false){
-				continue;
-			}
-		}
-		if(filter.strict){
-			if(field_cmp13(ofp13_oxm_match[i], ntohs(flow_match13[i].match.length)-4,
-					filter.oxm_fields, ntohs(filter.match.length)-4) == 0){
-				continue;
-			}
-		} else {
-			if(field_match13(ofp13_oxm_match[i], ntohs(flow_match13[i].match.length)-4,
-					filter.oxm_fields, ntohs(filter.match.length)-4) == 0){
 				continue;
 			}
 		}
@@ -1150,71 +1166,79 @@ int filter_ofp13_flow(int first, struct ofp13_filter filter){
 	return -1;
 }
 
-uint16_t fill_ofp13_flow_stats(const struct ofp13_flow_stats_request *unit, int *index, char *buffer, uint16_t capacity){
+uint16_t fill_ofp13_flow_stats(const struct ofp13_flow_stats_request *unit, int *mp_index, char *buffer, uint16_t capacity){
 	struct ofp13_filter filter = {
 		.cookie = unit->cookie,
 		.cookie_mask = unit->cookie_mask,
-		.out_group = unit->out_group,
-		.out_port = unit->out_port,
+		.out_group = ntohl(unit->out_group),
+		.out_port = ntohl(unit->out_port),
 		.table_id = unit->table_id,
-		.match = unit->match,
-		.oxm_fields = &unit->match.oxm_fields,
+		.oxm_length = ntohs(unit->match.length)-4,
+		.oxm = &unit->match.oxm_fields,
 	};
 	uint16_t length = 0;
-	int k;
-	for(k=filter_ofp13_flow(*index, filter); k>=0; k=filter_ofp13_flow(k+1, filter)){
+	int i;
+	for(i=filter_ofp13_flow(*mp_index, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
+		uint16_t offset_inst = offsetof(struct ofp13_flow_stats, match) + ALIGN8(4+fx_flows[i].oxm_length);		;
 		// ofp_flow_stats fixed fields are the same length with ofp_flow_mod
-		if(length + ntohs(flow_match13[k].header.length) > capacity){
-			*index = k; // we want to revisit k.
+		if(length + offset_inst + fx_flows[i].ops_length > capacity){
+			*mp_index = i; // we want to revisit k.
 			break;
 		}
-		int len = 0;
-		struct ofp13_flow_stats stats = {0};
-		stats.length = flow_match13[k].header.length;
-		stats.table_id = flow_match13[k].table_id;
-		stats.duration_sec = htonl(totaltime - flow_counters[k].duration); // TODO: reduce timer
-		stats.duration_nsec = htonl(0); // TODO: reduce timer
-		stats.priority = flow_match13[k].priority;
-		stats.idle_timeout = flow_match13[k].idle_timeout;
-		stats.hard_timeout = flow_match13[k].hard_timeout;
-		stats.flags = flow_match13[k].flags;
-		stats.cookie = flow_match13[k].cookie;
-		stats.packet_count = htonll(flow_counters[k].hitCount); // TODO: query switch
-		stats.byte_count = htonll(flow_counters[k].bytes); // TODO: query switch
-		stats.match = flow_match13[k].match;
+		uint32_t duration = sys_get_ms() - fx_flow_timeouts[i].init;
+		struct ofp13_flow_stats stats = {
+			.length = htons(offset_inst+fx_flows[i].ops_length),
+			.table_id = fx_flows[i].table_id,
+			.duration_sec = htonl(duration/1000U),
+			.duration_nsec = htonl((duration%1000U)*1000000U),
+			.priority = htons(fx_flows[i].priority),
+			.idle_timeout = htons(fx_flow_timeouts[i].idle_timeout),
+			.hard_timeout = htons(fx_flow_timeouts[i].hard_timeout),
+			.flags = htons(fx_flows[i].flags),
+			.cookie = fx_flows[i].cookie,
+			.packet_count = htonll(fx_flow_counts[i].packet_count),
+			.byte_count = htonll(fx_flow_counts[i].byte_count),
+			.match = {
+				.type = htons(OFPMT13_OXM),
+				.length = htons(4+fx_flows[i].oxm_length),
+			}
+		};
+		int len;
 		// struct ofp13_flow_stats(including ofp13_match)
 		memcpy(buffer+length, &stats, sizeof(struct ofp13_flow_stats));
 		// oxm_fields
 		len = offsetof(struct ofp13_flow_stats, match) + offsetof(struct ofp13_match, oxm_fields);
-		memcpy(buffer+length+len, ofp13_oxm_match[k], ntohs(stats.match.length) - 4);
+		memcpy(buffer+length+len, fx_flows[i].oxm, fx_flows[i].oxm_length);
 		// instructions
-		len = offsetof(struct ofp13_flow_stats, match) + ALIGN8(ntohs(stats.match.length));
-		memcpy(buffer+length+len, ofp13_oxm_inst[k], ntohs(stats.length) - len);
-		length += ntohs(stats.length);
+		len = offset_inst;
+		memcpy(buffer+length+len, fx_flows[i].ops, fx_flows[i].ops_length);
+		length += offset_inst + fx_flows[i].ops_length;
 	}
-	if(k<0){
-		*index = -1; // complete
+	if(i<0){
+		*mp_index = -1; // complete
 	}
 	return length;
 }
 
 static uint16_t add_ofp13_flow(const struct ofp13_flow_mod *req){
-	uint16_t flags = ntohs(req->flags);
-	if((flags & OFPFF13_CHECK_OVERLAP) != 0){
+	if(req->table_id > OFPP13_MAX){
+		return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_BAD_TABLE_ID);
+	}
+	if((req->flags & htons(OFPFF13_CHECK_OVERLAP)) != 0){
 		int overlap = -1;
 		for(int i=0; i<iLastFlow; i++){
-			if(flow_counters[i].active==false
-					|| req->table_id != flow_match13[i].table_id
-					|| req->priority != flow_match13[i].priority){
+			if(fx_flows[i].active != FX_FLOW_ACTIVE
+					|| req->table_id != fx_flows[i].table_id
+					|| req->priority != fx_flows[i].priority){
 				continue;
 			}
-			if(field_match13(req->match.oxm_fields, htons(req->match.length)-4,
-			ofp13_oxm_match[i], htons(flow_match13[i].match.length)-4) != 1){
+			if(field_match13(req->match.oxm_fields, ntohs(req->match.length)-4,
+					fx_flows[i].oxm, fx_flows[i].oxm_length) != 1){
 				overlap = i;
 				break;
 			}
-			if(field_match13(ofp13_oxm_match[i], htons(flow_match13[i].match.length)-4,
-			req->match.oxm_fields, htons(req->match.length)-4) != 1){
+			if(field_match13(fx_flows[i].oxm, fx_flows[i].oxm_length,
+					req->match.oxm_fields, ntohs(req->match.length)-4) != 1){
 				overlap = i;
 				break;
 			}
@@ -1223,89 +1247,145 @@ static uint16_t add_ofp13_flow(const struct ofp13_flow_mod *req){
 			return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_OVERLAP);
 		}
 	}
-	int found = -1;
-	for(int i=0; i<iLastFlow; i++){
-		if(flow_counters[i].active==false
-				|| req->table_id != flow_match13[i].table_id
-				|| req->priority != flow_match13[i].priority){
-			continue;
-		}
-		if(field_match13(req->match.oxm_fields, htons(req->match.length)-4,
-				ofp13_oxm_match[i], htons(flow_match13[i].match.length)-4) != 1){
-			continue;
-		}
-		if(field_match13(ofp13_oxm_match[i], htons(flow_match13[i].match.length)-4,
-				req->match.oxm_fields, htons(req->match.length)-4) != 1){
-			continue;
-		}
-		found = i; // identical flow found.
-		break;
-	}
+
+	struct ofp13_filter filter = {
+		.strict = true,
+		.table_id = req->table_id,
+		.priority = ntohs(req->priority),
+		.out_port = OFPP13_ANY,
+		.out_group = OFPG13_ANY,
+		.cookie = req->cookie,
+		.cookie_mask = req->cookie_mask,
+		.oxm_length = ntohs(req->match.length)-4,
+		.oxm = req->match.oxm_fields,
+	};
+	int found = filter_ofp13_flow(0, filter);
 	int n = found;
 	if(n < 0){
-		n = iLastFlow++;
+		for(int i=0; i<iLastFlow; i++){
+			if(fx_flows[i].active == 0){
+				n = i;
+				break;
+			}
+		}
 	}
-	memcpy(&flow_match13[n], req, sizeof(struct ofp13_flow_mod));
-	if(ofp13_oxm_match[n] != NULL){
-		free(ofp13_oxm_match[n]);
+	if(n < 0){
+		if(iLastFlow >= MAX_FLOWS){
+			return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
+		}else{
+			n = iLastFlow++;
+		}
 	}
-	if(req->match.length > 4){
-		ofp13_oxm_match[n] = malloc(ntohs(flow_match13[iLastFlow].match.length)-4);	// Allocate a space to store match fields
-		memcpy(ofp13_oxm_match[n], req->match.oxm_fields, ntohs(req->match.length)-4);
-	}else{
-		ofp13_oxm_match[n] = NULL;
+	uint16_t offset = offsetof(struct ofp13_flow_mod, match) + ALIGN8(ntohs(req->match.length));
+	uint16_t oxm_len = ntohs(req->match.length) - 4;
+	uint16_t ops_len = ntohs(req->header.length) - offset;
+	const char *oxm = malloc(oxm_len);
+	const char *ops = malloc(ops_len);
+	if(oxm==NULL || ops==NULL){
+		if(oxm!=NULL) free(oxm);
+		if(ops!=NULL) free(ops);
+		return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_UNKNOWN);
 	}
-	if(ofp13_oxm_inst[n] != NULL){
-		free(ofp13_oxm_inst[n]);
+	
+	fx_flows[n].active = FX_FLOW_ACTIVE;
+	fx_flows[n].table_id = req->table_id;
+	fx_flows[n].priority = ntohs(req->priority);
+	fx_flows[n].flags = ntohs(req->flags);
+	if(fx_flows[n].oxm){
+		free(fx_flows[n].oxm);
 	}
-	uint16_t inst_offset = 0;
-	inst_offset += offsetof(struct ofp13_flow_mod, match);
-	inst_offset += ALIGN8(ntohs(req->match.length));
-	uint16_t inst_length = ntohs(req->header.length) > inst_offset;
-	if(inst_length > 0){
-		const char *p = (const char*)req;
-		ofp13_oxm_inst[n] = malloc(inst_length);
-		memcpy(ofp13_oxm_inst[n], p+inst_offset, inst_length);
-	} else {
-		ofp13_oxm_inst[n] = NULL;
+	memcpy(oxm, req->match.oxm_fields, oxm_len);
+	fx_flows[n].oxm = oxm;
+	fx_flows[n].oxm_length = oxm_len;
+	if(fx_flows[n].ops){
+		free(fx_flows[n].ops);
 	}
-	if((flags & OFPFF13_RESET_COUNTS) != 0){
-		flow_counters[n].hitCount = 0;
-		flow_counters[n].bytes = 0;
+	memcpy(ops, (const char*)req + offset, ops_len);
+	fx_flows[n].ops = ops;
+	fx_flows[n].ops_length = ops_len;
+	fx_flows[n].cookie = req->cookie;
+	
+	if(found < 0 || (req->flags & htons(OFPFF13_RESET_COUNTS)) != 0){
+		fx_flow_counts[n].byte_count = 0;
+		fx_flow_counts[n].packet_count = 0;
 	}
-	flow_counters[n].active = true;
+	if(ntohl(req->buffer_id) != OFP13_NO_BUFFER){
+		// TODO: enqueue buffer
+	}
 	return 0;
 }
 
 static uint16_t modify_ofp13_flow(const struct ofp13_flow_mod *req, bool strict){
+	if(req->table_id > OFPP13_MAX){
+		return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_BAD_TABLE_ID);
+	}
+
 	struct ofp13_filter filter = {
+		.strict = strict,
+		.table_id = req->table_id,
+		.priority = ntohs(req->priority),
+		.out_port = OFPP13_ANY,
+		.out_group = OFPG13_ANY,
 		.cookie = req->cookie,
 		.cookie_mask = req->cookie_mask,
-		.out_port = req->out_port,
-		.out_group = req->out_group,
-		.table_id = req->table_id,
-		.match = req->match,
-		.oxm_fields = req->match.oxm_fields,
-		.strict = strict,
-		.priority = req->priority,
+		.oxm_length = ntohs(req->match.length)-4,
+		.oxm = req->match.oxm_fields,
 	};
-	int k;
-	for(k=filter_ofp13_flow(*index, filter); k>=0; k=filter_ofp13_flow(k+1, filter)){
-		if(ofp13_oxm_inst[k] != NULL){
-			free(ofp13_oxm_inst[k]);
-		}
 
-		uint16_t inst_offset = 0;
-		inst_offset += offsetof(struct ofp13_flow_mod, match);
-		inst_offset += ALIGN8(ntohs(req->match.length));
+	uint16_t inst_offset = offsetof(struct ofp13_flow_mod, match) + ALIGN8(ntohs(req->match.length));
+	uint16_t inst_length = ntohs(req->header.length) - inst_offset;
+	
+	int count = 0;
+	for(int i=filter_ofp13_flow(0, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
+		count++;
+	}
+	const char **tmp = malloc(count*sizeof(const char*));
+	for(int i=0; i<count; i++){
+		tmp[i] = malloc(inst_length);
+		if(tmp[i]==NULL){
+			for(int j=0; j<i; j++){
+				free(tmp[j]);
+			}
+			return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_UNKNOWN);
+		}
+	}
+	for(int i=filter_ofp13_flow(0, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
+		if(fx_flows[i].ops != NULL){
+			free(fx_flows[i].ops);
+		}
+		fx_flows[i].ops = tmp[--count];
+		memcpy(fx_flows[i].ops, (const char*)req + inst_offset, inst_length);
+		fx_flows[i].ops_length = inst_length;
 		
-		uint16_t inst_length = ntohs(req->header.length) > inst_offset;
-		if(inst_length > 0){
-			const char *p = (const char*)req;
-			ofp13_oxm_inst[k] = malloc(inst_length);
-			memcpy(ofp13_oxm_inst[k], p+inst_offset, inst_length);
+		if((req->flags & htons(OFPFF13_RESET_COUNTS)) != 0){
+			fx_flow_counts[i].byte_count = 0;
+			fx_flow_counts[i].packet_count = 0;
+		}
+	}
+	free(tmp);
+	if(req->buffer_id != htonl(OFP13_NO_BUFFER)){
+		// TODO: enqueue buffer
+	}
+	return 0;
+}
+
+static uint16_t delete_ofp13_flow(const struct ofp13_flow_mod *req, bool strict){
+	struct ofp13_filter filter = {
+		.strict = strict,
+		.table_id = req->table_id,
+		.priority = ntohs(req->priority),
+		.out_port = ntohl(req->out_port),
+		.out_group = ntohl(req->out_group),
+		.cookie = req->cookie,
+		.cookie_mask = req->cookie_mask,
+		.oxm_length = ntohs(req->match.length)-4,
+		.oxm = req->match.oxm_fields,
+	};
+	for(int i=filter_ofp13_flow(0, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
+		if(fx_flows[i].flags & OFPFF13_SEND_FLOW_REM != 0){
+			fx_flows[i].active = FX_FLOW_SEND_FLOW_REM;
 		} else {
-			ofp13_oxm_inst[k] = NULL;
+			fx_flows[i].active = 0;
 		}
 	}
 	return 0;
@@ -1313,34 +1393,355 @@ static uint16_t modify_ofp13_flow(const struct ofp13_flow_mod *req, bool strict)
 
 uint16_t mod_ofp13_flow(struct ofp13_flow_mod *req){
 	uint16_t ret;
-	switch(req->command){
+	switch(ntohs(req->command)){
 		case OFPFC13_ADD:
-			ret = add_ofp13_flow(req);
-		break;
+			return add_ofp13_flow(req);
 		
 		case OFPFC_MODIFY:
-			ret = modify_ofp13_flow(req, false);
-		break;
+			return modify_ofp13_flow(req, false);
 		
 		case OFPFC_MODIFY_STRICT:
-			ret = modify_ofp13_flow(req, true);
-		break;
+			return modify_ofp13_flow(req, true);
 		
 		case OFPFC13_DELETE:
-//		flow_delete13(req);
-		break;
+			return delete_ofp13_flow(req, false);
 		
 		case OFPFC13_DELETE_STRICT:
-//		flow_delete_strict13(req);
-		break;
+			return delete_ofp13_flow(req, true);
 		
 		default:
-			// TODO: add error
-		break;
+			return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_BAD_COMMAND);
 	}
-	if(req->buffer_id != OFP13_NO_BUFFER && ret != 0){
-		// TODO: enqueue buffer
-	}
-	return ret;
 }
 
+// kwi //
+
+static int bits_on(const char *data, int len){
+	int r = 0;
+	for(int i=0; i<len; i++){
+		if(data[i]&0x80) r++;
+		if(data[i]&0x40) r++;
+		if(data[i]&0x20) r++;
+		if(data[i]&0x10) r++;
+		if(data[i]&0x08) r++;
+		if(data[i]&0x04) r++;
+		if(data[i]&0x02) r++;
+		if(data[i]&0x01) r++;
+	}
+	return r;
+}
+
+int match_frame_by_oxm(struct fx_packet packet, struct fx_packet_oob oob, const char *oxm, uint16_t oxm_length){
+	int count = 0;
+	for(const char *pos=oxm; pos<oxm+oxm_length; pos+=oxm[3]){
+		if(pos[0]==0x80 && pos[1]==0x00){
+			int has_mask = pos[2] & 0x01;
+			switch(pos[2]>>1){
+				case OFPXMT13_OFB_IN_PORT:
+				if(memcmp(&packet.in_port, pos+4, 4)!=0){
+					return -1;
+				}
+				break;
+				
+				case OFPXMT13_OFB_IN_PHY_PORT:
+				if(memcmp(&packet.in_phy_port, pos+4, 4) != 0){
+					return -1;
+				}
+				break;
+				
+				case OFPXMT13_OFB_METADATA:
+				{
+					uint64_t value;
+					if(has_mask){
+						memcpy(value, pos+12, 8);
+						value &= packet.metadata;
+						count += bits_on(pos+12, 8);
+					} else {
+						value = packet.metadata;
+						count += 64;
+					}
+					if(memcmp(&value, pos+4, 8)!=0){
+						return -1;
+					}
+				}
+				break;
+				
+				case OFPXMT13_OFB_ETH_DST:
+				{
+					char mac[6];
+					pbuf_copy_partial(packet.data, mac, 6, 0);
+					if(has_mask){
+						for(int i=0; i<6; i++){
+							mac[i] &= pos[10+i];
+						}
+						count += bits_on(pos+10, 6);
+					}else{
+						count += 48;
+					}
+					if(memcmp(mac, pos+4, 6) != 0){
+						return -1;
+					}
+				}
+				break;
+				
+				case OFPXMT13_OFB_ETH_SRC:
+				{
+					char mac[6];
+					pbuf_copy_partial(packet.data, mac, 6, 6);
+					if(has_mask){
+						for(int i=0; i<6; i++){
+							mac[i] &= pos[10+i];
+						}
+						count += bits_on(pos+10, 6);
+					} else {
+						count += 48;
+					}
+					if(memcmp(mac, pos+4, 6) != 0){
+						return -1;
+					}
+				}
+				break;
+				
+				case OFPXMT13_OFB_ETH_TYPE:
+				if(memcmp(oob.eth_type, pos+4, 2) != 0){
+					return -1;
+				}
+				break;
+				
+				case OFPXMT13_OFB_VLAN_VID:
+				{
+					uint16_t vlan;
+					if(has_mask){
+						memcpy(&vlan, pos+6, 2);
+						vlan &= oob.vlan & htons(0x1FFF);
+						count += bits_on(pos+6, 2);
+					} else {
+						vlan = oob.vlan & htons(0x1FFF);
+						count += 16;
+					}
+					if(memcmp(&vlan, pos+4, 2) != 0){
+						return -1;
+					}
+				}
+				break;
+				
+				case OFPXMT13_OFB_VLAN_PCP:
+				{
+					if((oob.vlan & htons(0x1000)) == 0){
+						return -1;
+					}
+					uint8_t pcp;
+					pcp = ntohs(oob.vlan)>>13;
+					if(has_mask){
+						pcp &= pos[5];
+						count += bits_on(pos+5, 1);
+					} else {
+						count += 8;
+					}
+					if(pcp != pos[4]){
+						return -1;
+					}
+				}
+				break;
+				
+				case OFPXMT13_OFB_IP_DSCP:
+				{
+					uint8_t dscp;
+					if(oob.eth_type == htons(0x0800)){
+						struct ip_hdr *hdr = packet.data->payload + oob.eth_offset;
+						dscp = IPH_TOS(hdr)>>2;
+					} else if(oob.eth_type == htons(0x86dd)){
+						return -1; // TODO
+					} else {
+						return -1;
+					}
+					if(dscp != pos[4]){
+						return -1;
+					}
+				}
+				break;
+				
+				case OFPXMT13_OFB_IP_ECN:
+				{
+					uint8_t ecn;
+					if(oob.eth_type == htons(0x0800)){
+						struct ip_hdr *hdr = packet.data->payload + oob.eth_offset;
+						ecn = IPH_TOS(hdr)&0x03;
+					} else if(oob.eth_type == htons(0x86dd)){
+						return -1; // TODO
+					} else {
+						return -1;
+					}
+					if(ecn != pos[4]){
+						return -1;
+					}
+				}
+				break;
+				
+				case OFPXMT13_OFB_IPV4_SRC:
+				if(oob.eth_type == htons(0x0800)){
+					struct ip_hdr *hdr = packet.data->payload + oob.eth_offset;
+					uint32_t value;
+					if(has_mask){
+						memcpy(&value, pos+8, 4);
+						value &= hdr->src.addr;
+						count += bits_on(pos+8, 4);
+					} else {
+						value = hdr->src.addr;
+						count += 32;
+					}
+					if(memcmp(&value, pos+4, 4)!=0){
+						return -1;
+					}
+				}
+				break;
+				
+				case OFPXMT13_OFB_IPV4_DST:
+				if(oob.eth_type == htons(0x0800)){
+					struct ip_hdr *hdr = packet.data->payload + oob.eth_offset;
+					uint32_t value;
+					if(has_mask){
+						memcpy(&value, pos+8, 4);
+						value &= hdr->dest.addr;
+						count += bits_on(pos+8, 4);
+					} else {
+						value = hdr->dest.addr;
+						count += 32;
+					}
+					if(memcmp(&value, pos+4, 4)!=0){
+						return -1;
+					}
+				}
+				break;
+				
+				case OFPXMT13_OFB_TCP_SRC:
+				{
+					if(oob.eth_type != htons(0x0800)){
+						return -1;
+					}
+					struct ip_hdr *iphdr = (struct ip_hdr *)(packet.data->payload + oob.eth_offset);
+					if(IPH_PROTO(iphdr)!=6){
+						return -1;
+					}
+					struct tcp_hdr *tcphdr = (struct tcp_hdr *)(packet.data->payload
+						+ oob.eth_offset + IPH_HL(iphdr) * 4);
+					if(memcmp(&(tcphdr->src), pos+4, 2) != 0){
+						return -1;
+					}
+				}
+				break;
+				
+				case OFPXMT13_OFB_TCP_DST:
+				{
+					if(oob.eth_type != htons(0x0800)){
+						return -1;
+					}
+					struct ip_hdr *iphdr = (struct ip_hdr *)(packet.data->payload + oob.eth_offset);
+					if(IPH_PROTO(iphdr)!=6){
+						return -1;
+					}
+					struct tcp_hdr *tcphdr = (struct tcp_hdr *)(packet.data->payload
+						+ oob.eth_offset + IPH_HL(iphdr) * 4);
+					if(memcmp(&(tcphdr->dest), pos+4, 2) != 0){
+						return -1;
+					}
+				}
+				break;
+				
+				case OFPXMT13_OFB_UDP_SRC:
+				{
+					if(oob.eth_type != htons(0x0800)){
+						return -1;
+					}
+					struct ip_hdr *iphdr = (struct ip_hdr *)(packet.data->payload + oob.eth_offset);
+					if(IPH_PROTO(iphdr)!=6){
+						return -1;
+					}
+					struct udp_hdr *udphdr = (struct udp_hdr *)(packet.data->payload
+						+ oob.eth_offset + IPH_HL(iphdr) * 4);
+					if(memcmp(&(udphdr->src), pos+4, 2) != 0){
+						return -1;
+					}
+				}
+				break;
+				
+				case OFPXMT13_OFB_UDP_DST:
+				{
+					if(oob.eth_type != htons(0x0800)){
+						return -1;
+					}
+					struct ip_hdr *iphdr = (struct ip_hdr *)(packet.data->payload + oob.eth_offset);
+					if(IPH_PROTO(iphdr)!=6){
+						return -1;
+					}
+					struct udp_hdr *udphdr = (struct udp_hdr *)(packet.data->payload
+						+ oob.eth_offset + IPH_HL(iphdr) * 4);
+					if(memcmp(&(udphdr->dest), pos+4, 2) != 0){
+						return -1;
+					}
+				}
+				break;
+			}
+		}
+	}
+	return count;
+}
+
+static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob *oob, struct ofp13_action_header *act, int flow){
+	switch(ntohs(act->type)){
+		case OFPAT13_OUTPUT:
+		{
+			struct ofp13_action_output *out = act;
+			uint32_t port = ntohl(out->port);
+			if(port == OFPP13_CONTROLLER){
+				
+			}
+		}
+	}
+}
+
+void execute_ofp13_flow(struct fx_packet *packet, struct fx_packet_oob *oob, int flow){
+	const char* insts[6] = {};
+	const char *pos = fx_flows[flow].ops;
+	while(pos < fx_flows[flow].ops+fx_flows[flow].ops_length){
+		struct ofp13_instruction *hdr = (struct ofp13_instruction*)pos;
+		uint16_t itype = ntohs(hdr->type) - 1;
+		if(itype < 6){
+			insts[itype] = pos;
+		}
+		pos += ntohs(hdr->len);
+	}
+	
+	pos = insts[OFPIT13_METER-1];
+	if(pos != NULL){
+		// todo
+	}
+	pos = insts[OFPIT13_APPLY_ACTIONS-1];
+	if(pos != NULL){
+		struct ofp13_instruction_actions *ia = pos;
+		const char *p = ia->actions;
+		while(p < pos+ntohs(ia->len)){
+			struct ofp13_action_header *act = p;
+			execute_ofp13_action(&packet, &oob, act, flow);
+			p += ntohs(act->len);
+		}
+	}
+	pos = insts[OFPIT13_CLEAR_ACTIONS-1];
+	if(pos != NULL){
+		
+	}
+	pos = insts[OFPIT13_WRITE_ACTIONS-1];
+	if(pos != NULL){
+		
+	}
+	pos = insts[OFPIT13_WRITE_METADATA-1];
+	if(pos != NULL){
+		
+	}
+	pos = insts[OFPIT13_GOTO_TABLE-1];
+	if(pos != NULL){
+		
+	}else{
+		// TODO execute action-set
+	}
+}

@@ -89,6 +89,8 @@ void flowrem_notif(int flowid, uint8_t reason);
 
 #define ALIGN8(x) (x+7)/8*8
 
+struct flows_counter reset_counter();
+
 enum ofp_pcb_status {
 	OFP_OK, // successfully processed
 	OFP_NOOP, // precondition not satisfied
@@ -117,6 +119,7 @@ struct ofp_pcb {
 
 void openflow_init(void);
 void openflow_task(void);
+void openflow_pipeline(struct pbuf*, uint32_t);
 uint16_t ofp_rx_length(struct ofp_pcb*);
 uint16_t ofp_rx_read(struct ofp_pcb*, char*, uint16_t);
 uint16_t ofp_tx_room(struct ofp_pcb*);
@@ -125,10 +128,80 @@ uint16_t ofp_set_error(const char*, uint16_t, uint16_t);
 
 uint16_t mod_ofp13_flow(struct ofp13_flow_mod*);
 
-bool field_cmp13(const char*, int, const char*, int);
 int field_match13(const char*, int, const char*, int);
 
-enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self);
-enum ofp_pcb_status ofp10_handle(struct ofp_pcb *self);
+uint16_t handle_ofp13(struct ofp_pcb*, const char* req);
+uint16_t handle_ofp10(struct ofp_pcb*, const char* req);
+
+struct fx_table_count {
+	uint64_t lookup;
+	uint64_t matched;
+};
+
+struct fx_packet {
+	struct pbuf *data;
+	// pipeline fields
+	uint32_t in_port;
+	uint64_t metadata;
+	uint64_t tunnel_id;
+	uint32_t in_phy_port;
+};
+struct fx_packet_oob {
+	// cache
+	uint16_t vlan;
+	uint16_t eth_type;
+	uint16_t eth_offset;
+	// pipeline
+	uint16_t action_set_oxm_length;
+	const char* action_set_oxm; // malloc-ed oxm
+	const char* action_set[16]; // just reference to ofp_action inside fx_flow.ops
+};
+struct fx_packet_in {
+	int8_t stage;
+	uint32_t valid_until;
+	uint32_t buffer_id;
+	uint8_t reason;
+	uint8_t table_id;
+	uint64_t cookie;
+	struct fx_packet packet;
+	uint16_t max_len;
+};
+#define MAX_BUFFERS 16
+#define FX_PACKET_IN_STAGE_PACKET_IN 1
+#define FX_PACKET_IN_STAGE_PACKET_OUT 2
+
+struct fx_flow {
+	int8_t active; // 0=init, 1=FX_FLOW_ACTIVE, -1=FX_FLOW_SEND_FLOW_REM.
+	uint8_t table_id;
+	uint16_t priority;
+	uint16_t flags;
+	uint16_t oxm_length;
+	uint16_t ops_length;
+	const char* oxm;
+	const char* ops; // openflow 1.0 actions or openflow 1.3 instructions
+	struct ofp_match tuple; // openflow 1.0 12-tuple
+	uint64_t cookie;
+};
+struct fx_flow_timeout {
+	uint16_t idle_timeout; // config duration
+	uint16_t hard_timeout; // config duration
+	uint32_t init; // system clock time (ms)
+	uint32_t update; // system clock time (ms)
+	// Using system clock (ms) here is ok because
+	// UINT16_MAX sec is about 18 hours and
+	// UINT32_MAX ms is about 1193 hours.
+	// We can track the wrap-around.
+};
+struct fx_flow_count {
+	uint64_t packet_count;
+	uint64_t byte_count;
+};
+#define FX_FLOW_ACTIVE 1
+#define FX_FLOW_SEND_FLOW_REM -1
+
+int match_frame_by_oxm(struct fx_packet, struct fx_packet_oob, const char*, uint16_t);
+int match_frame_by_tuple(struct fx_packet, struct fx_packet_oob, struct ofp_match);
+void execute_ofp13_flow(struct fx_packet*, struct fx_packet_oob*, int flow);
+void execute_ofp10_flow(struct fx_packet*, struct fx_packet_oob*, int flow);
 
 #endif /* OPENFLOW_H_ */

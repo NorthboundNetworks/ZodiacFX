@@ -75,8 +75,22 @@ err_t TCPready(void *arg, struct tcp_pcb *tpcb, err_t err);
 void tcp_error(void * arg, err_t err);
 static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
 
+// --- kwi0 ---
+
+struct flows_counter reset_counter(){
+	struct flows_counter ret = {
+		.active = true,
+		.bytes = 0,
+		.hitCount = 0,
+		.duration = totaltime,
+		.lastmatch = totaltime,
+	};
+	return ret;
+}
+
 // --- kwi ---
 
+// prototype
 static bool switch_negotiated(void);
 
 /*
@@ -89,6 +103,46 @@ static bool switch_negotiated(void);
  */
 #define OFP_BUFFER_LEN 2048
 char ofp_buffer[OFP_BUFFER_LEN];
+
+#define MAX_TABLES 10 // must be smaller than OFPTT13_MAX
+struct fx_table_count fx_table_counts[MAX_TABLES];
+
+uint32_t fx_buffer_id = 0; // incremental
+struct fx_packet_in fx_packet_ins[MAX_BUFFERS] = {};
+
+struct fx_flow fx_flows[MAX_FLOWS];
+struct fx_flow_timeout fx_flow_timeouts[MAX_FLOWS];
+struct fx_flow_count fx_flow_counts[MAX_FLOWS];
+
+void execute_fx_flow(struct fx_packet *packet, struct fx_packet_oob *oob, uint8_t flow_id){
+	if(OF_Version == 4){
+		execute_ofp13_flow(packet, oob, flow_id);
+	} else if(OF_Version == 1){
+		execute_ofp10_flow(packet, oob, flow_id);
+	}
+}
+
+int lookup_fx_table(struct fx_packet packet, struct fx_packet_oob oob, uint8_t table_id){
+	int found = -1;
+	for(int i=0; i<iLastFlow; i++){
+		if(fx_flows[i].active != FX_FLOW_ACTIVE || fx_flows[i].table_id != table_id){
+			continue;
+		}
+		if(found>=0 && fx_flows[found].priority > fx_flows[i].priority){
+			continue;
+		}
+		if(OF_Version == 4){
+			if(!match_frame_by_oxm(packet, oob, fx_flows[i].oxm, fx_flows[i].oxm_length)){
+				continue;
+			}
+		} else if(OF_Version == 1){
+			if(!match_frame_by_tuple(packet, oob, fx_flows[i].tuple)){
+				continue;
+			}
+		}
+	}
+	return found;
+}
 
 static void ofp_unreach(void){
 	while(1);
@@ -152,25 +206,6 @@ static err_t ofp_close(struct ofp_pcb *self, uint32_t sleep){
 		return tcp_close(tcp);
 	}
 	return ERR_OK;
-}
-
-// tcp_err_fn
-static void ofp_err_cb(void *arg, err_t err){
-	if(arg == NULL) return;
-	struct ofp_pcb *self = arg;
-	if(err==ERR_RST){
-		while(self->rbuf != NULL){
-			struct pbuf *head = self->rbuf;
-			self->rbuf = pbuf_dechain(head);
-			pbuf_free(head);
-		}
-		memset(self, 0, sizeof(struct ofp_pcb));
-		self->sleep_until = sys_get_ms() + CONNECT_RETRY_INTERVAL;
-	} else if(err==ERR_ABRT){
-		// tcp_abort will only be called outside of ofp context
-	} else {
-		ofp_unreach();
-	}
 }
 
 /*
@@ -278,89 +313,106 @@ static enum ofp_pcb_status ofp_negotiation(struct ofp_pcb *self){
 	return OFP_CLOSE;
 }
 
+static enum ofp_pcb_status ofp_multipart_complete(struct ofp_pcb *self){
+	struct ofp13_multipart_request mpreq = {};
+	memcpy(&mpreq, self->mpreq_hdr, 16);
+	uint16_t length = ntohs(mpreq.header.length);
+	
+	while(self->mpreq_pos != 0){
+		switch(ntohs(mpreq.type)){
+			case OFPMP13_FLOW:
+			if(self->mp_out_index < 0){
+				if(ofp_rx_length(self) < 40){
+					return OFP_NOOP;
+				}
+				struct ofp13_flow_stats_request unit;
+				pbuf_copy_partial(self->rbuf, &unit, 40, self->rskip);
+				uint16_t unitreqlen = offsetof(struct ofp13_flow_stats_request, match) + ALIGN8(ntohs(unit.match.length));
+				if(ofp_rx_length(self) < unitreqlen){
+					return OFP_NOOP;
+				}
+				self->mpreq_pos += ofp_rx_read(self, self->mp_in, unitreqlen);
+				self->mp_out_index = 0;
+			}
+			{
+				struct ofp13_flow_stats_request hint;
+				memcpy(&hint, self->mp_in, 40);
+				char unit[MP_UNIT_MAXSIZE];
+				memcpy(&unit, self->mp_in, offsetof(struct ofp13_flow_stats_request, match) + ALIGN8(ntohs(hint.match.length)));
+				struct ofp13_multipart_reply rep = {};
+				rep.header = mpreq.header;
+				rep.header.type = OFPT13_MULTIPART_REPLY;
+				rep.flags = htons(0);
+				rep.type = htons(OFPMP13_FLOW);
+				uint16_t unitlength = fill_ofp13_flow_stats(
+				(struct ofp13_flow_stats_request*)unit,
+				&self->mp_out_index, ofp_buffer+16, ofp_tx_room(self)-16);
+				if(self->mp_out_index >= 0){
+					rep.flags = htons(OFPMPF13_REPLY_MORE);
+					} else if(self->mpreq_pos >= length){
+					self->mpreq_pos = 0;
+				}
+				rep.header.length = htons(16+unitlength);
+				memcpy(ofp_buffer, &rep, 16);
+				ofp_tx_write(self, ofp_buffer, 16+unitlength);
+			}
+			break;
+				
+			default:
+			{
+				if(ofp_rx_length(self) < length-16 || ofp_tx_room(self) < 12+64){
+					return OFP_NOOP;
+				}
+				memcpy(ofp_buffer, self->mpreq_hdr, 16);
+				ofp_rx_read(self, ofp_buffer+16, length-16);
+					
+				if (length > 64){
+					length = 64;
+				}
+				char reply[12+64];
+				struct ofp_error_msg err = {};
+				err.header.version = mpreq.header.version;
+				err.header.type = OFPT13_ERROR;
+				err.header.length = htons(12+length);
+				err.header.xid = mpreq.header.xid;
+				err.type = htons(OFPET13_BAD_REQUEST);
+				err.code = htons(OFPBRC13_BAD_MULTIPART);
+				memcpy(reply, &err, 12);
+				memcpy(reply+12, ofp_buffer, length);
+				ofp_tx_write(self, reply, 12+length);
+				self->mpreq_pos = 0;
+			}
+			break;
+		}
+		if (self->mpreq_pos == 0 && (ntohs(mpreq.flags) & OFPMPF13_REQ_MORE) == 0){
+			self->mpreq_on = false;
+		}
+	}
+	return OFP_OK;
+}
+
+static enum ofp_pcb_status ofp_notify(){
+	// TODO:
+	return OFP_OK;
+}
+
 static enum ofp_pcb_status ofp_handle(struct ofp_pcb *self){
 	enum ofp_pcb_status ret = ofp_negotiation(self);
 	if(OFP_OK != ret){
 		return ret;
 	}
+	ret = ofp_multipart_complete(self);
+	if(OFP_OK != ret){
+		return ret;
+	}
+	ret = ofp_notify(self);
+	if(OFP_OK != ret){
+		return ret;
+	}
 	while(ofp_rx_length(self) >= 8){
 		uint16_t length;
-		if(self->mpreq_pos != 0){
-			struct ofp13_multipart_request mpreq = {};
-			memcpy(&mpreq, self->mpreq_hdr, 16);
-			length = ntohs(mpreq.header.length);
-			switch(ntohs(mpreq.type)){
-				case OFPMP13_FLOW:
-				if(self->mp_out_index < 0){
-					if(ofp_rx_length(self) < 40){
-						return OFP_NOOP;
-					}
-					struct ofp13_flow_stats_request unit;
-					pbuf_copy_partial(self->rbuf, &unit, 40, self->rskip);
-					uint16_t unitreqlen = offsetof(struct ofp13_flow_stats_request, match) + ALIGN8(ntohs(unit.match.length));
-					if(ofp_rx_length(self) < unitreqlen){
-						return OFP_NOOP;
-					}
-					self->mpreq_pos += ofp_rx_read(self, self->mp_in, unitreqlen);
-					self->mp_out_index = 0;
-				}
-				{
-					struct ofp13_flow_stats_request hint;
-					memcpy(&hint, self->mp_in, 40);
-					char unit[MP_UNIT_MAXSIZE];
-					memcpy(&unit, self->mp_in, offsetof(struct ofp13_flow_stats_request, match) + ALIGN8(ntohs(hint.match.length)));
-					struct ofp13_multipart_reply rep = {};
-					rep.header = mpreq.header;
-					rep.header.type = OFPT13_MULTIPART_REPLY;
-					rep.flags = htons(0);
-					rep.type = htons(OFPMP13_FLOW);
-					uint16_t unitlength = fill_ofp13_flow_stats(
-						(struct ofp13_flow_stats_request*)unit,
-						&self->mp_out_index, ofp_buffer+16, ofp_tx_room(self)-16);
-					if(self->mp_out_index >= 0){
-						rep.flags = htons(OFPMPF13_REPLY_MORE);
-					} else if(self->mpreq_pos >= length){
-						self->mpreq_pos = 0;
-					}
-					rep.header.length = htons(16+unitlength);
-					memcpy(ofp_buffer, &rep, 16);
-					ofp_tx_write(self, ofp_buffer, 16+unitlength);
-				}
-				break;
-				
-				default:
-				{
-					if(ofp_rx_length(self) < length-16 || ofp_tx_room(self) < 12+64){
-						return OFP_NOOP;
-					}
-					memcpy(ofp_buffer, self->mpreq_hdr, 16);
-					ofp_rx_read(self, ofp_buffer+16, length-16);
-					
-					if (length > 64){
-						length = 64;
-					}
-					char reply[12+64];
-					struct ofp_error_msg err = {};
-					err.header.version = mpreq.header.version;
-					err.header.type = OFPT13_ERROR;
-					err.header.length = htons(12+length);
-					err.header.xid = mpreq.header.xid;
-					err.type = htons(OFPET13_BAD_REQUEST);
-					err.code = htons(OFPBRC13_BAD_MULTIPART);
-					memcpy(reply, &err, 12);
-					memcpy(reply+12, ofp_buffer, length);
-					ofp_tx_write(self, reply, 12+length);
-					self->mpreq_pos = 0;
-				}
-				break;
-			}
-			if (self->mpreq_pos == 0 && (ntohs(mpreq.flags) & OFPMPF13_REQ_MORE) == 0){
-				self->mpreq_on = false;
-			}
-			continue;
-		}
 		ret = OFP_NOOP;
-		struct ofp_header req;
+		struct ofp_header req; // look ahead
 		pbuf_copy_partial(self->rbuf, &req, 8, self->rskip);
 		length = ntohs(req.length);
 		if(length < 8){
@@ -432,7 +484,7 @@ static enum ofp_pcb_status ofp_handle(struct ofp_pcb *self){
 							self->mpreq_on = true;
 							self->mpreq_pos = 16;
 							self->mp_out_index = -1;
-							ret = OFP_OK;
+							ret = ofp_multipart_complete(self);
 						}
 					}
 				}
@@ -481,7 +533,10 @@ static enum ofp_pcb_status ofp_handle(struct ofp_pcb *self){
 		self->rbuf = pbuf_dechain(head);
 		pbuf_free(head);
 	}
-	return OFP_OK;
+	if (OFP_OK == ret){
+		return ofp_notify(self);
+	}
+	return ret;
 }
 
 static err_t ofp_poll_cb(void *arg, struct tcp_pcb *pcb){
@@ -493,7 +548,7 @@ static err_t ofp_poll_cb(void *arg, struct tcp_pcb *pcb){
 	if(ofp->alive_until - sys_get_ms() > 0x80000000U){
 		return ofp_close(ofp, CONNECT_RETRY_INTERVAL);
 	}
-	if(ofp->next_ping - sys_get_ms() > 0x80000000U){
+	if(ofp->negotiated && ofp->next_ping - sys_get_ms() > 0x80000000U){
 		ofp->next_ping = sys_get_ms() + OFP_PING_INTERVAL;
 		if(ofp->mpreq_pos == 0 && ofp_tx_room(ofp) > 8) {
 			struct ofp_header hdr;
@@ -575,7 +630,6 @@ static err_t ofp_connected_cb(void *arg, struct tcp_pcb *tcp, err_t err){
 		memset(ofp, 0, sizeof(struct ofp_pcb));
 		return err;
 	}
-	tcp_poll(tcp, ofp_poll_cb, 1);
 	err_t ret;
 	ofp->alive_until = sys_get_ms() + OFP_TIMEOUT;
 	ofp->next_ping = sys_get_ms() + OFP_PING_INTERVAL;
@@ -605,6 +659,25 @@ static err_t ofp_connected_cb(void *arg, struct tcp_pcb *tcp, err_t err){
 		return tcp_output(ofp->tcp);
 	}
 	return ret;
+}
+
+// tcp_err_fn
+static void ofp_err_cb(void *arg, err_t err){
+	if(arg == NULL) return;
+	struct ofp_pcb *self = arg;
+	if(err==ERR_RST){
+		while(self->rbuf != NULL){
+			struct pbuf *head = self->rbuf;
+			self->rbuf = pbuf_dechain(head);
+			pbuf_free(head);
+		}
+		memset(self, 0, sizeof(struct ofp_pcb));
+		self->sleep_until = sys_get_ms() + CONNECT_RETRY_INTERVAL;
+	} else if(err==ERR_ABRT){
+		// tcp_abort will only be called outside of ofp context
+	} else {
+		ofp_unreach();
+	}
 }
 
 #define MAX_CONTROLLERS 2
@@ -647,14 +720,53 @@ void openflow_task(){
 			c->ofp.sleep_until = sys_get_ms() + CONNECT_RETRY_INTERVAL;
 			continue;
 		}
+		c->ofp.alive_until = sys_get_ms() + CONNECT_RETRY_INTERVAL;
 		tcp_arg(tcp, &(c->ofp));
 		tcp_err(tcp, ofp_err_cb);
 		tcp_recv(tcp, ofp_recv_cb);
 		tcp_sent(tcp, ofp_sent_cb);
-		// tcp_poll must set in connected_callback.
+		tcp_poll(tcp, ofp_poll_cb, 1); // need to be placed here for catching the very first SYN send failure
 		tcp_connect(tcp, &(c->addr), Zodiac_Config.OFPort, ofp_connected_cb);
 		c->ofp.tcp = tcp;
 	}
+}
+
+void openflow_pipeline(struct pbuf *frame, uint32_t in_port){
+	uint8_t offset = 14;
+	uint16_t vlan = 0;
+	uint16_t eth_type;
+	pbuf_copy_partial(frame, &eth_type, 2, 12);
+	if(eth_type == htons(0x8100) || eth_type == htons(0x88a8)){
+		pbuf_copy_partial(frame, &vlan, 2, 14);
+		pbuf_copy_partial(frame, &eth_type, 2, 16);
+		vlan = (vlan & htons(0xEFFF)) | htons(0x1000); // set CFI bit for internal use
+		offset = 18;
+	}
+	struct fx_packet packet = {
+		.data = frame,
+		.in_port = in_port,
+	};
+	struct fx_packet_oob oob = {
+		.action_set = {},
+		.action_set_oxm = NULL,
+		.action_set_oxm_length = 0,
+		.eth_offset = offset,
+		.eth_type = eth_type,
+		.vlan = vlan,
+	};
+	int flow = lookup_fx_table(packet, oob, 0);
+	fx_table_counts[0].lookup++;
+	if(flow < 0){
+		if(OF_Version==1){
+			// XXX: packet-in
+		}
+		return;
+	}
+	fx_table_counts[0].matched++;
+	fx_flow_counts[0].packet_count++;
+	fx_flow_counts[0].byte_count+=frame->tot_len;
+	fx_flow_timeouts[flow].update = sys_get_ms();
+	execute_fx_flow(&packet, &oob, flow);
 }
 
 /*
