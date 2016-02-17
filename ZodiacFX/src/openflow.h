@@ -85,11 +85,21 @@ void flowrem_notif(int flowid, uint8_t reason);
 (((x) & 0xff000000UL) >> 24))
 #define NTOHL(x) HTONL(x)
 
+
+/* ---- kwi0 version ---- */
+
+struct flows_counter reset_counter();
+
 /* ---- kwi version ---- */
 
 #define ALIGN8(x) (x+7)/8*8
 
-struct flows_counter reset_counter();
+#define MAX_CONTROLLERS 2
+
+struct controller {
+	struct ip_addr addr;
+	struct ofp_pcb ofp;
+};
 
 enum ofp_pcb_status {
 	OFP_OK, // successfully processed
@@ -157,8 +167,8 @@ struct fx_packet_oob {
 	const char* action_set[16]; // just reference to ofp_action inside fx_flow.ops
 };
 struct fx_packet_in {
-	int8_t stage;
-	uint32_t valid_until;
+	uint8_t send_bits; // controller bitmap supporting up to 7 controllers now. 0x80 is for packet_out
+	uint32_t valid_until; // sys_ms
 	uint32_t buffer_id;
 	uint8_t reason;
 	uint8_t table_id;
@@ -167,11 +177,10 @@ struct fx_packet_in {
 	uint16_t max_len;
 };
 #define MAX_BUFFERS 16
-#define FX_PACKET_IN_STAGE_PACKET_IN 1
-#define FX_PACKET_IN_STAGE_PACKET_OUT 2
+#define BUFFER_TIMEOUT 5000U /* ms */
 
 struct fx_flow {
-	int8_t active; // 0=init, 1=FX_FLOW_ACTIVE, -1=FX_FLOW_SEND_FLOW_REM.
+	uint8_t send_bits; // 0=init, 0x80=active, 0x01=prepared to send_flow_rem to controller[0].
 	uint8_t table_id;
 	uint16_t priority;
 	uint16_t flags;

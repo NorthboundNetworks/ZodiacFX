@@ -776,10 +776,10 @@ static uint32_t match_prereq(const char *oxm, int length)
  */
 bool oxm_strict_equals(const char *oxm_a, int len_a, const char *oxm_b, int len_b){
 	int count_a = 0;
-	for(const char *pos_a=oxm_a; pos_a < oxm_a+len_a; pos_a+=pos_a[3]+4){
+	for(const char *pos_a=oxm_a; pos_a < oxm_a+len_a; pos_a+=4+(uint8_t)pos_a[3]){
 		bool miss = true;
-		for(const char *pos_b=oxm_b; pos_b < oxm_b+len_b; pos_b+=pos_b[3]+4){
-			if(pos_a[3] == pos_b[3] && memcmp(pos_a, pos_b, pos_a[3]) == 0){
+		for(const char *pos_b=oxm_b; pos_b < oxm_b+len_b; pos_b+=4+(uint8_t)pos_b[3]){
+			if(pos_a[3] == pos_b[3] && memcmp(pos_a, pos_b, (uint8_t)pos_a[3]) == 0){
 				miss = false;
 				break;
 			}
@@ -789,7 +789,7 @@ bool oxm_strict_equals(const char *oxm_a, int len_a, const char *oxm_b, int len_
 		}
 		count_a++;
 	}
-	for(const char *pos_b=oxm_b; pos_b < oxm_b+len_b; pos_b+=pos_b[3]+4){
+	for(const char *pos_b=oxm_b; pos_b < oxm_b+len_b; pos_b+=4+(uint8_t)pos_b[3]){
 		count_a--;
 	}
 	if(count_a==0){

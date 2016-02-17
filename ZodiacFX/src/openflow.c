@@ -680,12 +680,6 @@ static void ofp_err_cb(void *arg, err_t err){
 	}
 }
 
-#define MAX_CONTROLLERS 2
-
-struct controller {
-	struct ip_addr addr;
-	struct ofp_pcb ofp;
-};
 static struct controller controllers[MAX_CONTROLLERS] = {};
 
 static bool switch_negotiated(void){
