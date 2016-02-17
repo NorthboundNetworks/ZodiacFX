@@ -34,6 +34,7 @@
 #include "openflow_spec/openflow_spec13.h"
 #include "of_helper.h"
 #include <lwip/err.h>
+#include <lwip/tcp.h>
 
 struct flows_counter
 {
@@ -94,13 +95,6 @@ struct flows_counter reset_counter();
 
 #define ALIGN8(x) (x+7)/8*8
 
-#define MAX_CONTROLLERS 2
-
-struct controller {
-	struct ip_addr addr;
-	struct ofp_pcb ofp;
-};
-
 enum ofp_pcb_status {
 	OFP_OK, // successfully processed
 	OFP_NOOP, // precondition not satisfied
@@ -127,13 +121,22 @@ struct ofp_pcb {
 	uint32_t next_ping;
 };
 
+#define OFP_BUFFER_LEN 2048
+
+#define MAX_CONTROLLERS 2
+
+struct controller {
+	struct ip_addr addr;
+	struct ofp_pcb ofp;
+};
+
 void openflow_init(void);
 void openflow_task(void);
 void openflow_pipeline(struct pbuf*, uint32_t);
 uint16_t ofp_rx_length(struct ofp_pcb*);
 uint16_t ofp_rx_read(struct ofp_pcb*, char*, uint16_t);
 uint16_t ofp_tx_room(struct ofp_pcb*);
-uint16_t ofp_rx_write(struct ofp_pcb*, char*, uint16_t);
+uint16_t ofp_tx_write(struct ofp_pcb*, const char*, uint16_t);
 uint16_t ofp_set_error(const char*, uint16_t, uint16_t);
 
 uint16_t mod_ofp13_flow(struct ofp13_flow_mod*);
@@ -148,7 +151,7 @@ struct fx_table_count {
 	uint64_t matched;
 };
 
-struct fx_packet {
+struct fx_packet { // in network byte order
 	struct pbuf *data;
 	// pipeline fields
 	uint32_t in_port;
@@ -156,25 +159,25 @@ struct fx_packet {
 	uint64_t tunnel_id;
 	uint32_t in_phy_port;
 };
-struct fx_packet_oob {
+struct fx_packet_oob { // in network byte order
 	// cache
 	uint16_t vlan;
 	uint16_t eth_type;
 	uint16_t eth_offset;
 	// pipeline
-	uint16_t action_set_oxm_length;
+	uint16_t action_set_oxm_length; // in host byte order
 	const char* action_set_oxm; // malloc-ed oxm
 	const char* action_set[16]; // just reference to ofp_action inside fx_flow.ops
 };
-struct fx_packet_in {
+struct fx_packet_in { // in network byte order
 	uint8_t send_bits; // controller bitmap supporting up to 7 controllers now. 0x80 is for packet_out
-	uint32_t valid_until; // sys_ms
+	uint32_t valid_until; // sys_ms (in host network byte order)
 	uint32_t buffer_id;
 	uint8_t reason;
 	uint8_t table_id;
 	uint64_t cookie;
 	struct fx_packet packet;
-	uint16_t max_len;
+	uint16_t max_len; // in host byte order
 };
 #define MAX_BUFFERS 16
 #define BUFFER_TIMEOUT 5000U /* ms */
@@ -205,8 +208,7 @@ struct fx_flow_count {
 	uint64_t packet_count;
 	uint64_t byte_count;
 };
-#define FX_FLOW_ACTIVE 1
-#define FX_FLOW_SEND_FLOW_REM -1
+#define FX_FLOW_ACTIVE 0x80
 
 int match_frame_by_oxm(struct fx_packet, struct fx_packet_oob, const char*, uint16_t);
 int match_frame_by_tuple(struct fx_packet, struct fx_packet_oob, struct ofp_match);

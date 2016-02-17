@@ -101,7 +101,6 @@ static bool switch_negotiated(void);
  *  * Flatten pbuf and pass it to tcp_write()
  *    with TCP_WRITE_FLAG_COPY
  */
-#define OFP_BUFFER_LEN 2048
 char ofp_buffer[OFP_BUFFER_LEN];
 
 #define MAX_TABLES 10 // must be smaller than OFPTT13_MAX
@@ -110,9 +109,9 @@ struct fx_table_count fx_table_counts[MAX_TABLES];
 uint32_t fx_buffer_id = 0; // incremental
 struct fx_packet_in fx_packet_ins[MAX_BUFFERS] = {};
 
-struct fx_flow fx_flows[MAX_FLOWS];
-struct fx_flow_timeout fx_flow_timeouts[MAX_FLOWS];
-struct fx_flow_count fx_flow_counts[MAX_FLOWS];
+struct fx_flow fx_flows[MAX_FLOWS] = {};
+struct fx_flow_timeout fx_flow_timeouts[MAX_FLOWS] = {};
+struct fx_flow_count fx_flow_counts[MAX_FLOWS] = {};
 
 void execute_fx_flow(struct fx_packet *packet, struct fx_packet_oob *oob, uint8_t flow_id){
 	if(OF_Version == 4){
@@ -124,22 +123,25 @@ void execute_fx_flow(struct fx_packet *packet, struct fx_packet_oob *oob, uint8_
 
 int lookup_fx_table(struct fx_packet packet, struct fx_packet_oob oob, uint8_t table_id){
 	int found = -1;
+	int score = -1;
 	for(int i=0; i<iLastFlow; i++){
-		if(fx_flows[i].active != FX_FLOW_ACTIVE || fx_flows[i].table_id != table_id){
+		if((fx_flows[i].send_bits & FX_FLOW_ACTIVE) == 0 || fx_flows[i].table_id != table_id){
 			continue;
 		}
 		if(found>=0 && fx_flows[found].priority > fx_flows[i].priority){
 			continue;
 		}
+		int s = -1;
 		if(OF_Version == 4){
-			if(!match_frame_by_oxm(packet, oob, fx_flows[i].oxm, fx_flows[i].oxm_length)){
-				continue;
-			}
+			s = match_frame_by_oxm(packet, oob, fx_flows[i].oxm, fx_flows[i].oxm_length);
 		} else if(OF_Version == 1){
-			if(!match_frame_by_tuple(packet, oob, fx_flows[i].tuple)){
-				continue;
-			}
+			s = match_frame_by_tuple(packet, oob, fx_flows[i].tuple);
 		}
+		if(s<0 || s<score){
+			continue;
+		}
+		score = s;
+		found = i;
 	}
 	return found;
 }
@@ -179,7 +181,7 @@ uint16_t ofp_tx_room(struct ofp_pcb *pcb){
  * `data` will be queued as a single TCP segment, so you should write a
  * single complete openflow message in one call.
  */
-static uint16_t ofp_tx_write(struct ofp_pcb *pcb, const char *data, uint16_t length){
+uint16_t ofp_tx_write(struct ofp_pcb *pcb, const char *data, uint16_t length){
 	if(ofp_tx_room(pcb) >= length){
 		if(ERR_OK == tcp_write(pcb->tcp, data, length, TCP_WRITE_FLAG_COPY)){
 			pcb->txlen += length;
@@ -392,7 +394,7 @@ static enum ofp_pcb_status ofp_multipart_complete(struct ofp_pcb *self){
 }
 
 static enum ofp_pcb_status ofp_notify(){
-	// TODO:
+	// TODO
 	return OFP_OK;
 }
 
@@ -680,7 +682,7 @@ static void ofp_err_cb(void *arg, err_t err){
 	}
 }
 
-static struct controller controllers[MAX_CONTROLLERS] = {};
+struct controller controllers[MAX_CONTROLLERS] = {};
 
 static bool switch_negotiated(void){
 	for(int i=0; i<MAX_CONTROLLERS; i++){
@@ -738,7 +740,7 @@ void openflow_pipeline(struct pbuf *frame, uint32_t in_port){
 	}
 	struct fx_packet packet = {
 		.data = frame,
-		.in_port = in_port,
+		.in_port = htonl(in_port),
 	};
 	struct fx_packet_oob oob = {
 		.action_set = {},

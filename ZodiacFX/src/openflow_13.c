@@ -1061,16 +1061,13 @@ void of_error13(struct ofp_header *msg, uint16_t type, uint16_t code)
 
 
 // --- kwi --- //
+extern char ofp_buffer[OFP_BUFFER_LEN];
+extern struct controller controllers[MAX_CONTROLLERS];
 extern struct fx_flow fx_flows[MAX_FLOWS];
 extern struct fx_flow_timeout fx_flow_timeouts[MAX_FLOWS];
 extern struct fx_flow_count fx_flow_counts[MAX_FLOWS];
 extern uint32_t fx_buffer_id;
 extern struct fx_packet_in fx_packet_ins[MAX_BUFFERS];
-
-uint16_t send_ofp13_flow_rem(struct ofp_pcb *self){
-	// TODO
-	return 0;
-}
 
 // fields are in host byte order
 struct ofp13_filter {
@@ -1090,7 +1087,7 @@ struct ofp13_filter {
  */
 int filter_ofp13_flow(int first, struct ofp13_filter filter){
 	for(int i=first; i<iLastFlow; i++){
-		if(fx_flows[i].active != FX_FLOW_ACTIVE){
+		if((fx_flows[i].send_bits & FX_FLOW_ACTIVE) == 0){
 			continue;
 		}
 		if (filter.table_id != OFPTT13_ALL && filter.table_id != fx_flows[i].table_id){
@@ -1227,7 +1224,7 @@ static uint16_t add_ofp13_flow(const struct ofp13_flow_mod *req){
 	if((req->flags & htons(OFPFF13_CHECK_OVERLAP)) != 0){
 		int overlap = -1;
 		for(int i=0; i<iLastFlow; i++){
-			if(fx_flows[i].active != FX_FLOW_ACTIVE
+			if((fx_flows[i].send_bits & FX_FLOW_ACTIVE) == 0
 					|| req->table_id != fx_flows[i].table_id
 					|| req->priority != fx_flows[i].priority){
 				continue;
@@ -1263,7 +1260,7 @@ static uint16_t add_ofp13_flow(const struct ofp13_flow_mod *req){
 	int n = found;
 	if(n < 0){
 		for(int i=0; i<iLastFlow; i++){
-			if(fx_flows[i].active == 0){
+			if(fx_flows[i].send_bits == 0){
 				n = i;
 				break;
 			}
@@ -1287,7 +1284,7 @@ static uint16_t add_ofp13_flow(const struct ofp13_flow_mod *req){
 		return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_UNKNOWN);
 	}
 	
-	fx_flows[n].active = FX_FLOW_ACTIVE;
+	fx_flows[n].send_bits = FX_FLOW_ACTIVE;
 	fx_flows[n].table_id = req->table_id;
 	fx_flows[n].priority = ntohs(req->priority);
 	fx_flows[n].flags = ntohs(req->flags);
@@ -1383,9 +1380,14 @@ static uint16_t delete_ofp13_flow(const struct ofp13_flow_mod *req, bool strict)
 	};
 	for(int i=filter_ofp13_flow(0, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
 		if(fx_flows[i].flags & OFPFF13_SEND_FLOW_REM != 0){
-			fx_flows[i].active = FX_FLOW_SEND_FLOW_REM;
+			uint8_t send_bits = 0;
+			for(int i=0; i<MAX_CONTROLLERS; i++){
+				send_bits |= 1<<i;
+			}
+			fx_flows[i].send_bits = send_bits;
+			// TODO: trigger notification
 		} else {
-			fx_flows[i].active = 0;
+			fx_flows[i].send_bits = 0;
 		}
 	}
 	return 0;
@@ -1433,10 +1435,10 @@ static int bits_on(const char *data, int len){
 
 int match_frame_by_oxm(struct fx_packet packet, struct fx_packet_oob oob, const char *oxm, uint16_t oxm_length){
 	int count = 0;
-	for(const char *pos=oxm; pos<oxm+oxm_length; pos+=oxm[3]){
-		if(pos[0]==0x80 && pos[1]==0x00){
-			int has_mask = pos[2] & 0x01;
-			switch(pos[2]>>1){
+	for(const char *pos=oxm; pos<oxm+oxm_length; pos+=4+(uint8_t)oxm[3]){
+		if((uint8_t)pos[0]==0x80 && (uint8_t)pos[1]==0x00){
+			int has_mask = (uint8_t)pos[2] & 0x01;
+			switch((uint8_t)pos[2]>>1){
 				case OFPXMT13_OFB_IN_PORT:
 				if(memcmp(&packet.in_port, pos+4, 4)!=0){
 					return -1;
@@ -1687,16 +1689,169 @@ int match_frame_by_oxm(struct fx_packet packet, struct fx_packet_oob oob, const 
 	return count;
 }
 
+void check_ofp13_send_flow_rem(){
+	for(int i=0; i<iLastFlow; i++){
+		
+	}
+}
+
+static void send_ofp13_packet_in(struct fx_packet *packet, struct ofp13_packet_in base, uint16_t max_len, uint8_t *send_bits){
+	if(max_len == OFPCML13_NO_BUFFER || max_len > packet->data->tot_len){
+		max_len = packet->data->tot_len;
+	} // max_len is send_len
+	
+	base.header.type = OFPT13_PACKET_IN;
+	base.header.version = 4;
+	base.total_len = packet->data->tot_len;
+	
+	char oxm[32];
+	uint16_t oxm_length = 0;
+	if(packet->in_port != 0){
+		uint32_t field = htonl(OXM_OF_IN_PORT);
+		memcpy(oxm+oxm_length, &field, 4);
+		memcpy(oxm+oxm_length+4, &packet->in_port, 4);
+		oxm_length += 8;
+	}
+	if(packet->metadata != 0){
+		uint32_t field = htonl(OXM_OF_METADATA);
+		memcpy(oxm+oxm_length, &field, 4);
+		memcpy(oxm+oxm_length+4, &packet->metadata, 8);
+		oxm_length += 12;
+	}
+	if(packet->tunnel_id != 0){
+		uint32_t field = htonl(OXM_OF_TUNNEL_ID);
+		memcpy(oxm+oxm_length, &field, 4);
+		memcpy(oxm+oxm_length+4, &packet->tunnel_id, 8);
+		oxm_length += 12;
+	}
+	base.match.type = htons(OFPMT13_OXM);
+	base.match.length = htons(4 + oxm_length);
+	
+	uint16_t length = offsetof(struct ofp13_packet_in, match);
+	length += ALIGN8(4+oxm_length) + 2 + max_len;
+	base.header.length = htons(length);
+	
+	memset(ofp_buffer, 0, length);
+	memcpy(ofp_buffer, &base, sizeof(struct ofp13_packet_in));
+	memcpy(ofp_buffer+offsetof(struct ofp13_packet_in, match)+4, oxm, oxm_length);
+	pbuf_copy_partial(packet->data,
+		ofp_buffer+offsetof(struct ofp13_packet_in, match)+ALIGN8(4+oxm_length)+2,
+		max_len, 0);
+	for(int i=0; i<MAX_CONTROLLERS; i++){
+		struct ofp_pcb *ofp = &(controllers[i].ofp);
+		if((*send_bits & (1<<i)) == 0 ){
+			continue;
+		}
+		if(!ofp->negotiated){
+			*send_bits &= ~(1<<i);
+			continue;
+		}
+		if(ofp_tx_room(ofp) < length){
+			continue;
+		}
+		uint32_t xid = ofp->xid++;
+		memcpy(ofp_buffer+4, &xid, 4);
+		ofp_tx_write(ofp, ofp_buffer, length);
+		*send_bits &= ~(1<<i);
+	}
+}
+
+void check_ofp13_packet_in(){
+	for(int i=0; i<MAX_BUFFERS; i++){
+		struct fx_packet_in *pin = fx_packet_ins+i;
+		if((pin->send_bits &~ 0x80) == 0){
+			continue;
+		}
+		if(pin->valid_until - sys_get_ms() > 0x80000000U){
+			pbuf_free(pin->packet.data);
+			pin->send_bits = 0;
+			continue;
+		}
+		struct ofp13_packet_in msg = {};
+		msg.buffer_id = pin->buffer_id;
+		msg.reason = pin->reason;
+		msg.table_id = pin->table_id;
+		msg.cookie = pin->cookie;
+		send_ofp13_packet_in(&pin->packet, msg, ntohs(pin->max_len), &pin->send_bits);
+		if(pin->send_bits == 0){
+			pbuf_free(pin->packet.data);
+		}
+	}
+}
+
 static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob *oob, struct ofp13_action_header *act, int flow){
 	switch(ntohs(act->type)){
 		case OFPAT13_OUTPUT:
 		{
 			struct ofp13_action_output *out = act;
-			uint32_t port = ntohl(out->port);
-			if(port == OFPP13_CONTROLLER){
+			uint32_t port = ntohl(out->port) - 1; // port starts from 1
+			if(port < OFPP13_MAX){
+				if(out->port != packet->in_port && port<4 && Zodiac_Config.of_port[port]==1){
+					pbuf_copy_partial(packet->data, ofp_buffer, packet->data->tot_len, 0);
+					gmac_write(ofp_buffer, packet->data->tot_len, 1<<port);
+				}
+			}else if(out->port == htonl(OFPP13_ALL) || out->port == htonl(OFPP13_FLOOD) || out->port == htonl(OFPP13_NORMAL)){
+				uint8_t p = 0;
+				for(int i=0; i<4; i++){ // XXX: num port hardcoded
+					if(Zodiac_Config.of_port[i]==1 && i != ntohl(packet->in_port)-1){
+						p |= 1<<i;
+					}
+				}
+				if(p != 0){
+					pbuf_copy_partial(packet->data, ofp_buffer, packet->data->tot_len, 0);
+					gmac_write(ofp_buffer, packet->data->tot_len, p);
+				}
+			}else if(out->port == htonl(OFPP13_CONTROLLER)){
+				struct ofp13_packet_in msg = {};
+				uint8_t send_bits = 0;
+				msg.buffer_id = htonl(OFP13_NO_BUFFER);
+				if(out->max_len != htons(OFPCML13_NO_BUFFER)){
+					send_bits |= 0x80;
+					msg.buffer_id = htonl(fx_buffer_id++);
+				}
+				msg.table_id = fx_flows[flow].table_id;
+				msg.cookie = fx_flows[flow].cookie;
+				msg.reason = OFPR13_ACTION;
+				if(fx_flows[flow].priority == 0 && fx_flows[flow].oxm_length == 0){
+					// table-miss
+					msg.reason = OFPR13_NO_MATCH;
+				}
 				
+				for(int i=0; i<MAX_CONTROLLERS; i++){
+					if(controllers[i].ofp.negotiated){
+						send_bits |= 1<<i;
+					}
+				}
+				send_ofp13_packet_in(packet, msg, ntohs(out->max_len), &send_bits);
+				bool free_packet = true;
+				if(send_bits != 0){
+					for(int i=0; i<MAX_BUFFERS; i++){
+						struct fx_packet_in *pin = fx_packet_ins+i;
+						if(pin->send_bits == 0){
+							pin->send_bits = send_bits;
+							pin->valid_until = sys_get_ms() + BUFFER_TIMEOUT;
+							
+							pin->buffer_id = msg.buffer_id;
+							pin->reason = msg.reason;
+							pin->table_id = msg.table_id;
+							pin->cookie = msg.cookie;
+							
+							struct pbuf *data = pbuf_alloc(PBUF_RAW, packet->data->tot_len, PBUF_POOL);
+							pbuf_copy(data, packet->data);
+							pin->packet = *packet;
+							pin->packet.data = data;
+							pin->max_len = out->max_len;
+							
+							free_packet = false;
+							break;
+						}
+					}
+				}
 			}
 		}
+		break;
+		
+		
 	}
 }
 
@@ -1722,7 +1877,7 @@ void execute_ofp13_flow(struct fx_packet *packet, struct fx_packet_oob *oob, int
 		const char *p = ia->actions;
 		while(p < pos+ntohs(ia->len)){
 			struct ofp13_action_header *act = p;
-			execute_ofp13_action(&packet, &oob, act, flow);
+			execute_ofp13_action(packet, oob, act, flow);
 			p += ntohs(act->len);
 		}
 	}
