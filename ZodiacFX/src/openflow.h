@@ -184,6 +184,7 @@ struct fx_packet_in { // in network byte order
 };
 #define MAX_BUFFERS 16
 #define BUFFER_TIMEOUT 5000U /* ms */
+struct fx_packet_oob create_oob(struct pbuf*);
 
 struct fx_flow {
 	uint8_t send_bits; // 0=init, 0x80=active, 0x01=prepared to send_flow_rem to controller[0].
