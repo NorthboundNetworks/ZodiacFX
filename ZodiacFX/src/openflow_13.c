@@ -1217,6 +1217,293 @@ uint16_t fill_ofp13_flow_stats(const struct ofp13_flow_stats_request *unit, int 
 	return length;
 }
 
+uint16_t fill_ofp13_aggregate_stats(const struct ofp13_aggregate_stats_request *unit, int *mp_index, char *buffer, uint16_t capacity){
+	if(capacity < 24){
+		return 0;
+	}
+	struct ofp13_filter filter = {
+		.cookie = unit->cookie,
+		.cookie_mask = unit->cookie_mask,
+		.out_group = ntohl(unit->out_group),
+		.out_port = ntohl(unit->out_port),
+		.table_id = unit->table_id,
+		.oxm_length = ntohs(unit->match.length)-4,
+		.oxm = &unit->match.oxm_fields,
+	};
+	struct ofp13_aggregate_stats_reply res = {};
+	for(int i=filter_ofp13_flow(*mp_index, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
+		res.packet_count += fx_flow_counts[i].packet_count;
+		res.byte_count += fx_flow_counts[i].byte_count;
+		res.flow_count++;
+	}
+	memcpy(buffer, &res, 24);
+	*mp_index = -1;
+	return 24;
+}
+
+
+enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
+	if(ofp_rx_length(self) < 8){
+		return OFP_NOOP;
+	};
+	struct ofp_header req; // look ahead
+	pbuf_copy_partial(self->rbuf, &req, 8, self->rskip);
+	uint16_t length = ntohs(req.length);
+	switch(req.type){
+		case OFPT13_FEATURES_REQUEST:
+		if(ofp_tx_room(self) < 32){
+			return OFP_NOOP;
+		} else {
+			ofp_rx_read(self, ofp_buffer, length);
+			struct ofp13_switch_features res = {
+				.header = {
+					.version = 4,
+					.type = OFPT13_FEATURES_REPLY,
+					.length = htons(32),
+					.xid = htonl(self->xid++),
+				},
+				.n_buffers = MAX_BUFFERS,
+				.n_tables = MAX_TABLES,
+				.capabilities = htonl(OFPC13_FLOW_STATS | OFPC13_TABLE_STATS | OFPC13_PORT_STATS),
+			};
+			char dpid[8] = {};
+			memcpy(dpid+2, Zodiac_Config.MAC_address, 6);
+			memcpy(&res.datapath_id, dpid, 8);
+			return ofp_tx_write(self, &res, 32);
+		}
+		break;
+
+		case OFPT13_GET_CONFIG_REQUEST:
+		if(ofp_tx_room(self) < 12){
+			return OFP_NOOP;
+		}else{
+			ofp_rx_read(self, ofp_buffer, length);
+			struct ofp13_switch_config res = {
+				.header = {
+					.version = 4,
+					.type = OFPT13_GET_CONFIG_REPLY,
+					.length = htons(12),
+					.xid = htonl(self->xid++),
+				},
+				.flags = htons(fx_switch.flags),
+				.miss_send_len = htons(fx_switch.miss_send_len),
+			};
+			return ofp_tx_write(self, &res, 12);
+		}
+		break;
+
+		case OFPT13_SET_CONFIG:
+		if(ofp_rx_length(self) < 12 || ofp_tx_room(self) < 12+64){
+			return OFP_NOOP;
+		} else {
+			struct ofp13_switch_config req;
+			ofp_rx_read(self, &req, 12);
+			ofp_rx_read(self, ofp_buffer, length-12); //safety
+			fx_switch.flags = ntohs(req.flags); // XXX: add tcp_reass() support
+			fx_switch.miss_send_len = ntohs(req.miss_send_len);
+		}
+		break;
+
+		case OFPT13_PACKET_OUT:
+		if(ofp_rx_length(self) < length){
+			return OFP_NOOP;
+		}else{
+			ofp_rx_read(self, ofp_buffer, length);
+			struct ofp_packet_out *hint = ofp_buffer;
+			if(hint->buffer_id != htonl(OFP13_NO_BUFFER)){
+				bool found = false;
+				for(int i=0; i<MAX_BUFFERS; i++){
+					if((fx_packet_ins[i].send_bits & 0x80) == 0){
+						continue;
+					}
+					if(fx_packet_ins[i].buffer_id != hint->buffer_id){
+						continue;
+					}
+					found = true;
+					fx_packet_ins[i].send_bits = 0;
+					
+					struct fx_packet packet = fx_packet_ins[i].packet;
+					packet.in_port = hint->in_port;
+					struct fx_packet_oob oob = create_oob(packet.data);
+					
+					const char *p = hint->actions;
+					while(p < hint->actions+ntohs(hint->actions_len)){
+						struct ofp13_action_header *act = p;
+						execute_ofp13_action(&packet, &oob, act, -1);
+						p += ntohs(act->len);
+					}
+					
+					
+					break;
+				}
+			}
+		}
+		break;
+
+		case OFPT13_FLOW_MOD:
+		if(ofp_rx_length(self) < length || ofp_tx_room(self) < 12+64){
+			return OFP_NOOP;
+			} else {
+			ofp_rx_read(self, ofp_buffer, length);
+			uint16_t len = mod_ofp13_flow((struct ofp13_flow_mod*)ofp_buffer);
+			if(len > 0){
+				return ofp_tx_write(self, ofp_buffer, len);
+			}
+		}
+		break;
+
+		default:
+			if(ofp_rx_length(self) < length || ofp_tx_room(self) < 12+64){
+				return OFP_NOOP;
+			} else {
+				ofp_rx_read(self, ofp_buffer, length);
+			}
+			ofp_set_error(ofp_buffer, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
+			ofp_tx_write(self, ofp_buffer, 12+length);
+			return OFP_OK;
+		break;
+	}
+	return OFP_OK;
+}
+
+enum ofp_pcb_status ofp13_multipart_complete(struct ofp_pcb *self){
+	struct ofp13_multipart_request mpreq = {};
+	struct ofp13_multipart_reply mpres = {};
+	memcpy(&mpreq, self->mpreq_hdr, 16);
+	memcpy(&mpres, self->mpreq_hdr, 16);
+	mpres.header.type = OFPT13_MULTIPART_REPLY;
+	uint16_t length = ntohs(mpreq.header.length);
+	char unit[MP_UNIT_MAXSIZE];
+	
+	while(self->mpreq_pos != 0){
+		switch(ntohs(mpreq.type)){
+			case OFPMP13_DESC:
+			if(ofp_rx_length(self) < length - self->mpreq_pos || ofp_tx_room(self) < 16+1056){
+				return OFP_NOOP;
+			}else{
+				self->mpreq_pos += ofp_rx_read(self, ofp_buffer, length - self->mpreq_pos); // safety
+				mpres.header.length = htons(16+1056);
+				mpres.flags = 0;
+				struct ofp13_desc zodiac_desc = {
+					.mfr_desc = "Northbound Networks",
+					.hw_desc  = "Zodiac-FX Rev.A",
+					.sw_desc  = VERSION,
+					.serial_num= "",
+					.dp_desc  = "World's smallest OpenFlow switch!"
+				};
+				memcpy(ofp_buffer, &mpres, 16);
+				memcpy(ofp_buffer+16, &zodiac_desc, 1056);
+				ofp_tx_write(self, ofp_buffer, 16+1056);
+			}
+			break;
+			
+			case OFPMP13_FLOW:
+			{
+				struct ofp13_flow_stats_request hint;
+				if(self->mp_out_index < 0){
+					if(ofp_rx_length(self) < 40){
+						return OFP_NOOP;
+					}
+					pbuf_copy_partial(self->rbuf, &hint, 40, self->rskip);
+					uint16_t unitreqlen = offsetof(struct ofp13_flow_stats_request, match) + ALIGN8(ntohs(hint.match.length));
+					if(ofp_rx_length(self) < unitreqlen){
+						return OFP_NOOP;
+					}
+					self->mpreq_pos += ofp_rx_read(self, self->mp_in, unitreqlen);
+					self->mp_out_index = 0;
+				} else {
+					// restore hint
+					memcpy(&hint, self->mp_in, 40);
+				}
+				memcpy(&unit, self->mp_in, offsetof(struct ofp13_flow_stats_request, match) + ALIGN8(ntohs(hint.match.length)));
+				uint16_t unitlength = fill_ofp13_flow_stats(
+					(struct ofp13_flow_stats_request*)unit,
+					&self->mp_out_index, ofp_buffer+16, ofp_tx_room(self)-16);
+				if(unitlength == 0){
+					return OFP_NOOP;
+				}
+				mpres.flags = 0;
+				if(self->mp_out_index >= 0){
+					mpres.flags = htons(OFPMPF13_REPLY_MORE);
+				}
+				mpres.header.length = htons(16+unitlength);
+				memcpy(ofp_buffer, &mpres, 16);
+				ofp_tx_write(self, ofp_buffer, 16+unitlength);
+			}
+			break;
+			
+			case OFPMP13_AGGREGATE:
+			if(ofp_rx_length(self) < 40){
+				return OFP_NOOP;
+			}else{
+				struct ofp13_aggregate_stats_request hint;
+				if(self->mp_out_index < 0){
+					pbuf_copy_partial(self->rbuf, &hint, 40, self->rskip);
+					uint16_t unitreqlen = offsetof(struct ofp13_aggregate_stats_request, match) + ALIGN8(ntohs(hint.match.length));
+					if(ofp_rx_length(self) < unitreqlen){
+						return OFP_NOOP;
+					}
+					self->mpreq_pos += ofp_rx_read(self, self->mp_in, unitreqlen);
+					self->mp_out_index = 0;
+				} else {
+					// restore
+					memcpy(&hint, self->mp_in, 40);
+				}
+				memcpy(unit, self->mp_in, offsetof(struct ofp13_aggregate_stats_request, match) + ALIGN8(ntohs(hint.match.length)));
+				uint16_t unitlength = fill_ofp13_aggregate_stats(
+					(struct ofp13_aggregate_stats_request*)unit,
+					&self->mp_out_index, ofp_buffer+16, ofp_tx_room(self)-16);
+				if(unitlength == 0){
+					return OFP_NOOP;
+				}
+				mpres.flags = 0;
+				if(self->mp_out_index >= 0){
+					mpres.flags = htons(OFPMPF13_REPLY_MORE);
+					} else if(self->mpreq_pos >= length){
+					self->mpreq_pos = 0;
+				}
+				mpres.header.length = htons(16+unitlength);
+				memcpy(ofp_buffer, &mpres, 16);
+				ofp_tx_write(self, ofp_buffer, 16+unitlength);
+			}
+			break;
+			
+			default:
+			{
+				if(ofp_rx_length(self) < length-16 || ofp_tx_room(self) < 12+64){
+					return OFP_NOOP;
+				}
+				memcpy(ofp_buffer, self->mpreq_hdr, 16);
+				self->mpreq_pos += ofp_rx_read(self, ofp_buffer+16, length-16);
+				mpres.flags = 0;
+				
+				if (length > 64){
+					length = 64;
+				}
+				char reply[12+64];
+				struct ofp_error_msg err = {};
+				err.header.version = mpreq.header.version;
+				err.header.type = OFPT13_ERROR;
+				err.header.length = htons(12+length);
+				err.header.xid = mpreq.header.xid;
+				err.type = htons(OFPET13_BAD_REQUEST);
+				err.code = htons(OFPBRC13_BAD_MULTIPART);
+				memcpy(reply, &err, 12);
+				memcpy(reply+12, ofp_buffer, length);
+				ofp_tx_write(self, reply, 12+length);
+			}
+			break;
+		}
+		if (self->mpreq_pos >= length && (ntohs(mpres.flags) & OFPMPF13_REQ_MORE) == 0){
+			self->mpreq_pos = 0;
+			self->mpreq_on = false;
+		}
+	}
+	return OFP_OK;
+}
+
+
+
 static uint16_t add_ofp13_flow(const struct ofp13_flow_mod *req){
 	if(req->table_id > OFPP13_MAX){
 		return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_BAD_TABLE_ID);
@@ -1689,12 +1976,6 @@ int match_frame_by_oxm(struct fx_packet packet, struct fx_packet_oob oob, const 
 	return count;
 }
 
-void check_ofp13_send_flow_rem(){
-	for(int i=0; i<iLastFlow; i++){
-		
-	}
-}
-
 static void send_ofp13_packet_in(struct fx_packet *packet, struct ofp13_packet_in base, uint16_t max_len, uint8_t *send_bits){
 	if(max_len == OFPCML13_NO_BUFFER || max_len > packet->data->tot_len){
 		max_len = packet->data->tot_len;
@@ -1851,7 +2132,12 @@ static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob 
 		}
 		break;
 		
-		
+		case OFPAT13_COPY_TTL_OUT:
+		if(oob->eth_type==htons(0x8848) || oob->eth_type==htons(0x8848)){
+			// MPLS header structure
+			// check bottom
+		}
+		break;
 	}
 }
 

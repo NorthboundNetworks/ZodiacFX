@@ -93,6 +93,11 @@ struct flows_counter reset_counter(){
 // prototype
 static bool switch_negotiated(void);
 
+struct fx_switch_config fx_switch = {
+	.flags = OFPC13_FRAG_NORMAL,
+	.miss_send_len = 128,
+};
+
 /*
  * `ofp_buffer` len is a globally shared buffer,
  * which is only for temporary use.
@@ -103,7 +108,6 @@ static bool switch_negotiated(void);
  */
 char ofp_buffer[OFP_BUFFER_LEN];
 
-#define MAX_TABLES 10 // must be smaller than OFPTT13_MAX
 struct fx_table_count fx_table_counts[MAX_TABLES];
 
 uint32_t fx_buffer_id = 0; // incremental
@@ -159,7 +163,7 @@ uint16_t ofp_rx_length(struct ofp_pcb *self){
  * `ofp_rx_read` pops bytes from ofp_pcb rx buffer
  * @return written length
  */
-uint16_t ofp_rx_read(struct ofp_pcb *self, char *buf, uint16_t capacity){
+uint16_t ofp_rx_read(struct ofp_pcb *self, void *buf, uint16_t capacity){
 	if(ofp_rx_length(self) < capacity){
 		capacity = ofp_rx_length(self);
 	}
@@ -181,7 +185,7 @@ uint16_t ofp_tx_room(struct ofp_pcb *pcb){
  * `data` will be queued as a single TCP segment, so you should write a
  * single complete openflow message in one call.
  */
-uint16_t ofp_tx_write(struct ofp_pcb *pcb, const char *data, uint16_t length){
+uint16_t ofp_tx_write(struct ofp_pcb *pcb, const void *data, uint16_t length){
 	if(ofp_tx_room(pcb) >= length){
 		if(ERR_OK == tcp_write(pcb->tcp, data, length, TCP_WRITE_FLAG_COPY)){
 			pcb->txlen += length;
@@ -316,82 +320,12 @@ static enum ofp_pcb_status ofp_negotiation(struct ofp_pcb *self){
 }
 
 static enum ofp_pcb_status ofp_multipart_complete(struct ofp_pcb *self){
-	struct ofp13_multipart_request mpreq = {};
-	memcpy(&mpreq, self->mpreq_hdr, 16);
-	uint16_t length = ntohs(mpreq.header.length);
-	
-	while(self->mpreq_pos != 0){
-		switch(ntohs(mpreq.type)){
-			case OFPMP13_FLOW:
-			if(self->mp_out_index < 0){
-				if(ofp_rx_length(self) < 40){
-					return OFP_NOOP;
-				}
-				struct ofp13_flow_stats_request unit;
-				pbuf_copy_partial(self->rbuf, &unit, 40, self->rskip);
-				uint16_t unitreqlen = offsetof(struct ofp13_flow_stats_request, match) + ALIGN8(ntohs(unit.match.length));
-				if(ofp_rx_length(self) < unitreqlen){
-					return OFP_NOOP;
-				}
-				self->mpreq_pos += ofp_rx_read(self, self->mp_in, unitreqlen);
-				self->mp_out_index = 0;
-			}
-			{
-				struct ofp13_flow_stats_request hint;
-				memcpy(&hint, self->mp_in, 40);
-				char unit[MP_UNIT_MAXSIZE];
-				memcpy(&unit, self->mp_in, offsetof(struct ofp13_flow_stats_request, match) + ALIGN8(ntohs(hint.match.length)));
-				struct ofp13_multipart_reply rep = {};
-				rep.header = mpreq.header;
-				rep.header.type = OFPT13_MULTIPART_REPLY;
-				rep.flags = htons(0);
-				rep.type = htons(OFPMP13_FLOW);
-				uint16_t unitlength = fill_ofp13_flow_stats(
-				(struct ofp13_flow_stats_request*)unit,
-				&self->mp_out_index, ofp_buffer+16, ofp_tx_room(self)-16);
-				if(self->mp_out_index >= 0){
-					rep.flags = htons(OFPMPF13_REPLY_MORE);
-					} else if(self->mpreq_pos >= length){
-					self->mpreq_pos = 0;
-				}
-				rep.header.length = htons(16+unitlength);
-				memcpy(ofp_buffer, &rep, 16);
-				ofp_tx_write(self, ofp_buffer, 16+unitlength);
-			}
-			break;
-				
-			default:
-			{
-				if(ofp_rx_length(self) < length-16 || ofp_tx_room(self) < 12+64){
-					return OFP_NOOP;
-				}
-				memcpy(ofp_buffer, self->mpreq_hdr, 16);
-				ofp_rx_read(self, ofp_buffer+16, length-16);
-					
-				if (length > 64){
-					length = 64;
-				}
-				char reply[12+64];
-				struct ofp_error_msg err = {};
-				err.header.version = mpreq.header.version;
-				err.header.type = OFPT13_ERROR;
-				err.header.length = htons(12+length);
-				err.header.xid = mpreq.header.xid;
-				err.type = htons(OFPET13_BAD_REQUEST);
-				err.code = htons(OFPBRC13_BAD_MULTIPART);
-				memcpy(reply, &err, 12);
-				memcpy(reply+12, ofp_buffer, length);
-				ofp_tx_write(self, reply, 12+length);
-				self->mpreq_pos = 0;
-			}
-			break;
-		}
-		if (self->mpreq_pos == 0 && (ntohs(mpreq.flags) & OFPMPF13_REQ_MORE) == 0){
-			self->mpreq_on = false;
-		}
-	}
+	if(OF_Version == 4){
+		return ofp13_multipart_complete(self);
+	};
 	return OFP_OK;
 }
+
 
 static enum ofp_pcb_status ofp_notify(){
 	// TODO
@@ -412,11 +346,10 @@ static enum ofp_pcb_status ofp_handle(struct ofp_pcb *self){
 		return ret;
 	}
 	while(ofp_rx_length(self) >= 8){
-		uint16_t length;
 		ret = OFP_NOOP;
 		struct ofp_header req; // look ahead
 		pbuf_copy_partial(self->rbuf, &req, 8, self->rskip);
-		length = ntohs(req.length);
+		uint16_t length = ntohs(req.length);
 		if(length < 8){
 			ret = ofp_write_error(self, req, OFPET10_BAD_REQUEST, OFPBRC10_BAD_LEN);
 			if(ret == OFP_OK){
@@ -431,12 +364,13 @@ static enum ofp_pcb_status ofp_handle(struct ofp_pcb *self){
 				ret = OFP_NOOP;
 			} else {
 				ofp_rx_read(self, ofp_buffer, length);
-				struct ofp_header rep = {0};
-				rep.version = OF_Version;
-				rep.type = OFPT10_ECHO_REPLY;
-				rep.length = htons(8);
-				rep.xid = req.xid;
-				ofp_tx_write(self, (char*)&rep, 8);
+				struct ofp_header rep = {
+					.version = OF_Version,
+					.type = OFPT10_ECHO_REPLY,
+					.length = htons(8),
+					.xid = htonl(req.xid),
+				};
+				ofp_tx_write(self, &rep, 8);
 				ret = OFP_OK;
 			}
 		} else if(req.type == OFPT10_ECHO_REPLY){
@@ -492,25 +426,8 @@ static enum ofp_pcb_status ofp_handle(struct ofp_pcb *self){
 				}
 				break;
 				
-				// for normal handlers, we expect results are written
-				// in ofp_buffer, and the length is returned.
-				
-				case OFPT13_FLOW_MOD:
-				if(ofp_rx_length(self) < length || ofp_tx_room(self) < 12+64){
-					ret = OFP_NOOP;
-				} else {
-					ofp_rx_read(self, ofp_buffer, length);
-					uint16_t len = mod_ofp13_flow((struct ofp13_flow_mod*)ofp_buffer);
-					if(len > 0){
-						ret = ofp_tx_write(self, ofp_buffer, len);
-					} else {
-						ret = OFP_OK;
-					}
-				}
-				break;
-
 				default:
-					ret = ofp_write_error(self, req, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
+					ret = ofp13_handle(self);
 				break;
 			}
 		} else if(req.version == 1){
@@ -727,7 +644,7 @@ void openflow_task(){
 	}
 }
 
-void openflow_pipeline(struct pbuf *frame, uint32_t in_port){
+struct fx_packet_oob create_oob(struct pbuf *frame){
 	uint8_t offset = 14;
 	uint16_t vlan = 0;
 	uint16_t eth_type;
@@ -738,10 +655,6 @@ void openflow_pipeline(struct pbuf *frame, uint32_t in_port){
 		vlan = (vlan & htons(0xEFFF)) | htons(0x1000); // set CFI bit for internal use
 		offset = 18;
 	}
-	struct fx_packet packet = {
-		.data = frame,
-		.in_port = htonl(in_port),
-	};
 	struct fx_packet_oob oob = {
 		.action_set = {},
 		.action_set_oxm = NULL,
@@ -750,6 +663,15 @@ void openflow_pipeline(struct pbuf *frame, uint32_t in_port){
 		.eth_type = eth_type,
 		.vlan = vlan,
 	};
+	return oob;
+}
+
+void openflow_pipeline(struct pbuf *frame, uint32_t in_port){
+	struct fx_packet packet = {
+		.data = frame,
+		.in_port = htonl(in_port),
+	};
+	struct fx_packet_oob oob = create_oob(frame);
 	int flow = lookup_fx_table(packet, oob, 0);
 	fx_table_counts[0].lookup++;
 	if(flow < 0){

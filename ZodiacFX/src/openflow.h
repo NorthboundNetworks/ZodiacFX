@@ -134,22 +134,25 @@ void openflow_init(void);
 void openflow_task(void);
 void openflow_pipeline(struct pbuf*, uint32_t);
 uint16_t ofp_rx_length(struct ofp_pcb*);
-uint16_t ofp_rx_read(struct ofp_pcb*, char*, uint16_t);
+uint16_t ofp_rx_read(struct ofp_pcb*, void*, uint16_t);
 uint16_t ofp_tx_room(struct ofp_pcb*);
-uint16_t ofp_tx_write(struct ofp_pcb*, const char*, uint16_t);
+uint16_t ofp_tx_write(struct ofp_pcb*, const void*, uint16_t);
 uint16_t ofp_set_error(const char*, uint16_t, uint16_t);
 
 uint16_t mod_ofp13_flow(struct ofp13_flow_mod*);
 
 int field_match13(const char*, int, const char*, int);
 
-uint16_t handle_ofp13(struct ofp_pcb*, const char* req);
-uint16_t handle_ofp10(struct ofp_pcb*, const char* req);
+struct fx_switch_config {
+	uint16_t flags;
+	uint16_t miss_send_len;
+};
 
 struct fx_table_count {
 	uint64_t lookup;
 	uint64_t matched;
 };
+#define MAX_TABLES 10 // must be smaller than OFPTT13_MAX
 
 struct fx_packet { // in network byte order
 	struct pbuf *data;
@@ -214,5 +217,8 @@ int match_frame_by_oxm(struct fx_packet, struct fx_packet_oob, const char*, uint
 int match_frame_by_tuple(struct fx_packet, struct fx_packet_oob, struct ofp_match);
 void execute_ofp13_flow(struct fx_packet*, struct fx_packet_oob*, int flow);
 void execute_ofp10_flow(struct fx_packet*, struct fx_packet_oob*, int flow);
+
+enum ofp_pcb_status ofp13_multipart_complete(struct ofp_pcb*);
+enum ofp_pcb_status ofp13_handle(struct ofp_pcb*);
 
 #endif /* OPENFLOW_H_ */
