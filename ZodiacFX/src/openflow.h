@@ -214,8 +214,26 @@ struct fx_flow_count {
 };
 #define FX_FLOW_ACTIVE 0x80
 
-int match_frame_by_oxm(struct fx_packet, struct fx_packet_oob, const char*, uint16_t);
-int match_frame_by_tuple(struct fx_packet, struct fx_packet_oob, struct ofp_match);
+struct fx_port_count {
+	uint64_t rx_packets;
+	uint64_t tx_packets;
+	uint64_t rx_bytes; // sw
+	uint64_t tx_bytes; // sw
+	uint64_t rx_dropped; // sw
+	uint64_t tx_dropped; // sw
+	uint64_t rx_errors; // sw
+	uint64_t tx_errors; // sw
+	uint64_t rx_frame_err; // sw
+	uint64_t rx_over_err; // sw
+	uint64_t rx_crc_err; // sw
+	uint64_t collisions; // sw
+	uint64_t init; // sys_ms; update on config change
+};
+
+void execute_fx_flow(struct fx_packet*, struct fx_packet_oob*, uint8_t);
+int lookup_fx_table(struct fx_packet*, struct fx_packet_oob*, uint8_t);
+int match_frame_by_oxm(struct fx_packet*, struct fx_packet_oob*, const char*, uint16_t);
+int match_frame_by_tuple(struct fx_packet*, struct fx_packet_oob*, struct ofp_match);
 void execute_ofp13_flow(struct fx_packet*, struct fx_packet_oob*, int flow);
 void execute_ofp10_flow(struct fx_packet*, struct fx_packet_oob*, int flow);
 

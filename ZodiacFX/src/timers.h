@@ -32,5 +32,6 @@
 
 void sys_init_timing(void);
 uint32_t sys_get_ms(void);
+uint64_t sys_get_ms64(void);
 
 #endif /* TIMER_MGT_H_INCLUDED */

@@ -1103,7 +1103,8 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 
 	if (strcmp(command, "write")==0)
 	{
-		int n = switch_write(atoi(param1),atoi(param2));
+		switch_write(atoi(param1),atoi(param2));
+		int n = switch_read(atoi(param1));
 		printf("Register %d = 0x%.2X\r\n\n", atoi(param1),n);
 		return;
 	}

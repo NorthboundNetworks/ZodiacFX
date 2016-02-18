@@ -35,7 +35,7 @@
 #include "lwip/sys.h"
 
 /* Clock tick count. */
-static volatile uint32_t gs_ul_clk_tick;
+static volatile uint64_t gs_ul_clk_tick;
 
 #include "pmc.h"
 #include "sysclk.h"
@@ -91,6 +91,10 @@ void sys_init_timing(void)
  */
 uint32_t sys_get_ms(void)
 {
+	return gs_ul_clk_tick;
+}
+
+uint64_t sys_get_ms64(void){
 	return gs_ul_clk_tick;
 }
 

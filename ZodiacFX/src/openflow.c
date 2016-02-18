@@ -108,7 +108,9 @@ struct fx_switch_config fx_switch = {
  */
 char ofp_buffer[OFP_BUFFER_LEN];
 
-struct fx_table_count fx_table_counts[MAX_TABLES];
+struct fx_port_count fx_port_counts[4] = {}; // XXX: port num hardcoded
+
+struct fx_table_count fx_table_counts[MAX_TABLES] = {};
 
 uint32_t fx_buffer_id = 0; // incremental
 struct fx_packet_in fx_packet_ins[MAX_BUFFERS] = {};
@@ -125,7 +127,7 @@ void execute_fx_flow(struct fx_packet *packet, struct fx_packet_oob *oob, uint8_
 	}
 }
 
-int lookup_fx_table(struct fx_packet packet, struct fx_packet_oob oob, uint8_t table_id){
+int lookup_fx_table(struct fx_packet *packet, struct fx_packet_oob *oob, uint8_t table_id){
 	int found = -1;
 	int score = -1;
 	for(int i=0; i<iLastFlow; i++){
@@ -672,7 +674,7 @@ void openflow_pipeline(struct pbuf *frame, uint32_t in_port){
 		.in_port = htonl(in_port),
 	};
 	struct fx_packet_oob oob = create_oob(frame);
-	int flow = lookup_fx_table(packet, oob, 0);
+	int flow = lookup_fx_table(&packet, &oob, 0);
 	fx_table_counts[0].lookup++;
 	if(flow < 0){
 		if(OF_Version==1){
@@ -681,8 +683,8 @@ void openflow_pipeline(struct pbuf *frame, uint32_t in_port){
 		return;
 	}
 	fx_table_counts[0].matched++;
-	fx_flow_counts[0].packet_count++;
-	fx_flow_counts[0].byte_count+=frame->tot_len;
+	fx_flow_counts[flow].packet_count++;
+	fx_flow_counts[flow].byte_count+=frame->tot_len;
 	fx_flow_timeouts[flow].update = sys_get_ms();
 	execute_fx_flow(&packet, &oob, flow);
 }

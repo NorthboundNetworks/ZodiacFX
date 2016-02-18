@@ -1130,7 +1130,7 @@ void of10_error(struct ofp_header *msg, uint16_t type, uint16_t code)
 	return;
 }
 
-int match_frame_by_tuple(struct fx_packet packet, struct fx_packet_oob oob, struct ofp_match tuple){
+int match_frame_by_tuple(struct fx_packet *packet, struct fx_packet_oob *oob, struct ofp_match tuple){
 	return 0; // TODO
 }
 

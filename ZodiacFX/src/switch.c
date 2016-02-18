@@ -208,18 +208,23 @@ void SPI_Handler(void)
 /*
 *	Read from the switch registers
 *
+* SPI read cycle
+*      |         reg[0]        |         reg[1]        |
+* S_DI | 0  1  1 __ __ __ __ A7 A6 A5 A4 A3 A2 A1 A0 TR
+* S_DO |                                                D7 D6 D5 D4 D3 D2 D1 D0
 */
-int switch_read(uint8_t param1)
+uint64_t switch_read(uint8_t addr)
 {
+	
 	uint8_t reg[2];
 	
-	if (param1 < 128) {
+	if (addr < 128) {
 		reg[0] = 96;
-		} else {
+	} else {
 		reg[0] = 97;
 	}
 	
-	reg[1] = param1 << 1;
+	reg[1] = addr << 1;
 
 	/* Select the DF memory to check. */
 	usart_spi_select_device(USART_SPI, &USART_SPI_DEVICE);
@@ -239,19 +244,22 @@ int switch_read(uint8_t param1)
 /*
 *	Write to the switch registers
 *
+* SPI write cycle
+*      |         reg[0]        |         reg[1]        |         reg[2]        |
+* S_DI | 0  1  1 __ __ __ __ A7 A6 A5 A4 A3 A2 A1 A0 TR D7 D6 D5 D4 D3 D2 D1 D0
 */
-int switch_write(uint8_t param1, uint8_t param2)
+void switch_write(uint8_t addr, uint8_t value)
 {
 	uint8_t reg[3];
 	
-	if (param1 < 128) {
+	if (addr < 128) {
 		reg[0] = 64;
-		} else {
+	} else {
 		reg[0] = 65;
 	}
 	
-	reg[1] = param1 << 1;
-	reg[2] = param2;
+	reg[1] = addr << 1;
+	reg[2] = value;
 	
 	/* Select the DF memory to check. */
 	usart_spi_select_device(USART_SPI, &USART_SPI_DEVICE);
@@ -261,9 +269,6 @@ int switch_write(uint8_t param1, uint8_t param2)
 	
 	/* Deselect the checked DF memory. */
 	usart_spi_deselect_device(USART_SPI, &USART_SPI_DEVICE);
-	for(int x = 0;x<100000;x++);
-
-	return switch_read(param1);
 }
 
 /*
@@ -407,6 +412,7 @@ int readtxdrop(int port)
 	total += switch_read(120);
 	return total;
 }
+
 
 /*
 *	Updates the port status
@@ -563,6 +569,79 @@ void task_switch(struct netif *netif)
 
 // --- kwi ---
 
+extern struct fx_port_count fx_port_counts[4];
+void sync_switch_port_counts(uint8_t port_index){
+	switch_write(110, 0x1d); // write, MIB, 0x1??
+	switch_write(111, 4*port_index); // 0x100, 0x104, ... indirect address
+	fx_port_counts[port_index].rx_bytes += (
+	((switch_read(116) & 0x0f)<<32)
+	+ (switch_read(117)<<24)
+	+ (switch_read(118)<<16)
+	+ (switch_read(119)<<8)
+	+ switch_read(120));
+	
+	switch_write(110, 0x1d);
+	switch_write(111, 4*port_index + 1);
+	fx_port_counts[port_index].tx_bytes += (
+	((switch_read(116) & 0x0f)<<32)
+	+ (switch_read(117)<<24)
+	+ (switch_read(118)<<16)
+	+ (switch_read(119)<<8)
+	+ switch_read(120));
+
+	switch_write(110, 0x1d);
+	switch_write(111, 4*port_index + 2);
+	fx_port_counts[port_index].rx_dropped += (
+	+ (switch_read(119)<<8)
+	+ switch_read(120));
+
+	switch_write(110, 0x1d);
+	switch_write(111, 4*port_index + 3);
+	fx_port_counts[port_index].tx_dropped += (
+	+ (switch_read(119)<<8)
+	+ switch_read(120));
+
+	uint64_t rx_err_sum = 0;
+	uint64_t rx_err = 0;
+	
+	switch_write(110, 0x1c);
+	switch_write(111, 0x7 + 0x20*port_index);
+	rx_err = (((switch_read(117) & 0x1f)<<24)
+	+ (switch_read(118)<<16)
+	+ (switch_read(119)<<8)
+	+ switch_read(120));
+	fx_port_counts[port_index].rx_frame_err += rx_err;
+	rx_err_sum += rx_err;
+	
+	switch_write(110, 0x1c);
+	switch_write(111, 0x3 + 0x20*port_index);
+	rx_err = (((switch_read(117) & 0x1f)<<24)
+	+ (switch_read(118)<<16)
+	+ (switch_read(119)<<8)
+	+ switch_read(120));
+	fx_port_counts[port_index].rx_over_err += rx_err;
+	rx_err_sum += rx_err;
+	
+	switch_write(110, 0x1c);
+	switch_write(111, 0x6 + 0x20*port_index);
+	rx_err = (((switch_read(117) & 0x1f)<<24)
+	+ (switch_read(118)<<16)
+	+ (switch_read(119)<<8)
+	+ switch_read(120));
+	fx_port_counts[port_index].rx_crc_err += rx_err;
+	rx_err_sum += rx_err;
+	
+	fx_port_counts[port_index].rx_errors += rx_err_sum;
+	
+	switch_write(110, 0x1c);
+	switch_write(111, 0x1c + 0x20*port_index);
+	rx_err = (((switch_read(117) & 0x1f)<<24)
+	+ (switch_read(118)<<16)
+	+ (switch_read(119)<<8)
+	+ switch_read(120));
+	fx_port_counts[port_index].collisions += rx_err;
+}
+
 void switch_init(){
 	/* Wait for PHY to be ready (CAT811: Max400ms) */
 	volatile uint32_t ul_delay = sysclk_get_cpu_hz() / 1000 / 3 * 400;
@@ -623,6 +702,7 @@ void switch_task(struct netif *netif){
 		
 		pbuf_realloc(frame, frame_length);
 		if(tag<4 && Zodiac_Config.of_port[tag]==1){ // XXX: port number hardcoded here
+			fx_port_counts[tag].rx_packets++;
 			openflow_pipeline(frame, tag+1);
 		} else{
 			netif->input(frame, netif);
