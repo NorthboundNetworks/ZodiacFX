@@ -1072,6 +1072,7 @@ extern uint32_t fx_buffer_id;
 extern struct fx_packet_in fx_packet_ins[MAX_BUFFERS];
 extern struct fx_switch_config fx_switch;
 extern struct fx_port_count fx_port_counts[4];
+extern struct fx_meter_band fx_meter_bands[MAX_METER_BANDS];
 
 // fields are in host byte order
 struct ofp13_filter {
@@ -1175,15 +1176,16 @@ static uint16_t fill_ofp13_flow_stats(const struct ofp13_flow_stats_request *uni
 		.out_port = ntohl(unit->out_port),
 		.table_id = unit->table_id,
 		.oxm_length = ntohs(unit->match.length)-4,
-		.oxm = &unit->match.oxm_fields,
+		.oxm = unit->match.oxm_fields,
 	};
 	uint16_t length = 0;
-	int i;
-	for(i=filter_ofp13_flow(*mp_index, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
+	bool complete = true;
+	for(int i=filter_ofp13_flow(*mp_index, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
 		uint16_t offset_inst = offsetof(struct ofp13_flow_stats, match) + ALIGN8(4+fx_flows[i].oxm_length);		;
 		// ofp_flow_stats fixed fields are the same length with ofp_flow_mod
+		*mp_index = i; // we want to revisit k.
 		if(length + offset_inst + fx_flows[i].ops_length > capacity){
-			*mp_index = i; // we want to revisit k.
+			complete = false;
 			break;
 		}
 		uint32_t duration = sys_get_ms() - fx_flow_timeouts[i].init;
@@ -1215,7 +1217,7 @@ static uint16_t fill_ofp13_flow_stats(const struct ofp13_flow_stats_request *uni
 		memcpy(buffer+length+len, fx_flows[i].ops, fx_flows[i].ops_length);
 		length += offset_inst + fx_flows[i].ops_length;
 	}
-	if(i<0){
+	if(complete){
 		*mp_index = -1; // complete
 	}
 	return length;
@@ -1232,7 +1234,7 @@ static uint16_t fill_ofp13_aggregate_stats(const struct ofp13_aggregate_stats_re
 		.out_port = ntohl(unit->out_port),
 		.table_id = unit->table_id,
 		.oxm_length = ntohs(unit->match.length)-4,
-		.oxm = &unit->match.oxm_fields,
+		.oxm = unit->match.oxm_fields,
 	};
 	struct ofp13_aggregate_stats_reply res = {};
 	for(int i=filter_ofp13_flow(*mp_index, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
@@ -1745,21 +1747,27 @@ static uint16_t delete_ofp13_flow(const struct ofp13_flow_mod *req, bool strict)
 			fx_flows[i].send_bits = send_bits;
 			// TODO: trigger notification
 		} else {
-			fx_flows[i].send_bits = 0;
+			if(fx_flows[i].oxm != NULL){
+				free(fx_flows[i].oxm);
+			}
+			if(fx_flows[i].ops != NULL){
+				free(fx_flows[i].ops);
+			}
+			memset(fx_flows+i, 0, sizeof(struct fx_flow));
 		}
 	}
 	return 0;
 }
 
 uint16_t mod_ofp13_flow(struct ofp13_flow_mod *req){
-	switch(ntohs(req->command)){
+	switch(req->command){
 		case OFPFC13_ADD:
 			return add_ofp13_flow(req);
 		
-		case OFPFC_MODIFY:
+		case OFPFC13_MODIFY:
 			return modify_ofp13_flow(req, false);
 		
-		case OFPFC_MODIFY_STRICT:
+		case OFPFC13_MODIFY_STRICT:
 			return modify_ofp13_flow(req, true);
 		
 		case OFPFC13_DELETE:
@@ -1771,6 +1779,84 @@ uint16_t mod_ofp13_flow(struct ofp13_flow_mod *req){
 		default:
 			return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_BAD_COMMAND);
 	}
+}
+
+static uint16_t add_ofp13_meter(struct ofp13_meter_mod *req){
+	if(ntohl(req->meter_id)==OFPM13_ALL){
+		return ofp_set_error(req, OFPET13_METER_MOD_FAILED, OFPMMFC13_INVALID_METER);
+	}
+	// XXX: todo
+	return ofp_set_error(req, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_METERS);
+}
+
+static uint16_t modify_ofp13_meter(struct ofp13_meter_mod *req){
+	int count = 0;
+	const char *pos = req->bands;
+	while(pos < (char*)req + htons(req->header.length)){
+		struct ofp13_meter_band_header *band = pos;
+		count++;
+		pos += ntohs(band->len);
+	}
+	if(req->meter_id != htonl(OFPM13_ALL)){
+		count -= MAX_METER_BANDS;
+	}else{
+		for(int i=0; i<MAX_METER_BANDS; i++){
+			if(fx_meter_bands[i].meter_id == 0 || fx_meter_bands[i].meter_id == req->meter_id){
+				count--;
+			}
+		}
+	}
+	if(count > 0){
+		return ofp_set_error(req, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_BANDS);
+	}
+	// XXX: implement
+	return 0;
+}
+
+static uint16_t delete_ofp13_meter(struct ofp13_meter_mod *req){
+	uint32_t meter_id = ntohl(req->meter_id);
+	if(meter_id == OFPM13_ALL){
+		for(int i=0; i<MAX_METER_BANDS; i++){
+			fx_meter_bands[i].meter_id = 0;
+		}
+	} else if(meter_id <= OFPM13_MAX){
+		for(int i=0; i<MAX_METER_BANDS; i++){
+			if(fx_meter_bands[i].meter_id == req->meter_id){
+				fx_meter_bands[i].meter_id = 0;
+			}
+		}
+	}
+	// XXX: implement controller, slowpath
+	return 0;
+}
+
+uint16_t mod_ofp13_meter(struct ofp13_meter_mod *req){
+	uint32_t meter_id = ntohl(req->meter_id);
+	// meter_id starts from 1
+	if(meter_id==0 || (meter_id>OFPM13_MAX
+			&& meter_id!=OFPM13_SLOWPATH && meter_id!=OFPM13_CONTROLLER
+			&& meter_id!=OFPM13_ALL)){
+		return ofp_set_error(req, OFPET13_METER_MOD_FAILED, OFPMMFC13_INVALID_METER);
+	}
+	switch(ntohs(req->command)){
+		case OFPMC13_ADD:
+			return add_ofp13_meter(req);
+		case OFPMC13_MODIFY:
+			return modify_ofp13_meter(req);
+		case OFPMC13_DELETE:
+			return delete_ofp13_meter(req);
+		default:
+			return ofp_set_error(req, OFPET13_METER_MOD_FAILED, OFPFMFC13_BAD_COMMAND);
+	}
+}
+
+uint16_t mod_ofp13_group(struct ofp13_group_mod *req){
+	uint32_t group_id = ntohl(req->group_id);
+	if(group_id > OFPG13_MAX){
+		
+	}
+	// TODO: implement this
+	return 0;
 }
 
 static int bits_on(const char *data, int len){
@@ -2217,7 +2303,7 @@ static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob 
 	}
 }
 
-static uint16_t actset_index[] = {
+static const uint16_t actset_index[] = {
 	OFPAT13_COPY_TTL_IN,
 	OFPAT13_POP_VLAN,
 	OFPAT13_POP_MPLS,
@@ -2433,9 +2519,33 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 		case OFPT13_FLOW_MOD:
 		if(ofp_rx_length(self) < length || ofp_tx_room(self) < 12+64){
 			return OFP_NOOP;
-			} else {
+		} else {
 			ofp_rx_read(self, ofp_buffer, length);
 			uint16_t len = mod_ofp13_flow((struct ofp13_flow_mod*)ofp_buffer);
+			if(len > 0){
+				return ofp_tx_write(self, ofp_buffer, len);
+			}
+		}
+		break;
+
+		case OFPT13_GROUP_MOD:
+		if(ofp_rx_length(self) < length || ofp_tx_room(self) < 12+64){
+			return OFP_NOOP;
+		} else {
+			ofp_rx_read(self, ofp_buffer, length);
+			uint16_t len = mod_ofp13_group((struct ofp13_group_mod*)ofp_buffer);
+			if(len > 0){
+				return ofp_tx_write(self, ofp_buffer, len);
+			}
+		}
+		break;
+
+		case OFPT13_METER_MOD:
+		if(ofp_rx_length(self) < length || ofp_tx_room(self) < 12+64){
+			return OFP_NOOP;
+		} else {
+			ofp_rx_read(self, ofp_buffer, length);
+			uint16_t len = mod_ofp13_meter((struct ofp13_meter_mod*)ofp_buffer);
 			if(len > 0){
 				return ofp_tx_write(self, ofp_buffer, len);
 			}

@@ -931,10 +931,10 @@ int field_match13(const char *oxm_a, int len_a, const char *oxm_b, int len_b){
 	if ((prereq_b & PREREQ_INVALID) != 0){
 		return 0;
 	}
-	if ((prereq_a & PREREQ_ETH_TYPE_MASK & ~(prereq_b & PREREQ_ETH_TYPE_MASK)) != 0){
+	if (((prereq_a & PREREQ_ETH_TYPE_MASK) & ~(prereq_b & PREREQ_ETH_TYPE_MASK)) != (prereq_a & PREREQ_ETH_TYPE_MASK)){
 		return 0;
 	}
-	if ((prereq_a & PREREQ_ND_MASK & ~(prereq_b & PREREQ_ND_MASK)) != 0){
+	if (((prereq_a & PREREQ_ND_MASK) & ~(prereq_b & PREREQ_ND_MASK)) != (prereq_a & PREREQ_ND_MASK)){
 		return 0;
 	}
 	if ((prereq_b & PREREQ_VLAN) != 0) {

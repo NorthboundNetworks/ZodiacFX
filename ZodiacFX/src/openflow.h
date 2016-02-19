@@ -230,6 +230,39 @@ struct fx_port_count {
 	uint64_t init; // sys_ms; update on config change
 };
 
+// in host byte order
+struct fx_meter {
+	uint32_t meter_id; // in network byte order
+	uint16_t flags;
+};
+// in host byte order
+struct fx_meter_band {
+	uint32_t meter_id; // in network byte order
+	uint16_t type;
+	uint32_t rate;
+	uint32_t burst_size;
+	uint8_t prec_level;
+};
+#define MAX_METERS 0
+#define MAX_METER_BANDS 0
+
+// in host byte order
+struct fx_group {
+	uint32_t group_id; // in network byte order
+	uint8_t type;
+};
+// in host byte order
+struct fx_group_bucket {
+	uint32_t group_id; // in network byte order
+	uint16_t weight;
+	uint32_t watch_port;
+	uint32_t watch_group;
+	uint16_t actions_len;
+	const char* actions;
+};
+#define MAX_GROUPS 0
+#define MAX_GROUP_BUCKETS 0
+
 void execute_fx_flow(struct fx_packet*, struct fx_packet_oob*, uint8_t);
 int lookup_fx_table(struct fx_packet*, struct fx_packet_oob*, uint8_t);
 int match_frame_by_oxm(struct fx_packet*, struct fx_packet_oob*, const char*, uint16_t);

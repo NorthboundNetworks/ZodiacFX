@@ -430,30 +430,22 @@ void update_port_status(void)
 */
 void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
 {	
-	if (port & 1) phys10_port_stats[0].tx_packets++;
-	if (port & 2) phys10_port_stats[1].tx_packets++;
-	if (port & 4) phys10_port_stats[2].tx_packets++;
-	if (port & 8) phys10_port_stats[3].tx_packets++;
-	if (port & 1) phys13_port_stats[0].tx_packets++;
-	if (port & 2) phys13_port_stats[1].tx_packets++;
-	if (port & 4) phys13_port_stats[2].tx_packets++;
-	if (port & 8) phys13_port_stats[3].tx_packets++;
 	// Add padding
 	// switch discards frames less than 64 bytes
-	if (ul_size < 64) 
+	if (ul_size < 60) 
 	{
-		memset(&gmacbuffer, 0, 64);
-		memcpy(&gmacbuffer,p_buffer, ul_size);
+		memset(gmacbuffer, 0, 61);
+		memcpy(gmacbuffer, p_buffer, ul_size);
 		uint8_t *last_byte;
-		last_byte = gmacbuffer + 64;
+		last_byte = gmacbuffer + 60;
 		*last_byte = port;
-		gmac_dev_write(&gs_gmac_dev, &gmacbuffer, 65, NULL);
+		gmac_dev_write(&gs_gmac_dev, gmacbuffer, 61, NULL);
 	} else {
-		memcpy(&gmacbuffer,p_buffer, ul_size);
+		memcpy(gmacbuffer, p_buffer, ul_size);
 		uint8_t *last_byte;
 		last_byte = gmacbuffer + ul_size;
 		*last_byte = port;
-		gmac_dev_write(&gs_gmac_dev, &gmacbuffer, (ul_size + 1), NULL);
+		gmac_dev_write(&gs_gmac_dev, gmacbuffer, (ul_size + 1), NULL);
 	}
 	return;
 }

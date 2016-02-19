@@ -121,6 +121,8 @@ struct fx_flow fx_flows[MAX_FLOWS] = {};
 struct fx_flow_timeout fx_flow_timeouts[MAX_FLOWS] = {};
 struct fx_flow_count fx_flow_counts[MAX_FLOWS] = {};
 
+struct fx_meter_band fx_meter_bands[MAX_METER_BANDS] = {}; // excluding slowpath, controller
+
 void execute_fx_flow(struct fx_packet *packet, struct fx_packet_oob *oob, uint8_t flow_id){
 	if(OF_Version == 4){
 		execute_ofp13_flow(packet, oob, flow_id);
@@ -155,7 +157,9 @@ int lookup_fx_table(struct fx_packet *packet, struct fx_packet_oob *oob, uint8_t
 }
 
 static void ofp_unreach(void){
-	while(1);
+	while(1){
+		printf("hoge");
+	}
 }
 
 uint16_t ofp_rx_length(struct ofp_pcb *self){
