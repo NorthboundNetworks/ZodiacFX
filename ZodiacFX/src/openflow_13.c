@@ -1896,7 +1896,7 @@ int match_frame_by_oxm(struct fx_packet *packet, struct fx_packet_oob *oob, cons
 				{
 					uint64_t value;
 					if(has_mask){
-						memcpy(value, pos+12, 8);
+						memcpy(&value, pos+12, 8);
 						value &= packet->metadata;
 						count += bits_on(pos+12, 8);
 					} else {
@@ -2300,9 +2300,99 @@ static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob 
 			// check bottom
 		}
 		break;
+		
+		case OFPAT13_PUSH_VLAN:
+		{
+			struct ofp13_action_push *ap = act;
+			uint16_t vlan = oob->vlan & htons(0xEFFF); // clear CFI
+			// pbuf can't grow as of lwip 1.4
+			struct pbuf *grow = pbuf_alloc(PBUF_RAW,
+				packet->data->tot_len + 4, PBUF_POOL);
+			pbuf_copy_partial(packet->data, grow->payload, 12, 0);
+			memcpy(grow->payload+12, &ap->ethertype, 2);
+			memcpy(grow->payload+14, &vlan, 2);
+			pbuf_copy_partial(packet->data, grow->payload+16, packet->data->tot_len - 12, 12);
+			pbuf_free(packet->data);
+			packet->data = grow;
+			*oob = create_oob(packet);
+		}
+		break;
+		
+		case OFPAT13_POP_VLAN:
+		if(oob->vlan & htons(0x1000) != 0){
+			struct pbuf *data = packet->data;
+			memmove(data->payload+12, data->payload+16, data->tot_len - 16);
+			pbuf_realloc(data, data->tot_len-16);
+			*oob = create_oob(packet);
+		}
+		break;
+		
+		case OFPAT13_SET_NW_TTL:
+		if(oob->eth_type == htons(0x0806)){
+			struct ofp13_action_nw_ttl *an = act;
+			struct ip_hdr *hdr = packet->data->payload + oob->eth_offset;
+			IPH_TTL_SET(hdr, an->nw_ttl);
+		} // TODO: IPv6, MPLS
+		break;
+		
+		case OFPAT13_DEC_NW_TTL:
+		if(oob->eth_type == htons(0x0806)){
+			struct ofp13_action_nw_ttl *an = act;
+			struct ip_hdr *hdr = packet->data->payload + oob->eth_offset;
+			uint8_t ttl = IPH_TTL(hdr);
+			if(ttl == 1){
+				struct ofp13_packet_in msg = {};
+				uint8_t send_bits = 0;
+				msg.buffer_id = htonl(OFP13_NO_BUFFER);
+				if(fx_switch.miss_send_len != htons(OFPCML13_NO_BUFFER)){
+					send_bits |= 0x80;
+					msg.buffer_id = htonl(fx_buffer_id++);
+				}
+				msg.reason = OFPR13_INVALID_TTL;
+				if(flow < 0){
+					msg.table_id = 0;
+					memset(&msg.cookie, 0xff, 8); // openvswitch does this
+				} else {
+					msg.table_id = fx_flows[flow].table_id;
+					msg.cookie = fx_flows[flow].cookie;
+				}
+				
+				for(int i=0; i<MAX_CONTROLLERS; i++){
+					if(controllers[i].ofp.negotiated){
+						send_bits |= 1<<i;
+					}
+				}
+				send_ofp13_packet_in(packet, msg, ntohs(fx_switch.miss_send_len), &send_bits);
+				if(send_bits != 0){
+					for(int i=0; i<MAX_BUFFERS; i++){
+						struct fx_packet_in *pin = fx_packet_ins+i;
+						if(pin->send_bits == 0){
+							pin->send_bits = send_bits;
+							pin->valid_until = sys_get_ms() + BUFFER_TIMEOUT;
+							
+							pin->buffer_id = msg.buffer_id;
+							pin->reason = msg.reason;
+							pin->table_id = msg.table_id;
+							pin->cookie = msg.cookie;
+							
+							struct pbuf *data = pbuf_alloc(PBUF_RAW, packet->data->tot_len, PBUF_POOL);
+							pbuf_copy(data, packet->data);
+							pin->packet = *packet;
+							pin->packet.data = data;
+							pin->max_len = fx_switch.miss_send_len;
+							break;
+						}
+					}
+				}
+			} else {
+				IPH_TTL_SET(hdr, ttl-1);
+			}
+		} // TODO: IPv6, MPLS
+		break;
 	}
 }
 
+// 	OFPAT13_SET_FIELD has different rule
 static const uint16_t actset_index[] = {
 	OFPAT13_COPY_TTL_IN,
 	OFPAT13_POP_VLAN,
@@ -2316,29 +2406,28 @@ static const uint16_t actset_index[] = {
 	OFPAT13_DEC_NW_TTL,
 	OFPAT13_SET_MPLS_TTL,
 	OFPAT13_SET_NW_TTL,
-	OFPAT13_SET_FIELD,
 	OFPAT13_SET_QUEUE,
 	OFPAT13_GROUP,
 	OFPAT13_OUTPUT,
 };
 
 void execute_ofp13_flow(struct fx_packet *packet, struct fx_packet_oob *oob, int flow){
-	const char* insts[6] = {};
+	const char* insts[8] = {};
 	const char *pos = fx_flows[flow].ops;
 	while(pos < fx_flows[flow].ops+fx_flows[flow].ops_length){
 		struct ofp13_instruction *hdr = (struct ofp13_instruction*)pos;
-		uint16_t itype = ntohs(hdr->type) - 1;
-		if(itype < 6){
+		uint16_t itype = ntohs(hdr->type);
+		if(itype < 8){
 			insts[itype] = pos;
 		}
 		pos += ntohs(hdr->len);
 	}
 	
-	pos = insts[OFPIT13_METER-1];
+	pos = insts[OFPIT13_METER];
 	if(pos != NULL){
 		// todo
 	}
-	pos = insts[OFPIT13_APPLY_ACTIONS-1];
+	pos = insts[OFPIT13_APPLY_ACTIONS];
 	if(pos != NULL){
 		struct ofp13_instruction_actions *ia = pos;
 		const char *p = ia->actions;
@@ -2348,7 +2437,7 @@ void execute_ofp13_flow(struct fx_packet *packet, struct fx_packet_oob *oob, int
 			p += ntohs(act->len);
 		}
 	}
-	pos = insts[OFPIT13_CLEAR_ACTIONS-1];
+	pos = insts[OFPIT13_CLEAR_ACTIONS];
 	if(pos != NULL){
 		memset(oob->action_set, 0, sizeof(void*)*16);
 		if(oob->action_set_oxm != NULL){
@@ -2357,7 +2446,7 @@ void execute_ofp13_flow(struct fx_packet *packet, struct fx_packet_oob *oob, int
 		}
 		oob->action_set_oxm_length = 0;
 	}
-	pos = insts[OFPIT13_WRITE_ACTIONS-1];
+	pos = insts[OFPIT13_WRITE_ACTIONS];
 	if(pos != NULL){
 		struct ofp13_instruction_actions *ia = pos;
 		const char *p = ia->actions;
@@ -2371,13 +2460,13 @@ void execute_ofp13_flow(struct fx_packet *packet, struct fx_packet_oob *oob, int
 			p += ntohs(act->len);
 		}
 	}
-	pos = insts[OFPIT13_WRITE_METADATA-1];
+	pos = insts[OFPIT13_WRITE_METADATA];
 	if(pos != NULL){
 		struct ofp13_instruction_write_metadata *iw = pos;
 		packet->metadata &= ~iw->metadata_mask;
 		packet->metadata |= (iw->metadata & iw->metadata_mask);
 	}
-	pos = insts[OFPIT13_GOTO_TABLE-1];
+	pos = insts[OFPIT13_GOTO_TABLE];
 	if(pos != NULL){
 		struct ofp13_instruction_goto_table *ig = pos;
 		uint8_t table = ig->table_id;
