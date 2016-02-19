@@ -103,9 +103,7 @@ void temp_init(void)
 */
 void HardFault_Handler(void)
 {
-	while(1){
-		printf("hoge");
-	}
+	while(1);
 }
 
 /*

@@ -157,9 +157,8 @@ int lookup_fx_table(struct fx_packet *packet, struct fx_packet_oob *oob, uint8_t
 }
 
 static void ofp_unreach(void){
-	while(1){
-		printf("hoge");
-	}
+	// for breakpoint
+	while(1);
 }
 
 uint16_t ofp_rx_length(struct ofp_pcb *self){
