@@ -93,6 +93,8 @@ struct flows_counter reset_counter(){
 // prototype
 static bool switch_negotiated(void);
 
+bool disable_ofp_pipeline = false;
+
 struct fx_switch_config fx_switch = {
 	.flags = OFPC13_FRAG_NORMAL,
 	.miss_send_len = 128,

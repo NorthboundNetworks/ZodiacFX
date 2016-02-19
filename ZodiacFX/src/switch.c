@@ -271,18 +271,14 @@ void switch_write(uint8_t addr, uint8_t value)
 	usart_spi_deselect_device(USART_SPI, &USART_SPI_DEVICE);
 }
 
+extern bool disable_ofp_pipeline;
 /*
 *	Disable OpenFlow functionality
 *
 */
 void disableOF(void)
 {
-	switch_write(21,0);
-	switch_write(37,0);
-	switch_write(53,0);
-	switch_write(69,0);
-	clear_flows();
-
+	disable_ofp_pipeline = true;
 }
 
 /*
@@ -291,10 +287,7 @@ void disableOF(void)
 */
 void enableOF(void)
 {
-	if (Zodiac_Config.of_port[0] == 1) switch_write(21,3);
-	if (Zodiac_Config.of_port[1] == 1) switch_write(37,3);
-	if (Zodiac_Config.of_port[2] == 1) switch_write(53,3);
-	if (Zodiac_Config.of_port[3] == 1) switch_write(69,3);
+	disable_ofp_pipeline = false;
 }
 
 /*
@@ -446,14 +439,15 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
 	if (port & 4) phys13_port_stats[2].tx_packets++;
 	if (port & 8) phys13_port_stats[3].tx_packets++;
 	// Add padding
-	if (ul_size < 60) 
+	// switch discards frames less than 64 bytes
+	if (ul_size < 64) 
 	{
-		memset(&gmacbuffer, 0, 61);
+		memset(&gmacbuffer, 0, 64);
 		memcpy(&gmacbuffer,p_buffer, ul_size);
 		uint8_t *last_byte;
-		last_byte = gmacbuffer + 60;
+		last_byte = gmacbuffer + 64;
 		*last_byte = port;
-		gmac_dev_write(&gs_gmac_dev, &gmacbuffer, 61, NULL);
+		gmac_dev_write(&gs_gmac_dev, &gmacbuffer, 65, NULL);
 	} else {
 		memcpy(&gmacbuffer,p_buffer, ul_size);
 		uint8_t *last_byte;
@@ -501,8 +495,8 @@ void switch_init_old(void)
 		gs_gmac_dev.p_hw = GMAC;
 		
 		/* Init KSZ8795 registers */
-		switch_write(86,232);	// Set CPU interface to MII
-		switch_write(12,70);	// Turn on tail tag mode
+		switch_write(86, 232);	// Set CPU interface to MII
+		switch_write(12, 0x46);	// Turn on tail tag mode
 
 		/* Init GMAC driver structure */
 		gmac_dev_init(GMAC, &gs_gmac_dev, &gmac_option);
@@ -569,37 +563,156 @@ void task_switch(struct netif *netif)
 
 // --- kwi ---
 
+#define SWITCH_CONFIG_MASK (OFPPC_NO_FWD|OFPPC_NO_RECV|OFPPC_PORT_DOWN);
+uint8_t get_switch_config(uint32_t port){
+	uint8_t ret = 0;
+	if(port>=4){
+		return ret;
+	}
+	static uint8_t fwd[] = {18, 34, 50, 66};
+	static uint8_t pwr[] = {29. 45. 61. 77};
+	uint8_t r = switch_read(fwd[port]);
+	if((r & 0x04) == 0){
+		ret |= OFPPC_NO_FWD;
+	}
+	if((r & 0x02) == 0){
+		ret |= OFPPC_NO_RECV;
+	}
+	r = switch_read(pwr[port]);
+	if((r & 0x08) == 1){
+		ret |= OFPPC_PORT_DOWN;
+	}
+	return ret;
+}
+
+#define SWITCH_STATUS_MASK OFPPS10_LINK_DOWN;
+uint8_t get_switch_status(uint32_t port){
+	uint8_t ret = 0;
+	if(port >= 4){
+		return ret;
+	}
+	static uint8_t link = {30, 46, 62, 78};
+	uint8_t r = switch_read(link[port]);
+	if((r & 0x20) == 0){
+		ret |= OFPPS10_LINK_DOWN;
+	}
+	return ret;
+}
+
+uint32_t get_switch_ofppf13_curr(uint32_t port){
+	uint32_t ret = 0;
+	if(port >= 4){
+		return ret;
+	}
+	ret |= OFPPF13_COPPER;
+	static const uint8_t status1[] = {25.41.57.73};
+	uint8_t r = switch_read(status1[port]);
+	static const uint32_t idx[] = {
+		OFPPF13_10MB_HD,
+		OFPPF13_10MB_FD,
+		OFPPF13_100MB_HD,
+		OFPPF13_100MB_FD,
+	}
+	ret |= idx[(r>>1)&0x3];
+	return ret;
+}
+
+uint32_t get_switch_ofppf13_advertised(uint32_t port){
+	uint32_t ret = 0;
+	if(port >= 4){
+		return ret;
+	}
+	ret |= OFPPF13_COPPER;
+	
+	static const uint8_t ctl7 = {23,39,55,71};
+	uint8_t r = switch_read(ctl7[port]);
+	if((r & 0x30)==0x10){
+		ret |= OFPPF13_PAUSE;
+	}
+	if((r & 0x30)==0x20){
+		ret |= OFPPF13_PAUSE_ASYM;
+	}
+	if((r & 0x08) != 0){
+		ret |= OFPPF13_100MB_FD;
+	}
+	if((r & 0x04) != 0){
+		ret |= OFPPF13_100MB_HD;
+	}
+	if((r & 0x02) != 0){
+		ret |= OFPPF13_10MB_FD;
+	}
+	if((r & 0x01) != 0){
+		ret |= OFPPF13_10MB_HD;
+	}
+	static const uint8_t ctl9 = {28,44,60,76};
+	r = switch_read(ctl9[port]);
+	if((r & 0x80) == 0){
+		ret |= OFPPF13_AUTONEG;
+	}
+	return ret;
+}
+
+uint32_t get_switch_ofppf13_peer(uint32_t port){
+	uint32_t ret = 0;
+	if(port >= 4){
+		return ret;
+	}
+	ret |= OFPPF13_COPPER;
+	
+	static const uint8_t status0 = {24,40,56,72};
+	uint8_t r = switch_read(status0[port]);
+	if((r & 0x30)==0x10){
+		ret |= OFPPF13_PAUSE;
+	}
+	if((r & 0x30)==0x20){
+		ret |= OFPPF13_PAUSE_ASYM;
+	}
+	if((r & 0x08) != 0){
+		ret |= OFPPF13_100MB_FD;
+	}
+	if((r & 0x04) != 0){
+		ret |= OFPPF13_100MB_HD;
+	}
+	if((r & 0x02) != 0){
+		ret |= OFPPF13_10MB_FD;
+	}
+	if((r & 0x01) != 0){
+		ret |= OFPPF13_10MB_HD;
+	}
+	return ret;
+}
+
 extern struct fx_port_count fx_port_counts[4];
 void sync_switch_port_counts(uint8_t port_index){
 	switch_write(110, 0x1d); // write, MIB, 0x1??
 	switch_write(111, 4*port_index); // 0x100, 0x104, ... indirect address
 	fx_port_counts[port_index].rx_bytes += (
-	((switch_read(116) & 0x0f)<<32)
-	+ (switch_read(117)<<24)
-	+ (switch_read(118)<<16)
-	+ (switch_read(119)<<8)
-	+ switch_read(120));
+		((switch_read(116) & 0x0f)<<32)
+		+ (switch_read(117)<<24)
+		+ (switch_read(118)<<16)
+		+ (switch_read(119)<<8)
+		+ switch_read(120));
 	
 	switch_write(110, 0x1d);
 	switch_write(111, 4*port_index + 1);
 	fx_port_counts[port_index].tx_bytes += (
-	((switch_read(116) & 0x0f)<<32)
-	+ (switch_read(117)<<24)
-	+ (switch_read(118)<<16)
-	+ (switch_read(119)<<8)
-	+ switch_read(120));
+		((switch_read(116) & 0x0f)<<32)
+		+ (switch_read(117)<<24)
+		+ (switch_read(118)<<16)
+		+ (switch_read(119)<<8)
+		+ switch_read(120));
 
 	switch_write(110, 0x1d);
 	switch_write(111, 4*port_index + 2);
 	fx_port_counts[port_index].rx_dropped += (
-	+ (switch_read(119)<<8)
-	+ switch_read(120));
+		+ (switch_read(119)<<8)
+		+ switch_read(120));
 
 	switch_write(110, 0x1d);
 	switch_write(111, 4*port_index + 3);
 	fx_port_counts[port_index].tx_dropped += (
-	+ (switch_read(119)<<8)
-	+ switch_read(120));
+		+ (switch_read(119)<<8)
+		+ switch_read(120));
 
 	uint64_t rx_err_sum = 0;
 	uint64_t rx_err = 0;
@@ -607,27 +720,27 @@ void sync_switch_port_counts(uint8_t port_index){
 	switch_write(110, 0x1c);
 	switch_write(111, 0x7 + 0x20*port_index);
 	rx_err = (((switch_read(117) & 0x1f)<<24)
-	+ (switch_read(118)<<16)
-	+ (switch_read(119)<<8)
-	+ switch_read(120));
+		+ (switch_read(118)<<16)
+		+ (switch_read(119)<<8)
+		+ switch_read(120));
 	fx_port_counts[port_index].rx_frame_err += rx_err;
 	rx_err_sum += rx_err;
 	
 	switch_write(110, 0x1c);
 	switch_write(111, 0x3 + 0x20*port_index);
 	rx_err = (((switch_read(117) & 0x1f)<<24)
-	+ (switch_read(118)<<16)
-	+ (switch_read(119)<<8)
-	+ switch_read(120));
+		+ (switch_read(118)<<16)
+		+ (switch_read(119)<<8)
+		+ switch_read(120));
 	fx_port_counts[port_index].rx_over_err += rx_err;
 	rx_err_sum += rx_err;
 	
 	switch_write(110, 0x1c);
 	switch_write(111, 0x6 + 0x20*port_index);
 	rx_err = (((switch_read(117) & 0x1f)<<24)
-	+ (switch_read(118)<<16)
-	+ (switch_read(119)<<8)
-	+ switch_read(120));
+		+ (switch_read(118)<<16)
+		+ (switch_read(119)<<8)
+		+ switch_read(120));
 	fx_port_counts[port_index].rx_crc_err += rx_err;
 	rx_err_sum += rx_err;
 	
@@ -635,10 +748,10 @@ void sync_switch_port_counts(uint8_t port_index){
 	
 	switch_write(110, 0x1c);
 	switch_write(111, 0x1c + 0x20*port_index);
-	rx_err = (((switch_read(117) & 0x1f)<<24)
-	+ (switch_read(118)<<16)
-	+ (switch_read(119)<<8)
-	+ switch_read(120));
+		rx_err = (((switch_read(117) & 0x1f)<<24)
+		+ (switch_read(118)<<16)
+		+ (switch_read(119)<<8)
+		+ switch_read(120));
 	fx_port_counts[port_index].collisions += rx_err;
 }
 
@@ -702,8 +815,10 @@ void switch_task(struct netif *netif){
 		
 		pbuf_realloc(frame, frame_length);
 		if(tag<4 && Zodiac_Config.of_port[tag]==1){ // XXX: port number hardcoded here
-			fx_port_counts[tag].rx_packets++;
-			openflow_pipeline(frame, tag+1);
+			if(disable_ofp_pipeline == false){
+				fx_port_counts[tag].rx_packets++;
+				openflow_pipeline(frame, tag+1);
+			}
 		} else{
 			netif->input(frame, netif);
 		}

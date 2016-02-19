@@ -1061,6 +1061,7 @@ void of_error13(struct ofp_header *msg, uint16_t type, uint16_t code)
 
 
 // --- kwi --- //
+extern bool disable_ofp_pipeline;
 extern char ofp_buffer[OFP_BUFFER_LEN];
 extern struct controller controllers[MAX_CONTROLLERS];
 extern struct fx_table_count fx_table_counts[MAX_TABLES];
@@ -1332,6 +1333,41 @@ static uint16_t fill_ofp13_port_stats(uint32_t port, int *mp_index, char *buffer
 	return 0;
 }
 
+static uint16_t fill_ofp13_port_desc(int *mp_index, char *buffer, uint16_t capacity){
+	bool complete = true;
+	uint16_t length = 0;
+	for(int i=*mp_index; i<4; i++){
+		*mp_index = i;
+		if(Zodiac_Config.of_port[i] == 1){
+			if(length + 64 > capacity){
+				complete = false;
+				break;
+			}
+			uint32_t curr = get_switch_ofppf13_curr(i);
+			struct ofp13_port port = {
+				.port_no = htonl(i+1),
+				.hw_addr = Zodiac_Config.MAC_address,
+				.config = get_switch_config(i),
+				.state = get_switch_status(i),
+				.curr = htonl(curr),
+				.advertised = htonl(get_switch_ofppf13_advertised(i)),
+				.supported = 0, // XXX: FIX const
+				.peer = htonl(get_switch_ofppf13_peer(i)),
+				.max_speed = htonl(100000u),
+			};
+			if((curr & (OFPPF13_100MB_FD|OFPPF13_100MB_HD)) != 0){
+				port.curr_speed = htonl(100000u);
+			} else if((curr & (OFPPF13_10MB_FD|OFPPF13_10MB_HD)) != 0){
+				port.curr_speed = htonl(10000u);
+			}
+			memcpy(buffer+length, &port, 64);
+		}
+	}
+	if(complete){
+		*mp_index = -1;
+	}
+	return length;
+}
 
 enum ofp_pcb_status ofp13_multipart_complete(struct ofp_pcb *self){
 	struct ofp13_multipart_request mpreq = {};
@@ -1459,6 +1495,9 @@ enum ofp_pcb_status ofp13_multipart_complete(struct ofp_pcb *self){
 			if(ofp_rx_length(self) < 8 || ofp_tx_room(self) < 16+112){
 				return OFP_NOOP;
 			}else{
+				if(self->mp_out_index < 0){
+					self->mp_out_index = 0;
+				}
 				struct ofp13_port_stats_request hint;
 				self->mpreq_pos += ofp_rx_read(self, &hint, 8);
 				memcpy(ofp_buffer, self->mpreq_hdr, 16);
@@ -1478,6 +1517,26 @@ enum ofp_pcb_status ofp13_multipart_complete(struct ofp_pcb *self){
 				} else {
 					ofp_set_error(ofp_buffer, OFPET13_BAD_REQUEST, OFPBRC13_BAD_PORT);
 				}
+			}
+			break;
+			
+			case OFPMP13_PORT_DESC:
+			if(ofp_tx_room(self) < 64){
+				return OFP_NOOP;
+			} else {
+				if(self->mp_out_index < 0){
+					self->mp_out_index = 0;
+				}
+				self->mpreq_pos += ofp_rx_read(self, ofp_buffer, length - self->mpreq_pos);
+				uint16_t unitlength = fill_ofp13_port_desc(
+					&self->mp_out_index, ofp_buffer+16, ofp_tx_room(self)-16);
+				mpres.flags = 0;
+				if(self->mp_out_index >= 0){
+					mpres.flags = htons(OFPMPF13_REPLY_MORE);
+				}
+				mpres.header.length = htons(16+unitlength);
+				memcpy(ofp_buffer, &mpres, 16);
+				ofp_tx_write(self, ofp_buffer, 16+unitlength);
 			}
 			break;
 			
@@ -2077,21 +2136,25 @@ static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob 
 			uint32_t port = ntohl(out->port) - 1; // port starts from 1
 			if(port < OFPP13_MAX){
 				if(out->port != packet->in_port && port<4 && Zodiac_Config.of_port[port]==1){
-					fx_port_counts[port].tx_packets++;
-					pbuf_copy_partial(packet->data, ofp_buffer, packet->data->tot_len, 0);
-					gmac_write(ofp_buffer, packet->data->tot_len, 1<<port);
-				}
-			}else if(out->port == htonl(OFPP13_ALL) || out->port == htonl(OFPP13_FLOOD) || out->port == htonl(OFPP13_NORMAL)){
-				uint8_t p = 0;
-				for(int i=0; i<4; i++){ // XXX: num port hardcoded
-					if(Zodiac_Config.of_port[i]==1 && i != ntohl(packet->in_port)-1){
-						p |= 1<<i;
-						fx_port_counts[i].tx_packets++;
+					if(disable_ofp_pipeline == false){
+						fx_port_counts[port].tx_packets++;
+						pbuf_copy_partial(packet->data, ofp_buffer, packet->data->tot_len, 0);
+						gmac_write(ofp_buffer, packet->data->tot_len, 1<<port);
 					}
 				}
-				if(p != 0){
-					pbuf_copy_partial(packet->data, ofp_buffer, packet->data->tot_len, 0);
-					gmac_write(ofp_buffer, packet->data->tot_len, p);
+			}else if(out->port == htonl(OFPP13_ALL) || out->port == htonl(OFPP13_FLOOD) || out->port == htonl(OFPP13_NORMAL)){
+				if(disable_ofp_pipeline == false){
+					uint8_t p = 0;
+					for(int i=0; i<4; i++){ // XXX: num port hardcoded
+						if(Zodiac_Config.of_port[i]==1 && i != ntohl(packet->in_port)-1){
+							p |= 1<<i;
+							fx_port_counts[i].tx_packets++;
+						}
+					}
+					if(p != 0){
+						pbuf_copy_partial(packet->data, ofp_buffer, packet->data->tot_len, 0);
+						gmac_write(ofp_buffer, packet->data->tot_len, p);
+					}
 				}
 			}else if(out->port == htonl(OFPP13_CONTROLLER)){
 				struct ofp13_packet_in msg = {};
@@ -2376,12 +2439,6 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 			if(len > 0){
 				return ofp_tx_write(self, ofp_buffer, len);
 			}
-		}
-		break;
-
-		case OFPT13_PORT_STATUS:
-		{
-			
 		}
 		break;
 
