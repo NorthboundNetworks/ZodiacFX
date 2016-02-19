@@ -49,4 +49,11 @@ void stack_write(uint8_t data);
 
 void sync_switch_port_counts(uint8_t);
 
+// kwi //
+uint32_t get_switch_config(uint32_t);
+uint32_t get_switch_status(uint32_t);
+uint32_t get_switch_ofppf13_curr(uint32_t);
+uint32_t get_switch_ofppf13_advertised(uint32_t);
+uint32_t get_switch_ofppf13_peer(uint32_t);
+
 #endif /* SWITCH_H_ */

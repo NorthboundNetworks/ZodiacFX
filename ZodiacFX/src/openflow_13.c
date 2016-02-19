@@ -1284,20 +1284,20 @@ static struct ofp13_port_stats make_port_stats(uint32_t port){
 	uint64_t duration = sys_get_ms64() - fx_port_counts[port].init;
 	struct ofp13_port_stats stat = {
 		.port_no = htonl(port+1),
-		.rx_packets = fx_port_counts[port].rx_packets,
-		.tx_packets = fx_port_counts[port].tx_packets,
-		.rx_bytes = fx_port_counts[port].rx_bytes,
-		.tx_bytes = fx_port_counts[port].tx_bytes,
-		.rx_dropped = fx_port_counts[port].rx_dropped,
-		.tx_dropped = fx_port_counts[port].tx_dropped,
-		.rx_errors = fx_port_counts[port].rx_errors,
-		.tx_errors = fx_port_counts[port].tx_errors,
-		.rx_frame_err = fx_port_counts[port].rx_frame_err,
-		.rx_over_err = fx_port_counts[port].rx_over_err,
-		.rx_crc_err = fx_port_counts[port].rx_crc_err,
-		.collisions = fx_port_counts[port].collisions,
-		.duration_sec = duration/1000u,
-		.duration_nsec = (duration%1000u)*1000000u,
+		.rx_packets = htonll(fx_port_counts[port].rx_packets),
+		.tx_packets = htonll(fx_port_counts[port].tx_packets),
+		.rx_bytes = htonll(fx_port_counts[port].rx_bytes),
+		.tx_bytes = htonll(fx_port_counts[port].tx_bytes),
+		.rx_dropped = htonll(fx_port_counts[port].rx_dropped),
+		.tx_dropped = htonll(fx_port_counts[port].tx_dropped),
+		.rx_errors = htonll(fx_port_counts[port].rx_errors),
+		.tx_errors = htonll(fx_port_counts[port].tx_errors),
+		.rx_frame_err = htonll(fx_port_counts[port].rx_frame_err),
+		.rx_over_err = htonll(fx_port_counts[port].rx_over_err),
+		.rx_crc_err = htonll(fx_port_counts[port].rx_crc_err),
+		.collisions = htonll(fx_port_counts[port].collisions),
+		.duration_sec = htonl(duration/1000u),
+		.duration_nsec = htonl((duration%1000u)*1000000u),
 	};
 	return stat;
 }
@@ -1346,21 +1346,24 @@ static uint16_t fill_ofp13_port_desc(int *mp_index, char *buffer, uint16_t capac
 			uint32_t curr = get_switch_ofppf13_curr(i);
 			struct ofp13_port port = {
 				.port_no = htonl(i+1),
-				.hw_addr = Zodiac_Config.MAC_address,
-				.config = get_switch_config(i),
-				.state = get_switch_status(i),
+				.config = htonl(get_switch_config(i)),
+				.state = htonl(get_switch_status(i)),
 				.curr = htonl(curr),
 				.advertised = htonl(get_switch_ofppf13_advertised(i)),
-				.supported = 0, // XXX: FIX const
+				.supported = htonl(	OFPPF13_COPPER | OFPPF13_PAUSE | OFPPF13_PAUSE_ASYM |OFPPF13_100MB_FD \
+					| OFPPF13_100MB_HD | OFPPF13_10MB_FD | OFPPF13_10MB_HD | OFPPF13_AUTONEG),
 				.peer = htonl(get_switch_ofppf13_peer(i)),
 				.max_speed = htonl(100000u),
 			};
+			memcpy(port.hw_addr, Zodiac_Config.MAC_address, 6);
+			sprintf(port.name, "eth%d", i);
 			if((curr & (OFPPF13_100MB_FD|OFPPF13_100MB_HD)) != 0){
 				port.curr_speed = htonl(100000u);
 			} else if((curr & (OFPPF13_10MB_FD|OFPPF13_10MB_HD)) != 0){
 				port.curr_speed = htonl(10000u);
 			}
 			memcpy(buffer+length, &port, 64);
+			length += 64;
 		}
 	}
 	if(complete){
@@ -1422,9 +1425,6 @@ enum ofp_pcb_status ofp13_multipart_complete(struct ofp_pcb *self){
 				uint16_t unitlength = fill_ofp13_flow_stats(
 					(struct ofp13_flow_stats_request*)unit,
 					&self->mp_out_index, ofp_buffer+16, ofp_tx_room(self)-16);
-				if(unitlength == 0){
-					return OFP_NOOP;
-				}
 				mpres.flags = 0;
 				if(self->mp_out_index >= 0){
 					mpres.flags = htons(OFPMPF13_REPLY_MORE);
@@ -2336,9 +2336,9 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 					.version = 4,
 					.type = OFPT13_FEATURES_REPLY,
 					.length = htons(32),
-					.xid = htonl(self->xid++),
+					.xid = req.xid,
 				},
-				.n_buffers = MAX_BUFFERS,
+				.n_buffers = htonl(MAX_BUFFERS),
 				.n_tables = MAX_TABLES,
 				.capabilities = htonl(OFPC13_FLOW_STATS | OFPC13_TABLE_STATS | OFPC13_PORT_STATS),
 			};
@@ -2359,7 +2359,7 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 					.version = 4,
 					.type = OFPT13_GET_CONFIG_REPLY,
 					.length = htons(12),
-					.xid = htonl(self->xid++),
+					.xid = req.xid,
 				},
 				.flags = htons(fx_switch.flags),
 				.miss_send_len = htons(fx_switch.miss_send_len),

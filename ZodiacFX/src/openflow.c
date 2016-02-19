@@ -473,6 +473,7 @@ static err_t ofp_poll_cb(void *arg, struct tcp_pcb *pcb){
 	}
 	if(ofp->negotiated && ofp->next_ping - sys_get_ms() > 0x80000000U){
 		ofp->next_ping = sys_get_ms() + OFP_PING_INTERVAL;
+		/*
 		if(ofp->mpreq_pos == 0 && ofp_tx_room(ofp) > 8) {
 			struct ofp_header hdr;
 			hdr.version = OF_Version;
@@ -482,6 +483,7 @@ static err_t ofp_poll_cb(void *arg, struct tcp_pcb *pcb){
 			ofp_tx_write(ofp, (char*)&hdr, 8);
 			return tcp_output(ofp->tcp);
 		}
+		*/
 	}
 	return ERR_OK;
 }

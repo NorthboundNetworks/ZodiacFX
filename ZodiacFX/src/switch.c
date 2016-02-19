@@ -564,13 +564,13 @@ void task_switch(struct netif *netif)
 // --- kwi ---
 
 #define SWITCH_CONFIG_MASK (OFPPC_NO_FWD|OFPPC_NO_RECV|OFPPC_PORT_DOWN);
-uint8_t get_switch_config(uint32_t port){
-	uint8_t ret = 0;
+uint32_t get_switch_config(uint32_t port){
+	uint32_t ret = 0;
 	if(port>=4){
 		return ret;
 	}
 	static uint8_t fwd[] = {18, 34, 50, 66};
-	static uint8_t pwr[] = {29. 45. 61. 77};
+	static uint8_t pwr[] = {29, 45, 61, 77};
 	uint8_t r = switch_read(fwd[port]);
 	if((r & 0x04) == 0){
 		ret |= OFPPC_NO_FWD;
@@ -586,15 +586,15 @@ uint8_t get_switch_config(uint32_t port){
 }
 
 #define SWITCH_STATUS_MASK OFPPS10_LINK_DOWN;
-uint8_t get_switch_status(uint32_t port){
-	uint8_t ret = 0;
+uint32_t get_switch_status(uint32_t port){
+	uint32_t ret = 0;
 	if(port >= 4){
 		return ret;
 	}
-	static uint8_t link = {30, 46, 62, 78};
-	uint8_t r = switch_read(link[port]);
+	static uint8_t status2[] = {30, 46, 62, 78};
+	uint8_t r = switch_read(status2[port]);
 	if((r & 0x20) == 0){
-		ret |= OFPPS10_LINK_DOWN;
+		ret |= OFPPS13_LINK_DOWN;
 	}
 	return ret;
 }
@@ -605,14 +605,14 @@ uint32_t get_switch_ofppf13_curr(uint32_t port){
 		return ret;
 	}
 	ret |= OFPPF13_COPPER;
-	static const uint8_t status1[] = {25.41.57.73};
+	static const uint8_t status1[] = {25,41,57,73};
 	uint8_t r = switch_read(status1[port]);
 	static const uint32_t idx[] = {
 		OFPPF13_10MB_HD,
 		OFPPF13_10MB_FD,
 		OFPPF13_100MB_HD,
 		OFPPF13_100MB_FD,
-	}
+	};
 	ret |= idx[(r>>1)&0x3];
 	return ret;
 }
@@ -624,7 +624,7 @@ uint32_t get_switch_ofppf13_advertised(uint32_t port){
 	}
 	ret |= OFPPF13_COPPER;
 	
-	static const uint8_t ctl7 = {23,39,55,71};
+	static const uint8_t ctl7[] = {23, 39, 55, 71};
 	uint8_t r = switch_read(ctl7[port]);
 	if((r & 0x30)==0x10){
 		ret |= OFPPF13_PAUSE;
@@ -644,7 +644,7 @@ uint32_t get_switch_ofppf13_advertised(uint32_t port){
 	if((r & 0x01) != 0){
 		ret |= OFPPF13_10MB_HD;
 	}
-	static const uint8_t ctl9 = {28,44,60,76};
+	static const uint8_t ctl9[] = {28,44,60,76};
 	r = switch_read(ctl9[port]);
 	if((r & 0x80) == 0){
 		ret |= OFPPF13_AUTONEG;
@@ -659,7 +659,7 @@ uint32_t get_switch_ofppf13_peer(uint32_t port){
 	}
 	ret |= OFPPF13_COPPER;
 	
-	static const uint8_t status0 = {24,40,56,72};
+	static const uint8_t status0[] = {24,40,56,72};
 	uint8_t r = switch_read(status0[port]);
 	if((r & 0x30)==0x10){
 		ret |= OFPPF13_PAUSE;
