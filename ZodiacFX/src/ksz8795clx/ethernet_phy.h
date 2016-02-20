@@ -216,5 +216,7 @@ uint8_t ethernet_phy_reset(Gmac *p_gmac, uint8_t uc_phy_addr);
 
 err_t ethernetif_init(struct netif *netif);
 
+static err_t gmac_low_level_output(struct netif *netif, struct pbuf *p);
+
 #endif /* #ifndef ETHERNET_PHY_H_INCLUDED */
 
