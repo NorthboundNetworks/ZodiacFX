@@ -95,7 +95,7 @@ static inline uint64_t (htonll)(uint64_t n)
 *	@param port - the port that the packet was received on.
 *
 */
-void nnOF10_tablelookup(char *p_uc_data, uint32_t *ul_size, int port)
+void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 {
 	uint16_t packet_size;
 	memcpy(&packet_size, ul_size, 2);
@@ -1128,12 +1128,4 @@ void of10_error(struct ofp_header *msg, uint16_t type, uint16_t code)
 	memcpy(error_buf + sizeof(struct ofp_error_msg), msg, msglen);
 	sendtcp(&error_buf, (sizeof(struct ofp_error_msg) + msglen));
 	return;
-}
-
-int match_frame_by_tuple(struct fx_packet *packet, struct fx_packet_oob *oob, struct ofp_match tuple){
-	return 0; // TODO
-}
-
-void execute_ofp10_flow(struct fx_packet *packet, struct fx_packet_oob *oob, int flow){
-	return; // TODO
 }

@@ -152,11 +152,11 @@ int main (void)
 	IP4_ADDR(&x_net_mask, Zodiac_Config.netmask[0], Zodiac_Config.netmask[1],Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);
 	IP4_ADDR(&x_gateway, Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1],Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
 	
+	switch_init();
+	
 	/* Initialize lwIP. */
 	lwip_init();
 
-	switch_init();
-	
 	/* Add data to netif */
 	netif_add(&gs_net_if, &x_ip_addr, &x_net_mask, &x_gateway, NULL, ethernetif_init, ethernet_input);
 
@@ -164,7 +164,7 @@ int main (void)
 	netif_set_default(&gs_net_if);
 
 	netif_set_up(&gs_net_if);
-	
+
 	/* Initialize timer. */
 	sys_init_timing();
 	
@@ -190,14 +190,11 @@ int main (void)
 		}
 	}	
 	
-	openflow_init();
 	while(1)
 	{
-//		task_switch(&gs_net_if);
-		switch_task(&gs_net_if);
+		task_switch(&gs_net_if);
 		task_command(cCommand, cCommand_last);	
 		sys_check_timeouts();
-		openflow_task();
-//		task_openflow();
+		task_openflow();
 	}
 }
