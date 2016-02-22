@@ -86,12 +86,7 @@ void flowrem_notif(int flowid, uint8_t reason);
 (((x) & 0xff000000UL) >> 24))
 #define NTOHL(x) HTONL(x)
 
-
-/* ---- kwi0 version ---- */
-
 struct flows_counter reset_counter();
-
-/* ---- kwi version ---- */
 
 #define ALIGN8(x) (x+7)/8*8
 
