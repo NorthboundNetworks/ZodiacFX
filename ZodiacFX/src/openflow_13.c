@@ -1154,7 +1154,7 @@ static void send_ofp13_packet_in(struct fx_packet *packet, struct ofp13_packet_i
 	
 	base.header.type = OFPT13_PACKET_IN;
 	base.header.version = 4;
-	base.total_len = packet->data->tot_len;
+	base.total_len = htons(packet->data->tot_len);
 	
 	char oxm[32];
 	uint16_t oxm_length = 0;
