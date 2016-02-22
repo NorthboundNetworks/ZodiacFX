@@ -216,7 +216,7 @@ void SPI_Handler(void)
 uint64_t switch_read(uint8_t addr)
 {
 	
-	uint8_t reg[2];
+	volatile uint8_t reg[2];
 	
 	if (addr < 128) {
 		reg[0] = 96;
@@ -250,7 +250,7 @@ uint64_t switch_read(uint8_t addr)
 */
 void switch_write(uint8_t addr, uint8_t value)
 {
-	uint8_t reg[3];
+	volatile uint8_t reg[3];
 	
 	if (addr < 128) {
 		reg[0] = 64;
@@ -271,6 +271,11 @@ void switch_write(uint8_t addr, uint8_t value)
 	usart_spi_deselect_device(USART_SPI, &USART_SPI_DEVICE);
 }
 
+static void switch_unreach(){
+	volatile uint32_t noop = 0;
+	while(1){ noop++; }
+}
+
 extern bool disable_ofp_pipeline;
 /*
 *	Disable OpenFlow functionality
@@ -279,10 +284,6 @@ extern bool disable_ofp_pipeline;
 void disableOF(void)
 {
 	disable_ofp_pipeline = true;
-	switch_write(21,0);
-	switch_write(37,0);
-	switch_write(53,0);
-	switch_write(69,0);
 }
 
 /*
@@ -292,10 +293,6 @@ void disableOF(void)
 void enableOF(void)
 {
 	disable_ofp_pipeline = false;
-	if (Zodiac_Config.of_port[0] == 1) switch_write(21,3);
-	if (Zodiac_Config.of_port[1] == 1) switch_write(37,3);
-	if (Zodiac_Config.of_port[2] == 1) switch_write(53,3);
-	if (Zodiac_Config.of_port[3] == 1) switch_write(69,3);
 }
 
 /*
@@ -436,22 +433,18 @@ void update_port_status(void)
 *	@param port - the port to send the data out from.
 *
 */
-void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
-{	
+void gmac_write(const void *buffer, uint16_t ul_size, uint8_t port){
 	// Add padding
 	// switch discards frames less than 64 bytes
-	if (ul_size < 60) 
-	{
+	if (ul_size < 60){
 		memset(gmacbuffer, 0, 61);
-		memcpy(gmacbuffer, p_buffer, ul_size);
-		uint8_t *last_byte;
-		last_byte = gmacbuffer + 60;
+		memcpy(gmacbuffer, buffer, ul_size);
+		uint8_t *last_byte = (uintptr_t)gmacbuffer + 60;
 		*last_byte = port;
 		gmac_dev_write(&gs_gmac_dev, gmacbuffer, 61, NULL);
 	} else {
-		memcpy(gmacbuffer, p_buffer, ul_size);
-		uint8_t *last_byte;
-		last_byte = gmacbuffer + ul_size;
+		memcpy(gmacbuffer, buffer, ul_size);
+		uint8_t *last_byte = (uintptr_t)gmacbuffer + ul_size;
 		*last_byte = port;
 		gmac_dev_write(&gs_gmac_dev, gmacbuffer, (ul_size + 1), NULL);
 	}
@@ -466,102 +459,6 @@ void GMAC_Handler(void)
 {
 	gmac_handler(&gs_gmac_dev);
 }
-
-/*
-*	Switch initialisation function
-*
-*/
-void switch_init_old(void)
-{
-		volatile uint32_t ul_delay;
-		gmac_options_t gmac_option;
-		
-		/* Wait for PHY to be ready (CAT811: Max400ms) */
-		ul_delay = sysclk_get_cpu_hz() / 1000 / 3 * 400;
-		while (ul_delay--);
-		
-		/* Enable GMAC clock */
-		pmc_enable_periph_clk(ID_GMAC);
-		
-		/* Fill in GMAC options */
-		gmac_option.uc_copy_all_frame = 1;
-		gmac_option.uc_no_boardcast = 0;
-		gmac_option.uc_mac_addr[0] = Zodiac_Config.MAC_address[0];
-		gmac_option.uc_mac_addr[1] = Zodiac_Config.MAC_address[1];
-		gmac_option.uc_mac_addr[2] = Zodiac_Config.MAC_address[2];
-		gmac_option.uc_mac_addr[3] = Zodiac_Config.MAC_address[3];
-		gmac_option.uc_mac_addr[4] = Zodiac_Config.MAC_address[4];
-		gmac_option.uc_mac_addr[5] = Zodiac_Config.MAC_address[5];
-		gs_gmac_dev.p_hw = GMAC;
-		
-		/* Init KSZ8795 registers */
-		switch_write(86, 232);	// Set CPU interface to MII
-		switch_write(12, 0x46);	// Turn on tail tag mode
-
-		/* Init GMAC driver structure */
-		gmac_dev_init(GMAC, &gs_gmac_dev, &gmac_option);
-
-		/* Enable Interrupt */
-		NVIC_EnableIRQ(GMAC_IRQn);
-
-		/* Init MAC PHY driver */
-		if (ethernet_phy_init(GMAC, BOARD_GMAC_PHY_ADDR, sysclk_get_cpu_hz()) != GMAC_OK) {
-			return;
-		}
-
-		while (ethernet_phy_set_link(GMAC, BOARD_GMAC_PHY_ADDR, 1) != GMAC_OK) {
-			return;
-		}
-		
-		// clear port stat counters
-		memset(&phys10_port_stats, 0, sizeof(struct ofp10_port_stats)*4);
-		
-		disableOF(); // clear all port settings
-		
-		if (Zodiac_Config.OFEnabled == OF_ENABLED) enableOF();
-		//if (Zodiac_Config.OFEnabled == OF_DISABLED) disableOF();
-		return;
-}
-/*
-*	Main switching loop
-*
-*	@param *netif - pointer to the network interface struct.
-*
-*/
-void task_switch(struct netif *netif)
-{
-	uint32_t ul_frm_size = 0;
-
-	/* Main packet processing loop */
-	if (GMAC_OK == gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_frm_size))
-	{
-		if (ul_frm_size > 0)
-		{
-			uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_frm_size)-1);
-			uint8_t tag = *tail_tag + 1;
-			if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[tag-1] == 1)
-			{
-				phys10_port_stats[tag-1].rx_packets++;
-				phys13_port_stats[tag-1].rx_packets++;
-				ul_frm_size--; // remove the tail first
-				nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_frm_size, tag);
-				return;
-			} else {
-				struct pbuf *p;
-				p = pbuf_alloc(PBUF_RAW, ul_frm_size+1, PBUF_POOL);	
-				memcpy(p->payload, &gs_uc_eth_buffer,(ul_frm_size-1));
-				p->len = ul_frm_size-1;
-				p->tot_len = ul_frm_size-1;
-				netif->input(p, netif);
-				pbuf_free(p);
-				return;	
-			}
-		}
-	}
-	return;
-}
-
-// --- kwi ---
 
 #define SWITCH_CONFIG_MASK (OFPPC_NO_FWD|OFPPC_NO_RECV|OFPPC_PORT_DOWN);
 uint32_t get_switch_config(uint32_t port){
@@ -767,19 +664,18 @@ void switch_init(){
 	gmac_options_t gmac_option;
 	gmac_option.uc_copy_all_frame = 1;
 	gmac_option.uc_no_boardcast = 0;
-	gmac_option.uc_mac_addr[0] = Zodiac_Config.MAC_address[0];
-	gmac_option.uc_mac_addr[1] = Zodiac_Config.MAC_address[1];
-	gmac_option.uc_mac_addr[2] = Zodiac_Config.MAC_address[2];
-	gmac_option.uc_mac_addr[3] = Zodiac_Config.MAC_address[3];
-	gmac_option.uc_mac_addr[4] = Zodiac_Config.MAC_address[4];
-	gmac_option.uc_mac_addr[5] = Zodiac_Config.MAC_address[5];
+	memcpy(gmac_option.uc_mac_addr, Zodiac_Config.MAC_address, 6);
 	gs_gmac_dev.p_hw = GMAC;
 	/* Init GMAC driver structure */
 	gmac_dev_init(GMAC, &gs_gmac_dev, &gmac_option);
 	/* Init KSZ8795 registers */
 	switch_write(86,232);	// Set CPU interface to MII
-	switch_write(12,70);	// Turn on tail tag mode
-	disableOF();
+	switch_write(12, 0x46);	// Turn on tail tag mode
+	// CPU(port5) controls the traffic
+	switch_write(21, 0x03);
+	switch_write(37, 0x03);
+	switch_write(53, 0x03);
+	switch_write(69, 0x03);
 	/* Enable Interrupt */
 	NVIC_EnableIRQ(GMAC_IRQn);
 	
@@ -792,28 +688,26 @@ void switch_init(){
 		// unreach
 		return;
 	}
-	
-	if(Zodiac_Config.OFEnabled == OF_ENABLED){
-		enableOF();
-	}
 }
 
-
-void switch_task(struct netif *netif){	
-	struct pbuf *frame = pbuf_alloc(PBUF_RAW, GMAC_FRAME_LENTGH_MAX, PBUF_POOL);
+void switch_task(struct netif *netif){
+	uint8_t frame_buffer[GMAC_FRAME_LENTGH_MAX];
 	// PBUF_ROM or PBUF_REF fails with ICMP handling: not yet implemented in LWIP.
 	uint32_t frame_length;
 
 	// XXX: gmac_dev_read as gmac_low_level_input, may return pbuf chain directly here.
 	// XXX: lwip expects frame header structures are all placed in the pbuf first chunk.
 	// XXX: and openflow pipeline will expect this as well.
-	if (GMAC_OK == gmac_dev_read(&gs_gmac_dev, (uint8_t *)frame->payload, GMAC_FRAME_LENTGH_MAX, &frame_length)){
+	if (GMAC_OK == gmac_dev_read(&gs_gmac_dev, frame_buffer, GMAC_FRAME_LENTGH_MAX, &frame_length)){
 		// switch is configured to work in tail tag mode
 		frame_length--;
-		uint8_t tag;
-		pbuf_copy_partial(frame, &tag, 1, frame_length);
-		
-		pbuf_realloc(frame, frame_length);
+		uint8_t tag = frame_buffer[frame_length];
+		struct pbuf *frame = pbuf_alloc(PBUF_RAW, frame_length, PBUF_POOL);
+		// only PBUF_POOL or RAM supported. PBUF_REF does not work for ping for example.
+		if(frame==NULL){
+			switch_unreach();
+		}
+		memcpy(frame->payload, frame_buffer, frame_length);
 		if(tag<4 && Zodiac_Config.of_port[tag]==1){ // XXX: port number hardcoded here
 			if(disable_ofp_pipeline == false){
 				fx_port_counts[tag].rx_packets++;
@@ -822,7 +716,7 @@ void switch_task(struct netif *netif){
 		} else{
 			netif->input(frame, netif);
 		}
+		pbuf_free(frame);
 	}
-	pbuf_free(frame);
 	return;
 }

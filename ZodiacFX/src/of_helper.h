@@ -34,17 +34,9 @@
 #include "openflow.h"
 #include <lwip/pbuf.h>
 
-int flowmatch10(const char *pBuffer, uint32_t port);
-int flowmatch13(const char *pBuffer, uint32_t port);
-int field_match10(struct ofp_match *match_a, struct ofp_match *match_b);
-void nnOF_timer(void);
-void flow_timeouts(void);
-void clear_flows(void);
-int flow_stats_msg10(char *buffer, int first, int last);
-int flow_stats_msg13(char *buffer, int first, int last);
-void set_ip_checksum(char *p_uc_data, int packet_size, int iphdr_offset);
+void set_ip_checksum(void *p_uc_data, uint16_t packet_size, uint16_t iphdr_offset);
 
 // --- kwi ---
-bool oxm_strict_equals(const char*, int, const char*, int);
+bool oxm_strict_equals(const void*, int, const void*, int);
 
 #endif /* OF_HELPER_H_ */

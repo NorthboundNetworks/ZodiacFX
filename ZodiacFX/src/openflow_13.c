@@ -42,10 +42,19 @@
 // Global variables
 extern struct zodiac_config Zodiac_Config;
 extern int OF_Version;
-extern int iLastFlow; 
-struct ofp13_flow_mod flow_match13[MAX_FLOWS];
-char *ofp13_oxm_match[MAX_FLOWS];
-char *ofp13_oxm_inst[MAX_FLOWS];
+extern int iLastFlow;
+
+/*
+*	Converts a 64bit value from host to network format
+*
+*	@param n - value to convert.
+*
+*/
+static inline uint64_t (htonll)(uint64_t n)
+{
+	return htonl(1) == 1 ? n : ((uint64_t) htonl(n) << 32) | htonl(n >> 32);
+}
+
 extern bool disable_ofp_pipeline;
 extern char ofp_buffer[OFP_BUFFER_LEN];
 extern struct controller controllers[MAX_CONTROLLERS];
@@ -56,7 +65,8 @@ extern struct fx_flow_count fx_flow_counts[MAX_FLOWS];
 extern uint32_t fx_buffer_id;
 extern struct fx_packet_in fx_packet_ins[MAX_BUFFERS];
 extern struct fx_switch_config fx_switch;
-extern struct fx_port_count fx_port_counts[4];
+extern struct fx_port fx_ports[MAX_PORTS];
+extern struct fx_port_count fx_port_counts[MAX_PORTS];
 extern struct fx_meter_band fx_meter_bands[MAX_METER_BANDS];
 
 // fields are in host byte order
@@ -69,41 +79,13 @@ struct ofp13_filter {
 	uint64_t cookie; // in network byte order
 	uint64_t cookie_mask; // in network byte order
 	uint16_t oxm_length;
-	const char *oxm;
+	void *oxm;
 };
-
-/*
-*	Converts a 64bit value from host to network format
-*
-*	@param n - value to convert.
-*
-*/
-static inline uint64_t (htonll)(uint64_t n)
-{
-	return HTONL(1) == 1 ? n : ((uint64_t) HTONL(n) << 32) | HTONL(n >> 32);
-}
-
-/*
-*	OpenFlow BARRIER Reply message function
-*
-*	@param xid - transaction ID
-*
-*/
-void barrier13_reply(uint32_t xid)
-{
-	struct ofp_header of_barrier;
-	of_barrier.version= OF_Version;
-	of_barrier.length = htons(sizeof(of_barrier));
-	of_barrier.type   = OFPT13_BARRIER_REPLY;
-	of_barrier.xid = xid;
-	sendtcp(&of_barrier, sizeof(of_barrier));
-	return;
-}
 
 /*
  * scans flow table for matching flow
  */
-int filter_ofp13_flow(int first, struct ofp13_filter filter){
+static int filter_ofp13_flow(int first, struct ofp13_filter filter){
 	for(int i=first; i<iLastFlow; i++){
 		if((fx_flows[i].send_bits & FX_FLOW_ACTIVE) == 0){
 			continue;
@@ -128,16 +110,16 @@ int filter_ofp13_flow(int first, struct ofp13_filter filter){
 		}
 		if (filter.out_port != OFPP13_ANY){
 			bool out_port_match = false;
-			const char *ops = fx_flows[i].ops;
-			while(ops < fx_flows[i].ops+fx_flows[i].ops_length){
-				struct ofp13_instruction *inst = (struct ofp13_instruction*)ops;
+			uintptr_t ops = (uintptr_t)fx_flows[i].ops;
+			while(ops < (uintptr_t)fx_flows[i].ops + fx_flows[i].ops_length){
+				struct ofp13_instruction *inst = (void*)ops;
 				if(inst->type==htons(OFPIT13_APPLY_ACTIONS) || inst->type==htons(OFPIT13_WRITE_ACTIONS)){
-					struct ofp13_instruction_actions *ia = (struct ofp13_instruction_actions*)inst;
-					const char *act = (const char*)ia->actions;
+					struct ofp13_instruction_actions *ia = (void*)ops;
+					uintptr_t act = (uintptr_t)ia->actions;
 					while(act < ops+ntohs(inst->len)){
-						struct ofp13_action_header *action = (struct ofp13_action_header*)act;
+						struct ofp13_action_header *action = (void*)act;
 						if(action->type==htons(OFPAT13_OUTPUT)){
-							struct ofp13_action_output *output = (struct ofp13_action_output*)action;
+							struct ofp13_action_output *output = (void*)act;
 							if (output->port == filter.out_port){
 								out_port_match = true;
 							}
@@ -153,16 +135,16 @@ int filter_ofp13_flow(int first, struct ofp13_filter filter){
 		}
 		if (filter.out_group != OFPG13_ANY){
 			bool out_group_match = false;
-			const char *ops = fx_flows[i].ops;
-			while(ops < fx_flows[i].ops+fx_flows[i].ops_length){
-				struct ofp13_instruction *inst = (struct ofp13_instruction*)ops;
+			uintptr_t ops = (uintptr_t)fx_flows[i].ops;
+			while(ops < (uintptr_t)fx_flows[i].ops + fx_flows[i].ops_length){
+				struct ofp13_instruction *inst = (void*)ops;
 				if(inst->type==htons(OFPIT13_APPLY_ACTIONS) || inst->type==htons(OFPIT13_WRITE_ACTIONS)){
-					struct ofp13_instruction_actions *ia = (struct ofp13_instruction_actions*)inst;
-					const char *act = (const char*)ia->actions;
+					struct ofp13_instruction_actions *ia = (void*)ops;
+					uintptr_t act = (uintptr_t)ia->actions;
 					while(act < ops+ntohs(inst->len)){
-						struct ofp13_action_header *action = (struct ofp13_action_header*)act;
+						struct ofp13_action_header *action = (void*)act;
 						if(action->type==htons(OFPAT13_GROUP)){
-							struct ofp13_action_group *group = (struct ofp13_action_group*)action;
+							struct ofp13_action_group *group = (void*)act;
 							if (group->group_id == filter.out_group){
 								out_group_match = true;
 							}
@@ -181,7 +163,8 @@ int filter_ofp13_flow(int first, struct ofp13_filter filter){
 	return -1;
 }
 
-static uint16_t fill_ofp13_flow_stats(const struct ofp13_flow_stats_request *unit, int *mp_index, char *buffer, uint16_t capacity){
+static uint16_t fill_ofp13_flow_stats(const void *cunit, int *mp_index, void *buffer, uint16_t capacity){
+	const struct ofp13_flow_stats_request *unit = cunit;
 	struct ofp13_filter filter = {
 		.cookie = unit->cookie,
 		.cookie_mask = unit->cookie_mask,
@@ -189,7 +172,7 @@ static uint16_t fill_ofp13_flow_stats(const struct ofp13_flow_stats_request *uni
 		.out_port = ntohl(unit->out_port),
 		.table_id = unit->table_id,
 		.oxm_length = ntohs(unit->match.length)-4,
-		.oxm = unit->match.oxm_fields,
+		.oxm = (void*)unit->match.oxm_fields,
 	};
 	uint16_t length = 0;
 	bool complete = true;
@@ -220,14 +203,17 @@ static uint16_t fill_ofp13_flow_stats(const struct ofp13_flow_stats_request *uni
 			}
 		};
 		int len;
+		uintptr_t buf = (uintptr_t)buffer + length;
 		// struct ofp13_flow_stats(including ofp13_match)
-		memcpy(buffer+length, &stats, sizeof(struct ofp13_flow_stats));
+		memcpy((void*)buf, &stats, sizeof(struct ofp13_flow_stats));
 		// oxm_fields
 		len = offsetof(struct ofp13_flow_stats, match) + offsetof(struct ofp13_match, oxm_fields);
-		memcpy(buffer+length+len, fx_flows[i].oxm, fx_flows[i].oxm_length);
+		buf = (uintptr_t)buffer + length + len;
+		memcpy((void*)buf, fx_flows[i].oxm, fx_flows[i].oxm_length);
 		// instructions
 		len = offset_inst;
-		memcpy(buffer+length+len, fx_flows[i].ops, fx_flows[i].ops_length);
+		buf = (uintptr_t)buffer + length + len;
+		memcpy((void*)buf, fx_flows[i].ops, fx_flows[i].ops_length);
 		length += offset_inst + fx_flows[i].ops_length;
 	}
 	if(complete){
@@ -236,20 +222,23 @@ static uint16_t fill_ofp13_flow_stats(const struct ofp13_flow_stats_request *uni
 	return length;
 }
 
-static uint16_t fill_ofp13_aggregate_stats(const struct ofp13_aggregate_stats_request *unit, int *mp_index, char *buffer, uint16_t capacity){
+static uint16_t fill_ofp13_aggregate_stats(const void *cunit, int *mp_index, void *buffer, uint16_t capacity){
 	if(capacity < 24){
 		return 0;
 	}
+	struct ofp13_aggregate_stats_request unit;
+	memcpy(&unit, cunit, sizeof(unit));
+	
 	struct ofp13_filter filter = {
-		.cookie = unit->cookie,
-		.cookie_mask = unit->cookie_mask,
-		.out_group = ntohl(unit->out_group),
-		.out_port = ntohl(unit->out_port),
-		.table_id = unit->table_id,
-		.oxm_length = ntohs(unit->match.length)-4,
-		.oxm = unit->match.oxm_fields,
+		.cookie = unit.cookie,
+		.cookie_mask = unit.cookie_mask,
+		.out_group = ntohl(unit.out_group),
+		.out_port = ntohl(unit.out_port),
+		.table_id = unit.table_id,
+		.oxm_length = ntohs(unit.match.length)-4,
+		.oxm = (void*)unit.match.oxm_fields,
 	};
-	struct ofp13_aggregate_stats_reply res = {};
+	struct ofp13_aggregate_stats_reply res = {0};
 	for(int i=filter_ofp13_flow(*mp_index, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
 		res.packet_count += fx_flow_counts[i].packet_count;
 		res.byte_count += fx_flow_counts[i].byte_count;
@@ -260,7 +249,7 @@ static uint16_t fill_ofp13_aggregate_stats(const struct ofp13_aggregate_stats_re
 	return 24;
 }
 
-static uint16_t fill_ofp13_table_stats(int *mp_index, char *buffer, uint16_t capacity){
+static uint16_t fill_ofp13_table_stats(int *mp_index, void *buffer, uint16_t capacity){
 	if(capacity < 24){
 		return 0;
 	}
@@ -285,7 +274,8 @@ static uint16_t fill_ofp13_table_stats(int *mp_index, char *buffer, uint16_t cap
 			.matched_count = htonll(fx_table_counts[i].matched),
 			.lookup_count = htonll(fx_table_counts[i].lookup),
 		};
-		memcpy(buffer+length, &stat, 24);
+		uintptr_t buf = (uintptr_t)buffer+length;
+		memcpy((void*)buf, &stat, 24);
 		length += 24;
 	}
 	if(complete){
@@ -294,34 +284,31 @@ static uint16_t fill_ofp13_table_stats(int *mp_index, char *buffer, uint16_t cap
 	return length;
 }
 
-static struct ofp13_port_stats make_port_stats(uint32_t port){
+static void make_port_stats(uint32_t port, struct ofp13_port_stats *stats){
 	sync_switch_port_counts(port);
-	uint64_t duration = sys_get_ms64() - fx_port_counts[port].init;
-	struct ofp13_port_stats stat = {
-		.port_no = htonl(port+1),
-		.rx_packets = htonll(fx_port_counts[port].rx_packets),
-		.tx_packets = htonll(fx_port_counts[port].tx_packets),
-		.rx_bytes = htonll(fx_port_counts[port].rx_bytes),
-		.tx_bytes = htonll(fx_port_counts[port].tx_bytes),
-		.rx_dropped = htonll(fx_port_counts[port].rx_dropped),
-		.tx_dropped = htonll(fx_port_counts[port].tx_dropped),
-		.rx_errors = htonll(fx_port_counts[port].rx_errors),
-		.tx_errors = htonll(fx_port_counts[port].tx_errors),
-		.rx_frame_err = htonll(fx_port_counts[port].rx_frame_err),
-		.rx_over_err = htonll(fx_port_counts[port].rx_over_err),
-		.rx_crc_err = htonll(fx_port_counts[port].rx_crc_err),
-		.collisions = htonll(fx_port_counts[port].collisions),
-		.duration_sec = htonl(duration/1000u),
-		.duration_nsec = htonl((duration%1000u)*1000000u),
-	};
-	return stat;
+	uint64_t duration = sys_get_ms64() - fx_ports[port].init;
+	stats->port_no = htonl(port+1);
+	stats->rx_packets = htonll(fx_port_counts[port].rx_packets);
+	stats->tx_packets = htonll(fx_port_counts[port].tx_packets);
+	stats->rx_bytes = htonll(fx_port_counts[port].rx_bytes);
+	stats->tx_bytes = htonll(fx_port_counts[port].tx_bytes);
+	stats->rx_dropped = htonll(fx_port_counts[port].rx_dropped);
+	stats->tx_dropped = htonll(fx_port_counts[port].tx_dropped);
+	stats->rx_errors = htonll(fx_port_counts[port].rx_errors);
+	stats->tx_errors = htonll(fx_port_counts[port].tx_errors);
+	stats->rx_frame_err = htonll(fx_port_counts[port].rx_frame_err);
+	stats->rx_over_err = htonll(fx_port_counts[port].rx_over_err);
+	stats->rx_crc_err = htonll(fx_port_counts[port].rx_crc_err);
+	stats->collisions = htonll(fx_port_counts[port].collisions);
+	stats->duration_sec = htonl(duration/1000u);
+	stats->duration_nsec = htonl((duration%1000u)*1000000u);
 }
 
-static uint16_t fill_ofp13_port_stats(uint32_t port, int *mp_index, char *buffer, uint16_t capacity){
+static uint16_t fill_ofp13_port_stats(uint32_t port, int *mp_index, void *buffer, uint16_t capacity){
 	uint32_t port_index = ntohl(port)-1;
 	struct ofp13_port_stats stat;
 	if(port_index < OFPP13_MAX){
-		stat = make_port_stats(port_index);
+		make_port_stats(port_index, &stat);
 		memcpy(buffer, &stat, 112);
 		*mp_index = -1;
 		return 112;
@@ -335,8 +322,8 @@ static uint16_t fill_ofp13_port_stats(uint32_t port, int *mp_index, char *buffer
 					complete = false;
 					break;
 				}
-				stat = make_port_stats(i);
-				memcpy(buffer+len, &stat, 112);
+				make_port_stats(i, &stat);
+				memcpy((void*)((uintptr_t)buffer + len), &stat, 112);
 				len += 112;
 			}
 		}
@@ -348,7 +335,7 @@ static uint16_t fill_ofp13_port_stats(uint32_t port, int *mp_index, char *buffer
 	return 0;
 }
 
-static uint16_t fill_ofp13_port_desc(int *mp_index, char *buffer, uint16_t capacity){
+static uint16_t fill_ofp13_port_desc(int *mp_index, void *buffer, uint16_t capacity){
 	bool complete = true;
 	uint16_t length = 0;
 	for(int i=*mp_index; i<4; i++){
@@ -377,7 +364,7 @@ static uint16_t fill_ofp13_port_desc(int *mp_index, char *buffer, uint16_t capac
 			} else if((curr & (OFPPF13_10MB_FD|OFPPF13_10MB_HD)) != 0){
 				port.curr_speed = htonl(10000u);
 			}
-			memcpy(buffer+length, &port, 64);
+			memcpy((void*)((uintptr_t)buffer + length), &port, 64);
 			length += 64;
 		}
 	}
@@ -388,8 +375,8 @@ static uint16_t fill_ofp13_port_desc(int *mp_index, char *buffer, uint16_t capac
 }
 
 enum ofp_pcb_status ofp13_multipart_complete(struct ofp_pcb *self){
-	struct ofp13_multipart_request mpreq = {};
-	struct ofp13_multipart_reply mpres = {};
+	struct ofp13_multipart_request mpreq = {0};
+	struct ofp13_multipart_reply mpres = {0};
 	memcpy(&mpreq, self->mpreq_hdr, 16);
 	memcpy(&mpres, self->mpreq_hdr, 16);
 	mpres.header.type = OFPT13_MULTIPART_REPLY;
@@ -437,8 +424,7 @@ enum ofp_pcb_status ofp13_multipart_complete(struct ofp_pcb *self){
 					memcpy(&hint, self->mp_in, 40);
 				}
 				memcpy(&unit, self->mp_in, offsetof(struct ofp13_flow_stats_request, match) + ALIGN8(ntohs(hint.match.length)));
-				uint16_t unitlength = fill_ofp13_flow_stats(
-					(struct ofp13_flow_stats_request*)unit,
+				uint16_t unitlength = fill_ofp13_flow_stats(unit,
 					&self->mp_out_index, ofp_buffer+16, ofp_tx_room(self)-16);
 				mpres.flags = 0;
 				if(self->mp_out_index >= 0){
@@ -468,8 +454,7 @@ enum ofp_pcb_status ofp13_multipart_complete(struct ofp_pcb *self){
 					memcpy(&hint, self->mp_in, 40);
 				}
 				memcpy(unit, self->mp_in, offsetof(struct ofp13_aggregate_stats_request, match) + ALIGN8(ntohs(hint.match.length)));
-				uint16_t unitlength = fill_ofp13_aggregate_stats(
-					(struct ofp13_aggregate_stats_request*)unit,
+				uint16_t unitlength = fill_ofp13_aggregate_stats(unit,
 					&self->mp_out_index, ofp_buffer+16, ofp_tx_room(self)-16);
 				if(unitlength == 0){
 					return OFP_NOOP;
@@ -568,7 +553,7 @@ enum ofp_pcb_status ofp13_multipart_complete(struct ofp_pcb *self){
 					length = 64;
 				}
 				char reply[12+64];
-				struct ofp_error_msg err = {};
+				struct ofp_error_msg err = {0};
 				err.header.version = mpreq.header.version;
 				err.header.type = OFPT13_ERROR;
 				err.header.length = htons(12+length);
@@ -589,9 +574,9 @@ enum ofp_pcb_status ofp13_multipart_complete(struct ofp_pcb *self){
 	return OFP_OK;
 }
 
-
-static uint16_t add_ofp13_flow(const struct ofp13_flow_mod *req){
-	if(req->table_id > OFPP13_MAX){
+static uint16_t add_ofp13_flow(const void *creq){
+	const struct ofp13_flow_mod *req = creq;
+	if(req->table_id > OFPTT13_MAX){
 		return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_BAD_TABLE_ID);
 	}
 	if((req->flags & htons(OFPFF13_CHECK_OVERLAP)) != 0){
@@ -627,7 +612,7 @@ static uint16_t add_ofp13_flow(const struct ofp13_flow_mod *req){
 		.cookie = req->cookie,
 		.cookie_mask = req->cookie_mask,
 		.oxm_length = ntohs(req->match.length)-4,
-		.oxm = req->match.oxm_fields,
+		.oxm = (void*)req->match.oxm_fields,
 	};
 	int found = filter_ofp13_flow(0, filter);
 	int n = found;
@@ -649,8 +634,8 @@ static uint16_t add_ofp13_flow(const struct ofp13_flow_mod *req){
 	uint16_t offset = offsetof(struct ofp13_flow_mod, match) + ALIGN8(ntohs(req->match.length));
 	uint16_t oxm_len = ntohs(req->match.length) - 4;
 	uint16_t ops_len = ntohs(req->header.length) - offset;
-	const char *oxm = malloc(oxm_len);
-	const char *ops = malloc(ops_len);
+	char *oxm = malloc(oxm_len);
+	char *ops = malloc(ops_len);
 	if(oxm==NULL || ops==NULL){
 		if(oxm!=NULL) free(oxm);
 		if(ops!=NULL) free(ops);
@@ -662,18 +647,23 @@ static uint16_t add_ofp13_flow(const struct ofp13_flow_mod *req){
 	fx_flows[n].priority = ntohs(req->priority);
 	fx_flows[n].flags = ntohs(req->flags);
 	if(fx_flows[n].oxm){
-		free(fx_flows[n].oxm);
+		free((char*)fx_flows[n].oxm);
 	}
 	memcpy(oxm, req->match.oxm_fields, oxm_len);
 	fx_flows[n].oxm = oxm;
 	fx_flows[n].oxm_length = oxm_len;
 	if(fx_flows[n].ops){
-		free(fx_flows[n].ops);
+		free((char*)fx_flows[n].ops);
 	}
 	memcpy(ops, (const char*)req + offset, ops_len);
 	fx_flows[n].ops = ops;
 	fx_flows[n].ops_length = ops_len;
 	fx_flows[n].cookie = req->cookie;
+	
+	fx_flow_timeouts[n].hard_timeout = req->hard_timeout;
+	fx_flow_timeouts[n].idle_timeout = req->idle_timeout;
+	fx_flow_timeouts[n].init = sys_get_ms64();
+	fx_flow_timeouts[n].update = sys_get_ms();
 	
 	if(found < 0 || (req->flags & htons(OFPFF13_RESET_COUNTS)) != 0){
 		fx_flow_counts[n].byte_count = 0;
@@ -685,11 +675,11 @@ static uint16_t add_ofp13_flow(const struct ofp13_flow_mod *req){
 	return 0;
 }
 
-static uint16_t modify_ofp13_flow(const struct ofp13_flow_mod *req, bool strict){
-	if(req->table_id > OFPP13_MAX){
+static uint16_t modify_ofp13_flow(const void *creq, bool strict){
+	const struct ofp13_flow_mod *req = creq;
+	if(req->table_id > OFPTT13_MAX){
 		return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_BAD_TABLE_ID);
 	}
-
 	struct ofp13_filter filter = {
 		.strict = strict,
 		.table_id = req->table_id,
@@ -699,7 +689,7 @@ static uint16_t modify_ofp13_flow(const struct ofp13_flow_mod *req, bool strict)
 		.cookie = req->cookie,
 		.cookie_mask = req->cookie_mask,
 		.oxm_length = ntohs(req->match.length)-4,
-		.oxm = req->match.oxm_fields,
+		.oxm = (void*)req->match.oxm_fields,
 	};
 
 	uint16_t inst_offset = offsetof(struct ofp13_flow_mod, match) + ALIGN8(ntohs(req->match.length));
@@ -709,22 +699,23 @@ static uint16_t modify_ofp13_flow(const struct ofp13_flow_mod *req, bool strict)
 	for(int i=filter_ofp13_flow(0, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
 		count++;
 	}
-	const char **tmp = malloc(count*sizeof(const char*));
+	void **tmp = malloc(count*sizeof(char*));
 	for(int i=0; i<count; i++){
 		tmp[i] = malloc(inst_length);
 		if(tmp[i]==NULL){
 			for(int j=0; j<i; j++){
 				free(tmp[j]);
 			}
-			return ofp_set_error(req, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_UNKNOWN);
+			return ofp_set_error(creq, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_UNKNOWN);
 		}
 	}
 	for(int i=filter_ofp13_flow(0, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
 		if(fx_flows[i].ops != NULL){
 			free(fx_flows[i].ops);
 		}
-		fx_flows[i].ops = tmp[--count];
-		memcpy(fx_flows[i].ops, (const char*)req + inst_offset, inst_length);
+		void *ops = tmp[--count];
+		memcpy(ops, (void*)((uintptr_t)creq + inst_offset), inst_length);
+		fx_flows[i].ops = ops;
 		fx_flows[i].ops_length = inst_length;
 		
 		if((req->flags & htons(OFPFF13_RESET_COUNTS)) != 0){
@@ -739,7 +730,8 @@ static uint16_t modify_ofp13_flow(const struct ofp13_flow_mod *req, bool strict)
 	return 0;
 }
 
-static uint16_t delete_ofp13_flow(const struct ofp13_flow_mod *req, bool strict){
+static uint16_t delete_ofp13_flow(const void *creq, bool strict){
+	const struct ofp13_flow_mod *req = creq;
 	struct ofp13_filter filter = {
 		.strict = strict,
 		.table_id = req->table_id,
@@ -749,16 +741,16 @@ static uint16_t delete_ofp13_flow(const struct ofp13_flow_mod *req, bool strict)
 		.cookie = req->cookie,
 		.cookie_mask = req->cookie_mask,
 		.oxm_length = ntohs(req->match.length)-4,
-		.oxm = req->match.oxm_fields,
+		.oxm = (void*)req->match.oxm_fields,
 	};
 	for(int i=filter_ofp13_flow(0, filter); i>=0; i=filter_ofp13_flow(i+1, filter)){
-		if(fx_flows[i].flags & OFPFF13_SEND_FLOW_REM != 0){
+		if((fx_flows[i].flags & OFPFF13_SEND_FLOW_REM) != 0){
 			uint8_t send_bits = 0;
-			for(int i=0; i<MAX_CONTROLLERS; i++){
-				send_bits |= 1<<i;
+			for(int j=0; j<MAX_CONTROLLERS; j++){
+				send_bits |= 1<<j;
 			}
 			fx_flows[i].send_bits = send_bits;
-			// TODO: trigger notification
+			fx_flows[i].reason = OFPRR13_DELETE;
 		} else {
 			if(fx_flows[i].oxm != NULL){
 				free(fx_flows[i].oxm);
@@ -772,7 +764,8 @@ static uint16_t delete_ofp13_flow(const struct ofp13_flow_mod *req, bool strict)
 	return 0;
 }
 
-uint16_t mod_ofp13_flow(struct ofp13_flow_mod *req){
+static uint16_t mod_ofp13_flow(const void *creq){
+	const struct ofp13_flow_mod *req = creq;
 	switch(req->command){
 		case OFPFC13_ADD:
 			return add_ofp13_flow(req);
@@ -794,19 +787,23 @@ uint16_t mod_ofp13_flow(struct ofp13_flow_mod *req){
 	}
 }
 
-static uint16_t add_ofp13_meter(struct ofp13_meter_mod *req){
-	if(ntohl(req->meter_id)==OFPM13_ALL){
-		return ofp_set_error(req, OFPET13_METER_MOD_FAILED, OFPMMFC13_INVALID_METER);
+static uint16_t add_ofp13_meter(const void *cmsg){
+	struct ofp13_meter_mod req;
+	memcpy(&req, cmsg, sizeof(struct ofp13_meter_mod));
+	
+	if(ntohl(req.meter_id)==OFPM13_ALL){
+		return ofp_set_error(cmsg, OFPET13_METER_MOD_FAILED, OFPMMFC13_INVALID_METER);
 	}
 	// XXX: todo
-	return ofp_set_error(req, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_METERS);
+	return ofp_set_error(cmsg, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_METERS);
 }
 
-static uint16_t modify_ofp13_meter(struct ofp13_meter_mod *req){
+static uint16_t modify_ofp13_meter(const void *cmsg){
+	const struct ofp13_meter_mod *req = cmsg;
 	int count = 0;
-	const char *pos = req->bands;
-	while(pos < (char*)req + htons(req->header.length)){
-		struct ofp13_meter_band_header *band = pos;
+	uintptr_t pos = (uintptr_t)req->bands;
+	while(pos < (uintptr_t)cmsg + htons(req->header.length)){
+		struct ofp13_meter_band_header *band = (void*)pos;
 		count++;
 		pos += ntohs(band->len);
 	}
@@ -820,21 +817,24 @@ static uint16_t modify_ofp13_meter(struct ofp13_meter_mod *req){
 		}
 	}
 	if(count > 0){
-		return ofp_set_error(req, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_BANDS);
+		return ofp_set_error(cmsg, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_BANDS);
 	}
 	// XXX: implement
 	return 0;
 }
 
-static uint16_t delete_ofp13_meter(struct ofp13_meter_mod *req){
-	uint32_t meter_id = ntohl(req->meter_id);
+static uint16_t delete_ofp13_meter(const void *cmsg){
+	struct ofp13_meter_mod req;
+	memcpy(&req, cmsg, sizeof(struct ofp13_meter_mod));
+	
+	uint32_t meter_id = ntohl(req.meter_id);
 	if(meter_id == OFPM13_ALL){
 		for(int i=0; i<MAX_METER_BANDS; i++){
 			fx_meter_bands[i].meter_id = 0;
 		}
 	} else if(meter_id <= OFPM13_MAX){
 		for(int i=0; i<MAX_METER_BANDS; i++){
-			if(fx_meter_bands[i].meter_id == req->meter_id){
+			if(fx_meter_bands[i].meter_id == req.meter_id){
 				fx_meter_bands[i].meter_id = 0;
 			}
 		}
@@ -843,28 +843,34 @@ static uint16_t delete_ofp13_meter(struct ofp13_meter_mod *req){
 	return 0;
 }
 
-uint16_t mod_ofp13_meter(struct ofp13_meter_mod *req){
-	uint32_t meter_id = ntohl(req->meter_id);
+static uint16_t mod_ofp13_meter(const void *cmsg){
+	struct ofp13_meter_mod req;
+	memcpy(&req, cmsg, sizeof(struct ofp13_meter_mod));
+	
+	uint32_t meter_id = ntohl(req.meter_id);
 	// meter_id starts from 1
 	if(meter_id==0 || (meter_id>OFPM13_MAX
 			&& meter_id!=OFPM13_SLOWPATH && meter_id!=OFPM13_CONTROLLER
 			&& meter_id!=OFPM13_ALL)){
-		return ofp_set_error(req, OFPET13_METER_MOD_FAILED, OFPMMFC13_INVALID_METER);
+		return ofp_set_error(cmsg, OFPET13_METER_MOD_FAILED, OFPMMFC13_INVALID_METER);
 	}
-	switch(ntohs(req->command)){
+	switch(ntohs(req.command)){
 		case OFPMC13_ADD:
-			return add_ofp13_meter(req);
+			return add_ofp13_meter(cmsg);
 		case OFPMC13_MODIFY:
-			return modify_ofp13_meter(req);
+			return modify_ofp13_meter(cmsg);
 		case OFPMC13_DELETE:
-			return delete_ofp13_meter(req);
+			return delete_ofp13_meter(cmsg);
 		default:
-			return ofp_set_error(req, OFPET13_METER_MOD_FAILED, OFPFMFC13_BAD_COMMAND);
+			return ofp_set_error(cmsg, OFPET13_METER_MOD_FAILED, OFPFMFC13_BAD_COMMAND);
 	}
 }
 
-uint16_t mod_ofp13_group(struct ofp13_group_mod *req){
-	uint32_t group_id = ntohl(req->group_id);
+static uint16_t mod_ofp13_group(const void *cmsg){
+	struct ofp13_group_mod req;
+	memcpy(&req, cmsg, sizeof(struct ofp13_group_mod));
+	
+	uint32_t group_id = ntohl(req.group_id);
 	if(group_id > OFPG13_MAX){
 		
 	}
@@ -872,7 +878,7 @@ uint16_t mod_ofp13_group(struct ofp13_group_mod *req){
 	return 0;
 }
 
-static int bits_on(const char *data, int len){
+static int bits_on(const uint8_t *data, int len){
 	int r = 0;
 	for(int i=0; i<len; i++){
 		if(data[i]&0x80) r++;
@@ -887,36 +893,34 @@ static int bits_on(const char *data, int len){
 	return r;
 }
 
-int match_frame_by_oxm(struct fx_packet *packet, struct fx_packet_oob *oob, const char *oxm, uint16_t oxm_length){
+int match_frame_by_oxm(const struct fx_packet *packet, const struct fx_packet_oob *oob, const void *oxm, uint16_t oxm_length){
 	int count = 0;
-	for(const char *pos=oxm; pos<oxm+oxm_length; pos+=4+(uint8_t)oxm[3]){
-		if((uint8_t)pos[0]==0x80 && (uint8_t)pos[1]==0x00){
-			int has_mask = (uint8_t)pos[2] & 0x01;
-			switch((uint8_t)pos[2]>>1){
+	for(const uint8_t *pos=oxm; pos<(const uint8_t*)oxm+oxm_length; pos+=4+pos[3]){
+		if(pos[0]==0x80 && pos[1]==0x00){
+			int has_mask = pos[2] & 0x01;
+			switch(pos[2]>>1){
 				case OFPXMT13_OFB_IN_PORT:
-				if(memcmp(&packet->in_port, pos+4, 4)!=0){
+				if(packet->in_port != *(uint32_t*)((uintptr_t)pos + 4)){
 					return -1;
 				}
 				break;
 				
 				case OFPXMT13_OFB_IN_PHY_PORT:
-				if(memcmp(&packet->in_phy_port, pos+4, 4) != 0){
+				if(packet->in_phy_port != *(uint32_t*)((uintptr_t)pos + 4)){
 					return -1;
 				}
 				break;
 				
 				case OFPXMT13_OFB_METADATA:
 				{
-					uint64_t value;
+					uint64_t value = packet->metadata;
 					if(has_mask){
-						memcpy(&value, pos+12, 8);
-						value &= packet->metadata;
+						value &= *(uint64_t*)((uintptr_t)pos + 12);
 						count += bits_on(pos+12, 8);
 					} else {
-						value = packet->metadata;
 						count += 64;
 					}
-					if(memcmp(&value, pos+4, 8)!=0){
+					if(value != *(uint64_t*)((uintptr_t)pos + 4)){
 						return -1;
 					}
 				}
@@ -959,7 +963,7 @@ int match_frame_by_oxm(struct fx_packet *packet, struct fx_packet_oob *oob, cons
 				break;
 				
 				case OFPXMT13_OFB_ETH_TYPE:
-				if(memcmp(oob->eth_type, pos+4, 2) != 0){
+				if(oob->eth_type != *(uint16_t*)((uintptr_t)pos + 4)){
 					return -1;
 				}
 				break;
@@ -1004,7 +1008,7 @@ int match_frame_by_oxm(struct fx_packet *packet, struct fx_packet_oob *oob, cons
 				{
 					uint8_t dscp;
 					if(oob->eth_type == htons(0x0800)){
-						struct ip_hdr *hdr = packet->data->payload + oob->eth_offset;
+						struct ip_hdr *hdr = (void*)((uintptr_t)packet->data->payload + oob->eth_offset);
 						dscp = IPH_TOS(hdr)>>2;
 					} else if(oob->eth_type == htons(0x86dd)){
 						return -1; // TODO
@@ -1021,7 +1025,7 @@ int match_frame_by_oxm(struct fx_packet *packet, struct fx_packet_oob *oob, cons
 				{
 					uint8_t ecn;
 					if(oob->eth_type == htons(0x0800)){
-						struct ip_hdr *hdr = packet->data->payload + oob->eth_offset;
+						struct ip_hdr *hdr = (void*)((uintptr_t)packet->data->payload + oob->eth_offset);
 						ecn = IPH_TOS(hdr)&0x03;
 					} else if(oob->eth_type == htons(0x86dd)){
 						return -1; // TODO
@@ -1036,7 +1040,7 @@ int match_frame_by_oxm(struct fx_packet *packet, struct fx_packet_oob *oob, cons
 				
 				case OFPXMT13_OFB_IPV4_SRC:
 				if(oob->eth_type == htons(0x0800)){
-					struct ip_hdr *hdr = packet->data->payload + oob->eth_offset;
+					struct ip_hdr *hdr = (void*)((uintptr_t)packet->data->payload + oob->eth_offset);
 					uint32_t value;
 					if(has_mask){
 						memcpy(&value, pos+8, 4);
@@ -1054,7 +1058,7 @@ int match_frame_by_oxm(struct fx_packet *packet, struct fx_packet_oob *oob, cons
 				
 				case OFPXMT13_OFB_IPV4_DST:
 				if(oob->eth_type == htons(0x0800)){
-					struct ip_hdr *hdr = packet->data->payload + oob->eth_offset;
+					struct ip_hdr *hdr = (void*)((uintptr_t)packet->data->payload + oob->eth_offset);
 					uint32_t value;
 					if(has_mask){
 						memcpy(&value, pos+8, 4);
@@ -1075,13 +1079,13 @@ int match_frame_by_oxm(struct fx_packet *packet, struct fx_packet_oob *oob, cons
 					if(oob->eth_type != htons(0x0800)){
 						return -1;
 					}
-					struct ip_hdr *iphdr = (struct ip_hdr *)(packet->data->payload + oob->eth_offset);
+					struct ip_hdr *iphdr = (void*)((uintptr_t)packet->data->payload + oob->eth_offset);
 					if(IPH_PROTO(iphdr)!=6){
 						return -1;
 					}
-					struct tcp_hdr *tcphdr = (struct tcp_hdr *)(packet->data->payload
+					struct tcp_hdr *tcphdr = (void*)((uintptr_t)packet->data->payload
 						+ oob->eth_offset + IPH_HL(iphdr) * 4);
-					if(memcmp(&(tcphdr->src), pos+4, 2) != 0){
+					if(tcphdr->src != *(uint16_t*)((uintptr_t)pos + 4)){
 						return -1;
 					}
 				}
@@ -1092,11 +1096,11 @@ int match_frame_by_oxm(struct fx_packet *packet, struct fx_packet_oob *oob, cons
 					if(oob->eth_type != htons(0x0800)){
 						return -1;
 					}
-					struct ip_hdr *iphdr = (struct ip_hdr *)(packet->data->payload + oob->eth_offset);
+					struct ip_hdr *iphdr = (void*)((uintptr_t)packet->data->payload + oob->eth_offset);
 					if(IPH_PROTO(iphdr)!=6){
 						return -1;
 					}
-					struct tcp_hdr *tcphdr = (struct tcp_hdr *)(packet->data->payload
+					struct tcp_hdr *tcphdr = (void*)((uintptr_t)packet->data->payload
 						+ oob->eth_offset + IPH_HL(iphdr) * 4);
 					if(memcmp(&(tcphdr->dest), pos+4, 2) != 0){
 						return -1;
@@ -1109,11 +1113,11 @@ int match_frame_by_oxm(struct fx_packet *packet, struct fx_packet_oob *oob, cons
 					if(oob->eth_type != htons(0x0800)){
 						return -1;
 					}
-					struct ip_hdr *iphdr = (struct ip_hdr *)(packet->data->payload + oob->eth_offset);
+					struct ip_hdr *iphdr = (void*)((uintptr_t)packet->data->payload + oob->eth_offset);
 					if(IPH_PROTO(iphdr)!=6){
 						return -1;
 					}
-					struct udp_hdr *udphdr = (struct udp_hdr *)(packet->data->payload
+					struct udp_hdr *udphdr = (void*)((uintptr_t)packet->data->payload
 						+ oob->eth_offset + IPH_HL(iphdr) * 4);
 					if(memcmp(&(udphdr->src), pos+4, 2) != 0){
 						return -1;
@@ -1126,11 +1130,11 @@ int match_frame_by_oxm(struct fx_packet *packet, struct fx_packet_oob *oob, cons
 					if(oob->eth_type != htons(0x0800)){
 						return -1;
 					}
-					struct ip_hdr *iphdr = (struct ip_hdr *)(packet->data->payload + oob->eth_offset);
+					struct ip_hdr *iphdr = (void*)((uintptr_t)packet->data->payload + oob->eth_offset);
 					if(IPH_PROTO(iphdr)!=6){
 						return -1;
 					}
-					struct udp_hdr *udphdr = (struct udp_hdr *)(packet->data->payload
+					struct udp_hdr *udphdr = (void*)((uintptr_t)packet->data->payload
 						+ oob->eth_offset + IPH_HL(iphdr) * 4);
 					if(memcmp(&(udphdr->dest), pos+4, 2) != 0){
 						return -1;
@@ -1150,7 +1154,7 @@ static void send_ofp13_packet_in(struct fx_packet *packet, struct ofp13_packet_i
 	
 	base.header.type = OFPT13_PACKET_IN;
 	base.header.version = 4;
-	base.total_len = htons(packet->data->tot_len);
+	base.total_len = packet->data->tot_len;
 	
 	char oxm[32];
 	uint16_t oxm_length = 0;
@@ -1227,11 +1231,59 @@ void check_ofp13_packet_in(){
 	}
 }
 
-static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob *oob, struct ofp13_action_header *act, int flow){
+static void set_field(struct fx_packet *packet, struct fx_packet_oob *oob, const void *oxm){
+	uint8_t *data = packet->data->payload;
+	const uint8_t *o = oxm;
+	switch(*(uint32_t*)oxm){
+		// OXM_OF_IN_PORT, OXM_OF_IN_PHY_PORT not valid by spec.
+		// OXM_OF_METADATA not valid by spec.
+		case OXM_OF_ETH_DST_W:
+		for(int i=0; i<6; i++){
+			data[i] &= ~o[10+i];
+			data[i] |= o[4+i] & o[10+i];
+		}
+		break;
+		
+		case OXM_OF_ETH_DST:
+		for(int i=0; i<6; i++){
+			data[i] = o[4+i];
+		}
+		break;
+		
+		case OXM_OF_ETH_SRC_W:
+		for(int i=0; i<6; i++){
+			data[i+6] &= ~o[10+i];
+			data[i+6] |= o[4+i] & o[10+i];
+		}
+		break;
+		
+		case OXM_OF_ETH_SRC:
+		for(int i=0; i<6; i++){
+			data[i+6] = o[4+i];
+		}
+		break;
+		
+		case OXM_OF_ETH_TYPE:
+		{
+			uint16_t i = oob->eth_offset-2;
+			data[i] = o[4];
+			data[i+1] = o[5];
+			create_oob(packet->data, oob);
+		}
+		break;
+		
+		// TODO: implement more
+		
+		// OXM_OF_IPV6_EXTDR not valid by spec.
+	}
+}
+
+static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob *oob, void *action, int flow){
+	struct ofp13_action_header *act = action;
 	switch(ntohs(act->type)){
 		case OFPAT13_OUTPUT:
 		{
-			struct ofp13_action_output *out = act;
+			struct ofp13_action_output *out = action;
 			uint32_t port = ntohl(out->port) - 1; // port starts from 1
 			if(port < OFPP13_MAX){
 				if(out->port != packet->in_port && port<4 && Zodiac_Config.of_port[port]==1){
@@ -1244,8 +1296,8 @@ static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob 
 			}else if(out->port == htonl(OFPP13_ALL) || out->port == htonl(OFPP13_FLOOD) || out->port == htonl(OFPP13_NORMAL)){
 				if(disable_ofp_pipeline == false){
 					uint8_t p = 0;
-					for(int i=0; i<4; i++){ // XXX: num port hardcoded
-						if(Zodiac_Config.of_port[i]==1 && i != ntohl(packet->in_port)-1){
+					for(int i=0; i<MAX_PORTS; i++){
+						if(Zodiac_Config.of_port[i]==1 && i != (int)ntohl(packet->in_port)-1){
 							p |= 1<<i;
 							fx_port_counts[i].tx_packets++;
 						}
@@ -1294,12 +1346,7 @@ static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob 
 							pin->table_id = msg.table_id;
 							pin->cookie = msg.cookie;
 							
-							struct pbuf *data = pbuf_alloc(PBUF_RAW, packet->data->tot_len, PBUF_POOL);
-							if (data == NULL)
-							{
-								printf("Unable to allocate pbuf - Packet In\r\n");
-								break;
-							}
+							struct pbuf *data = pbuf_alloc(PBUF_RAW, packet->data->tot_len, PBUF_RAM);
 							pbuf_copy(data, packet->data);
 							pin->packet = *packet;
 							pin->packet.data = data;
@@ -1321,42 +1368,40 @@ static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob 
 		
 		case OFPAT13_PUSH_VLAN:
 		{
-			struct ofp13_action_push *ap = act;
+			struct ofp13_action_push *ap = action;
 			uint16_t vlan = oob->vlan & htons(0xEFFF); // clear CFI
 			// pbuf can't grow as of lwip 1.4
-			struct pbuf *grow = pbuf_alloc(PBUF_RAW,
-				packet->data->tot_len + 4, PBUF_POOL);
+			struct pbuf *grow = pbuf_alloc(PBUF_RAW, packet->data->tot_len + 4, PBUF_POOL);
 			pbuf_copy_partial(packet->data, grow->payload, 12, 0);
-			memcpy(grow->payload+12, &ap->ethertype, 2);
-			memcpy(grow->payload+14, &vlan, 2);
-			pbuf_copy_partial(packet->data, grow->payload+16, packet->data->tot_len - 12, 12);
+			*(uint16_t*)((uintptr_t)grow->payload + 12) = ap->ethertype;
+			*(uint16_t*)((uintptr_t)grow->payload + 14) = vlan;
+			pbuf_copy_partial(packet->data, (void*)((uintptr_t)grow->payload + 16), packet->data->tot_len - 12, 12);
 			pbuf_free(packet->data);
 			packet->data = grow;
-			*oob = create_oob(packet);
+			create_oob(packet->data, oob);
 		}
 		break;
 		
 		case OFPAT13_POP_VLAN:
-		if(oob->vlan & htons(0x1000) != 0){
+		if((oob->vlan & htons(0x1000)) != 0){
 			struct pbuf *data = packet->data;
-			memmove(data->payload+12, data->payload+16, data->tot_len - 16);
+			memmove((void*)((uintptr_t)data->payload + 12), (void*)((uintptr_t)data->payload + 16), data->tot_len - 16);
 			pbuf_realloc(data, data->tot_len-16);
-			*oob = create_oob(packet);
+			create_oob(packet->data, oob);
 		}
 		break;
 		
 		case OFPAT13_SET_NW_TTL:
 		if(oob->eth_type == htons(0x0806)){
-			struct ofp13_action_nw_ttl *an = act;
-			struct ip_hdr *hdr = packet->data->payload + oob->eth_offset;
+			struct ofp13_action_nw_ttl *an = action;
+			struct ip_hdr *hdr = (void*)((uintptr_t)packet->data->payload + oob->eth_offset);
 			IPH_TTL_SET(hdr, an->nw_ttl);
 		} // TODO: IPv6, MPLS
 		break;
 		
 		case OFPAT13_DEC_NW_TTL:
 		if(oob->eth_type == htons(0x0806)){
-			struct ofp13_action_nw_ttl *an = act;
-			struct ip_hdr *hdr = packet->data->payload + oob->eth_offset;
+			struct ip_hdr *hdr = (void*)((uintptr_t)packet->data->payload + oob->eth_offset);
 			uint8_t ttl = IPH_TTL(hdr);
 			if(ttl == 1){
 				struct ofp13_packet_in msg = {};
@@ -1393,7 +1438,7 @@ static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob 
 							pin->table_id = msg.table_id;
 							pin->cookie = msg.cookie;
 							
-							struct pbuf *data = pbuf_alloc(PBUF_RAW, packet->data->tot_len, PBUF_POOL);
+							struct pbuf *data = pbuf_alloc(PBUF_RAW, packet->data->tot_len, PBUF_RAM);
 							pbuf_copy(data, packet->data);
 							pin->packet = *packet;
 							pin->packet.data = data;
@@ -1430,63 +1475,62 @@ static const uint16_t actset_index[] = {
 };
 
 void execute_ofp13_flow(struct fx_packet *packet, struct fx_packet_oob *oob, int flow){
-	const char* insts[8] = {};
-	const char *pos = fx_flows[flow].ops;
-	while(pos < fx_flows[flow].ops+fx_flows[flow].ops_length){
-		struct ofp13_instruction *hdr = (struct ofp13_instruction*)pos;
+	void* insts[8] = {};
+	uintptr_t pos = (uintptr_t)fx_flows[flow].ops;
+	while(pos < (uintptr_t)fx_flows[flow].ops + fx_flows[flow].ops_length){
+		struct ofp13_instruction *hdr = (void*)pos;
 		uint16_t itype = ntohs(hdr->type);
 		if(itype < 8){
-			insts[itype] = pos;
+			insts[itype] = (void*)pos;
 		}
 		pos += ntohs(hdr->len);
 	}
 	
-	pos = insts[OFPIT13_METER];
-	if(pos != NULL){
+	if(insts[OFPIT13_METER] != NULL){
 		// todo
 	}
-	pos = insts[OFPIT13_APPLY_ACTIONS];
-	if(pos != NULL){
-		struct ofp13_instruction_actions *ia = pos;
-		const char *p = ia->actions;
-		while(p < pos+ntohs(ia->len)){
-			struct ofp13_action_header *act = p;
-			execute_ofp13_action(packet, oob, act, flow);
+	if(insts[OFPIT13_APPLY_ACTIONS] != NULL){
+		struct ofp13_instruction_actions *ia = insts[OFPIT13_APPLY_ACTIONS];
+		uintptr_t p = (uintptr_t)ia->actions;
+		while(p < (uintptr_t)insts[OFPIT13_APPLY_ACTIONS] + ntohs(ia->len)){
+			struct ofp13_action_header *act = (void*)p;
+			execute_ofp13_action(packet, oob, (void*)p, flow);
 			p += ntohs(act->len);
 		}
 	}
-	pos = insts[OFPIT13_CLEAR_ACTIONS];
-	if(pos != NULL){
-		memset(oob->action_set, 0, sizeof(void*)*16);
+	if(insts[OFPIT13_CLEAR_ACTIONS] != NULL){
+		memset(oob->action_set, 0, sizeof(void *) * 16);
 		if(oob->action_set_oxm != NULL){
 			free(oob->action_set_oxm);
 			oob->action_set_oxm = NULL;
 		}
 		oob->action_set_oxm_length = 0;
 	}
-	pos = insts[OFPIT13_WRITE_ACTIONS];
-	if(pos != NULL){
-		struct ofp13_instruction_actions *ia = pos;
-		const char *p = ia->actions;
-		while(p < pos+ntohs(ia->len)){
-			struct ofp13_action_header *act = p;
-			for(int i=0; i<sizeof(actset_index)/sizeof(uint16_t); i++){
-				if(actset_index[i] == ntohs(act->type)){
-					oob->action_set[i] = p;
+	if(insts[OFPIT13_WRITE_ACTIONS] != NULL){
+		struct ofp13_instruction_actions *ia = insts[OFPIT13_WRITE_ACTIONS];
+		uintptr_t p = (uintptr_t)ia->actions;
+		while(p < (uintptr_t)insts[OFPIT13_WRITE_ACTIONS] + ntohs(ia->len)){
+			struct ofp13_action_header *act = (void*)p;
+			if(ntohs(act->type) == OFPAT13_SET_FIELD){
+				struct ofp13_action_set_field *setf = (void*)p;
+				// scan oob->action_set
+			}else{
+				for(uintptr_t i=0; i<sizeof(actset_index)/sizeof(uint16_t); i++){
+					if(actset_index[i] == ntohs(act->type)){
+						oob->action_set[i] = (void*)p;
+					}
 				}
 			}
 			p += ntohs(act->len);
 		}
 	}
-	pos = insts[OFPIT13_WRITE_METADATA];
-	if(pos != NULL){
-		struct ofp13_instruction_write_metadata *iw = pos;
+	if(insts[OFPIT13_WRITE_METADATA] != NULL){
+		struct ofp13_instruction_write_metadata *iw = insts[OFPIT13_WRITE_METADATA];
 		packet->metadata &= ~iw->metadata_mask;
 		packet->metadata |= (iw->metadata & iw->metadata_mask);
 	}
-	pos = insts[OFPIT13_GOTO_TABLE];
-	if(pos != NULL){
-		struct ofp13_instruction_goto_table *ig = pos;
+	if(insts[OFPIT13_GOTO_TABLE] != NULL){
+		struct ofp13_instruction_goto_table *ig = insts[OFPIT13_GOTO_TABLE];
 		uint8_t table = ig->table_id;
 		if(table < MAX_TABLES){
 			flow = lookup_fx_table(packet, oob, table);
@@ -1498,12 +1542,12 @@ void execute_ofp13_flow(struct fx_packet *packet, struct fx_packet_oob *oob, int
 			fx_flow_counts[flow].packet_count++;
 			fx_flow_counts[flow].byte_count+=packet->data->tot_len;
 			fx_flow_timeouts[flow].update = sys_get_ms();
-			execute_fx_flow(packet, oob, flow);
+			execute_ofp13_flow(packet, oob, flow);
 		}
 		return;
 	}
 	// execute action set
-	for(int i=0; i<sizeof(actset_index)/sizeof(uint16_t); i++){
+	for(uintptr_t i=0; i<sizeof(actset_index)/sizeof(uint16_t); i++){
 		if(oob->action_set[i] == NULL){
 			continue;
 		}
@@ -1565,11 +1609,11 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 		if(ofp_rx_length(self) < 12 || ofp_tx_room(self) < 12+64){
 			return OFP_NOOP;
 		} else {
-			struct ofp13_switch_config req;
-			ofp_rx_read(self, &req, 12);
+			struct ofp13_switch_config msg;
+			ofp_rx_read(self, &msg, 12);
 			ofp_rx_read(self, ofp_buffer, length-12); //safety
-			fx_switch.flags = ntohs(req.flags); // XXX: add tcp_reass() support
-			fx_switch.miss_send_len = ntohs(req.miss_send_len);
+			fx_switch.flags = ntohs(msg.flags); // XXX: add tcp_reass() support
+			fx_switch.miss_send_len = ntohs(msg.miss_send_len);
 			// XXX: ofp_error may be raised
 		}
 		break;
@@ -1579,7 +1623,7 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 			return OFP_NOOP;
 		}else{
 			ofp_rx_read(self, ofp_buffer, length);
-			struct ofp13_packet_out *hint = ofp_buffer;
+			struct ofp13_packet_out *hint = (void*)ofp_buffer;
 			
 			struct fx_packet packet = {
 				.in_port = hint->in_port,
@@ -1607,24 +1651,19 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 				uint16_t len = offsetof(struct ofp13_packet_out, actions);
 				len += ntohs(hint->actions_len);
 				struct pbuf *data = pbuf_alloc(PBUF_RAW, length-len, PBUF_POOL);
-				if (data == NULL)
-				{
-					printf("Unable to allocate pbuf - Packet Out\r\n");	
-					break;
-				}
 				memcpy(data->payload, hint+length-len, length-len);
 				packet.data = data;
 			}
-			struct fx_packet_oob oob = create_oob(packet.data);
+			struct fx_packet_oob oob;
+			create_oob(packet.data, &oob);
 			
-			const char *p = hint->actions;
-			while(p < hint->actions+ntohs(hint->actions_len)){
-				struct ofp13_action_header *act = p;
+			uintptr_t p = (uintptr_t)hint->actions;
+			while(p < (uintptr_t)hint->actions + ntohs(hint->actions_len)){
+				struct ofp13_action_header *act = (void*)p;
 				execute_ofp13_action(&packet, &oob, act, -1);
-				p += ntohs(&act->len);
+				p += ntohs(act->len);
 			}
 			pbuf_free(packet.data); // free that obtained pbuf
-					
 		}
 		break;
 
@@ -1633,7 +1672,7 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 			return OFP_NOOP;
 		} else {
 			ofp_rx_read(self, ofp_buffer, length);
-			uint16_t len = mod_ofp13_flow((struct ofp13_flow_mod*)ofp_buffer);
+			uint16_t len = mod_ofp13_flow(ofp_buffer);
 			if(len > 0){
 				return ofp_tx_write(self, ofp_buffer, len);
 			}
@@ -1645,7 +1684,7 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 			return OFP_NOOP;
 		} else {
 			ofp_rx_read(self, ofp_buffer, length);
-			uint16_t len = mod_ofp13_group((struct ofp13_group_mod*)ofp_buffer);
+			uint16_t len = mod_ofp13_group(ofp_buffer);
 			if(len > 0){
 				return ofp_tx_write(self, ofp_buffer, len);
 			}
@@ -1657,7 +1696,7 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 			return OFP_NOOP;
 		} else {
 			ofp_rx_read(self, ofp_buffer, length);
-			uint16_t len = mod_ofp13_meter((struct ofp13_meter_mod*)ofp_buffer);
+			uint16_t len = mod_ofp13_meter(ofp_buffer);
 			if(len > 0){
 				return ofp_tx_write(self, ofp_buffer, len);
 			}
@@ -1676,5 +1715,141 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 		break;
 	}
 	return OFP_OK;
+}
+
+void timeout_ofp13_flows(){
+	uint32_t send_bits = 0;
+	for(int i=0; i<MAX_CONTROLLERS; i++){
+		if(controllers[i].ofp.negotiated){
+			send_bits |= 1<<i;
+		}
+	}
+	for(int i=0; i<iLastFlow; i++){
+		if((fx_flows[i].send_bits & FX_FLOW_ACTIVE) == 0){
+			// already removed
+			continue;
+		}
+		if(fx_flow_timeouts[i].hard_timeout != 0){
+			uint32_t timeout = fx_flow_timeouts[i].init + fx_flow_timeouts[i].hard_timeout;
+			if(timeout - sys_get_ms() > 0x80000000){
+				if((fx_flows[i].flags & OFPFF13_SEND_FLOW_REM) != 0 ){
+					fx_flows[i].send_bits = send_bits;
+				} else {
+					fx_flows[i].send_bits = 0;
+				}
+			}
+		}
+		if(fx_flow_timeouts[i].idle_timeout != 0){
+			uint32_t timeout = fx_flow_timeouts[i].update + fx_flow_timeouts[i].idle_timeout;
+			if(timeout - sys_get_ms() > 0x80000000){
+				if((fx_flows[i].flags & OFPFF13_SEND_FLOW_REM) != 0 ){
+					fx_flows[i].send_bits = send_bits;
+				} else {
+					fx_flows[i].send_bits = 0;
+				}
+			}
+		}
+	}
+}
+
+void send_ofp13_port_status(){
+	for(int i=0; i<MAX_CONTROLLERS; i++){
+		if(controllers[i].ofp.negotiated == false){
+			continue;
+		}
+		uint8_t bits = 1<<i;
+		for(int j=0; j<4; j++){
+			uint8_t reason;
+			if((fx_ports[j].send_bits & bits) != 0){
+				if(Zodiac_Config.of_port[j] == 1){
+					reason = OFPPR13_ADD;
+				}else{
+					reason = OFPPR13_DELETE;
+				}
+			}else if((fx_ports[j].send_bits_mod & bits) != 0){
+				reason = OFPPR13_MODIFY;
+			}else{
+				continue;
+			}
+			if(ofp_tx_room(&controllers[i].ofp) > 80){
+				struct ofp13_port_status msg = {
+					.header = {
+						.version = 4,
+						.type = OFPT13_PORT_STATUS,
+						.length = htons(80),
+						.xid = htonl(controllers[i].ofp.xid++),
+					},
+					.reason = reason,
+					.desc = {
+						.port_no = htonl(i+1),
+						.config = htonl(get_switch_config(j)),
+						.state = htonl(get_switch_status(j)),
+						.curr = htonl(get_switch_ofppf13_curr(j)),
+						.advertised = htonl(get_switch_ofppf13_advertised(j)),
+						.supported = htonl(	OFPPF13_COPPER | OFPPF13_PAUSE | OFPPF13_PAUSE_ASYM |OFPPF13_100MB_FD \
+							| OFPPF13_100MB_HD | OFPPF13_10MB_FD | OFPPF13_10MB_HD | OFPPF13_AUTONEG),
+						.peer = htonl(get_switch_ofppf13_peer(j)),
+						.max_speed = htonl(100000u),
+					},
+				};
+				ofp_tx_write(&controllers[i].ofp, &msg, 80);
+				fx_ports[j].send_bits &= ~bits;
+				fx_ports[j].send_bits_mod &= ~bits;
+			}
+		}
+	}
+}
+
+void send_ofp13_flow_rem(){
+	for(int i=0; i<iLastFlow; i++){
+		if(fx_flows[i].send_bits == 0){
+			continue;
+		}
+		if((fx_flows[i].send_bits & FX_FLOW_ACTIVE) != 0){
+			continue;
+		}
+		uint16_t length = offsetof(struct ofp13_flow_removed, match) + ALIGN8(4+fx_flows[i].oxm_length);
+		struct ofp13_flow_removed msg = {
+			.header = {
+				.version = 4,
+				.type = OFPT13_FLOW_REMOVED,
+				.length = htons(length),
+			},
+			.cookie = fx_flows[i].cookie,
+			.priority = fx_flows[i].priority,
+			.reason = fx_flows[i].reason,
+			.table_id = fx_flows[i].table_id,
+			.duration_sec = htonl((sys_get_ms64() - fx_flow_timeouts[i].init)/1000u),
+			.duration_nsec = htonl((sys_get_ms64() - fx_flow_timeouts[i].init)%1000u * 1000000u),
+			.idle_timeout = htons(fx_flow_timeouts[i].idle_timeout),
+			.hard_timeout = htons(fx_flow_timeouts[i].hard_timeout),
+			.packet_count = fx_flow_counts[i].packet_count,
+			.byte_count = fx_flow_counts[i].byte_count,
+			.match = {
+				.type = htons(OFPMT13_OXM),
+				.length = htons(4 + fx_flows[i].oxm_length),
+			},
+		};
+		for(int j=0; j<MAX_CONTROLLERS; j++){
+			uint8_t bit = 1<<i;
+			if(controllers[j].ofp.tcp == NULL){
+				fx_flows[i].send_bits &= ~bit;
+			}
+			if((fx_flows[i].send_bits & bit) == 0){
+				continue;
+			}
+			if(controllers[j].ofp.negotiated){
+				struct ofp_pcb *ofp = &controllers[j].ofp;
+				if(ofp_tx_room(ofp) > length){
+					msg.header.xid = htons(ofp->xid++);
+					uint16_t offset = offsetof(struct ofp13_flow_removed, match) + 4;
+					memcpy(ofp_buffer, &msg, offset);
+					memcpy(ofp_buffer+offset, fx_flows[i].oxm, fx_flows[i].oxm_length);
+					ofp_tx_write(ofp, ofp_buffer, length);
+					fx_flows[i].send_bits &= ~bit;
+				}
+			}
+		}
+	}
 }
 

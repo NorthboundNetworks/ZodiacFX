@@ -101,7 +101,7 @@
  * MEM_SIZE: the size of the heap memory. If the application will send
  * a lot of data that needs to be copied, this should be set high.
  */
-#define MEM_SIZE                		8 * 1024
+#define MEM_SIZE                		4 * 1024
 
 /**
  * MEMP_NUM_UDP_PCB: the number of UDP protocol control blocks. One
@@ -148,7 +148,7 @@
  * If the application sends a lot of data out of ROM (or other static memory),
  * this should be set high.
  */
-#define MEMP_NUM_PBUF                   2
+#define MEMP_NUM_PBUF                   4
 
 /**
  * MEMP_NUM_NETBUF: the number of struct netbufs.
@@ -165,7 +165,7 @@
 /**
  * PBUF_POOL_SIZE: the number of buffers in the pbuf pool.
  */
-#define PBUF_POOL_SIZE                  16
+#define PBUF_POOL_SIZE                  8
 
 /**
  * PBUF_POOL_BUFSIZE: the size of each pbuf in the pbuf pool.
@@ -324,7 +324,7 @@
 
 #define ETHARP_DEBUG                    LWIP_DBG_OFF
 #define NETIF_DEBUG                     LWIP_DBG_OFF
-#define PBUF_DEBUG                      LWIP_DBG_ON
+#define PBUF_DEBUG                      LWIP_DBG_OFF
 #define API_LIB_DEBUG                   LWIP_DBG_OFF
 #define API_MSG_DEBUG                   LWIP_DBG_OFF
 #define SOCKETS_DEBUG                   LWIP_DBG_OFF
