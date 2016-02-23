@@ -151,6 +151,7 @@ static void ofp_unreach(void){
 
 uint16_t ofp_rx_length(const struct ofp_pcb *self){
 	if(self->rbuf == NULL) return 0;
+	if(self->rskip > self->rbuf->tot_len) return 0;
 	return self->rbuf->tot_len - self->rskip;
 }
 

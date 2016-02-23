@@ -122,7 +122,7 @@ struct fx_packet_in { // in network byte order
 	struct fx_packet packet;
 	uint16_t max_len; // in host byte order
 };
-#define MAX_BUFFERS 16
+#define MAX_BUFFERS 8
 #define BUFFER_TIMEOUT 5000U /* ms */
 void create_oob(struct pbuf*, struct fx_packet_oob*);
 

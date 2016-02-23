@@ -1148,6 +1148,7 @@ int match_frame_by_oxm(const struct fx_packet *packet, const struct fx_packet_oo
 }
 
 static void send_ofp13_packet_in(struct fx_packet *packet, struct ofp13_packet_in base, uint16_t max_len, uint8_t *send_bits){
+	if (packet == NULL) return;
 	if(max_len == OFPCML13_NO_BUFFER || max_len > packet->data->tot_len){
 		max_len = packet->data->tot_len;
 	} // max_len is send_len
@@ -1224,7 +1225,7 @@ void check_ofp13_packet_in(){
 		msg.reason = pin->reason;
 		msg.table_id = pin->table_id;
 		msg.cookie = pin->cookie;
-		send_ofp13_packet_in(&pin->packet, msg, ntohs(pin->max_len), &pin->send_bits);
+		if (ntohs(pin->max_len) > 0) send_ofp13_packet_in(&pin->packet, msg, ntohs(pin->max_len), &pin->send_bits);
 		if(pin->send_bits == 0){
 			pbuf_free(pin->packet.data);
 		}
@@ -1345,12 +1346,16 @@ static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob 
 							pin->reason = msg.reason;
 							pin->table_id = msg.table_id;
 							pin->cookie = msg.cookie;
-							
 							struct pbuf *data = pbuf_alloc(PBUF_RAW, packet->data->tot_len, PBUF_RAM);
-							pbuf_copy(data, packet->data);
-							pin->packet = *packet;
-							pin->packet.data = data;
-							pin->max_len = out->max_len;
+							if (data == NULL)
+							{
+								printf("Unable to allocate buffer\r\n");
+							} else {
+								pbuf_copy(data, packet->data);
+								pin->packet = *packet;
+								pin->packet.data = data;
+								pin->max_len = out->max_len;
+							}
 							break;
 						}
 					}
@@ -1437,7 +1442,6 @@ static void execute_ofp13_action(struct fx_packet *packet, struct fx_packet_oob 
 							pin->reason = msg.reason;
 							pin->table_id = msg.table_id;
 							pin->cookie = msg.cookie;
-							
 							struct pbuf *data = pbuf_alloc(PBUF_RAW, packet->data->tot_len, PBUF_RAM);
 							pbuf_copy(data, packet->data);
 							pin->packet = *packet;
@@ -1651,6 +1655,11 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 				uint16_t len = offsetof(struct ofp13_packet_out, actions);
 				len += ntohs(hint->actions_len);
 				struct pbuf *data = pbuf_alloc(PBUF_RAW, length-len, PBUF_POOL);
+				if (data == NULL)
+				{
+					printf("Unable to allocate buffer\r\n");
+					break;
+				}
 				memcpy(data->payload, hint+length-len, length-len);
 				packet.data = data;
 			}
@@ -1658,6 +1667,10 @@ enum ofp_pcb_status ofp13_handle(struct ofp_pcb *self){
 			create_oob(packet.data, &oob);
 			
 			uintptr_t p = (uintptr_t)hint->actions;
+			if ((ntohs(hint->actions_len) > 64) || (req.version > 4) || (req.version == 0))
+			{
+				break;
+			}
 			while(p < (uintptr_t)hint->actions + ntohs(hint->actions_len)){
 				struct ofp13_action_header *act = (void*)p;
 				execute_ofp13_action(&packet, &oob, act, -1);
