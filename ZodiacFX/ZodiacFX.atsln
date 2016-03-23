@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Atmel Studio Solution File, Format Version 11.00
+Project("{54F91283-7BC4-4236-8FF9-10F437C3AD48}") = "ZodiacFX", "ZodiacFX\ZodiacFX.cproj", "{D48AA523-B6FA-4608-B329-EF580BA58EBA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|ARM = Debug|ARM
+		Release|ARM = Release|ARM
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D48AA523-B6FA-4608-B329-EF580BA58EBA}.Debug|ARM.ActiveCfg = Debug|ARM
+		{D48AA523-B6FA-4608-B329-EF580BA58EBA}.Debug|ARM.Build.0 = Debug|ARM
+		{D48AA523-B6FA-4608-B329-EF580BA58EBA}.Release|ARM.ActiveCfg = Release|ARM
+		{D48AA523-B6FA-4608-B329-EF580BA58EBA}.Release|ARM.Build.0 = Release|ARM
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
