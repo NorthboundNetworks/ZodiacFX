@@ -148,7 +148,7 @@
  * If the application sends a lot of data out of ROM (or other static memory),
  * this should be set high.
  */
-#define MEMP_NUM_PBUF                   4
+#define MEMP_NUM_PBUF                   2
 
 /**
  * MEMP_NUM_NETBUF: the number of struct netbufs.
@@ -165,7 +165,7 @@
 /**
  * PBUF_POOL_SIZE: the number of buffers in the pbuf pool.
  */
-#define PBUF_POOL_SIZE                  8
+#define PBUF_POOL_SIZE                  4
 
 /**
  * PBUF_POOL_BUFSIZE: the size of each pbuf in the pbuf pool.

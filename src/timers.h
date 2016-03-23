@@ -1,8 +1,8 @@
 /**
  * @file
- * config_zodiac.h
+ * timer.h
  *
- * This file contains the configuration for the Zodiac FX
+ * This file contains the function declarations for the timer functions
  *
  */
 
@@ -27,18 +27,10 @@
  *
  */
 
-#ifndef CONFIG_ZODIAC_H_
-#define CONFIG_ZODIAC_H_
+#ifndef TIMER_MGT_H_INCLUDED
+#define TIMER_MGT_H_INCLUDED
 
+void sys_init_timing(void);
+uint32_t sys_get_ms(void);
 
-#define VERSION "0.58"		// Firmware version number
-
-#define MAX_OFP_VERSION   0x04
-
-#define MAX_FLOWS	128		// Maximum number of flows
-
-#define MAX_VLANS	4	// Maximum number of VLANS, default is 1 per port (4)
-
-#define HB_TIMEOUT	6	// Number of seconds to wait when there is no response from the controller
-
-#endif /* CONFIG_ZODIAC_H_ */
+#endif /* TIMER_MGT_H_INCLUDED */

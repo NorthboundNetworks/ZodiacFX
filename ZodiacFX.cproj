@@ -35,9 +35,13 @@
           <option id="common.services.basic.spi_master" value="Add" config="usart_spi" content-id="Atmel.ASF" />
           <option id="common.services.basic.twi" value="Add" config="" content-id="Atmel.ASF" />
           <option id="common.services.usb.class.device" value="Add" config="cdc_stdio" content-id="Atmel.ASF" />
+          <option id="sam.drivers.afec" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.gmac" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.pmc" value="Add" config="" content-id="Atmel.ASF" />
+          <option id="sam.drivers.rstc" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.rtc" value="Add" config="" content-id="Atmel.ASF" />
+          <option id="sam.drivers.tc.appnote" value="Add" config="" content-id="Atmel.ASF" />
+          <option id="sam.drivers.spi" value="Add" config="" content-id="Atmel.ASF" />
         </options>
         <configurations>
           <configuration key="config.compiler.armgcc.fpu_used" value="yes" default="yes" content-id="Atmel.ASF" />
@@ -48,7 +52,7 @@
         </configurations>
         <files>
           <file path="src/main.c" framework="" version="" source="common/applications/user_application/main.c" changed="False" content-id="Atmel.ASF" />
-          <file path="src/config/conf_board.h" framework="" version="" source="common/applications/user_application/user_board/config/conf_board.h" changed="False" content-id="Atmel.ASF" />
+          <file path="src/Config/conf_board.h" framework="" version="3.27.0" source="sam\drivers\tc\tc_capture_waveform_example\sam4e16e_sam4e_ek\conf_board.h" changed="False" content-id="Atmel.ASF" />
           <file path="src/ASF/common/boards/board.h" framework="" version="" source="common/boards/board.h" changed="False" content-id="Atmel.ASF" />
           <file path="src/ASF/common/boards/user_board/init.c" framework="" version="" source="common/boards/user_board/init.c" changed="False" content-id="Atmel.ASF" />
           <file path="src/ASF/common/boards/user_board/user_board.h" framework="" version="" source="common/boards/user_board/user_board.h" changed="False" content-id="Atmel.ASF" />
@@ -231,6 +235,16 @@
           <file path="src/ASF/sam/drivers/pio/pio_handler.h" framework="" version="3.27.0" source="sam\drivers\pio\pio_handler.h" changed="False" content-id="Atmel.ASF" />
           <file path="src/ASF/sam/drivers/udp/udp_device.c" framework="" version="3.27.0" source="sam\drivers\udp\udp_device.c" changed="False" content-id="Atmel.ASF" />
           <file path="src/ASF/sam/drivers/udp/udp_device.h" framework="" version="3.27.0" source="sam\drivers\udp\udp_device.h" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/drivers/tc/tc.c" framework="" version="3.27.0" source="sam\drivers\tc\tc.c" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/drivers/tc/tc.h" framework="" version="3.27.0" source="sam\drivers\tc\tc.h" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/drivers/tc/tc_capture_waveform_example/tc_capture_waveform_example.h" framework="" version="3.27.0" source="sam\drivers\tc\tc_capture_waveform_example\tc_capture_waveform_example.h" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/drivers/spi/spi.c" framework="" version="3.27.0" source="sam\drivers\spi\spi.c" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/drivers/spi/spi.h" framework="" version="3.27.0" source="sam\drivers\spi\spi.h" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/drivers/rstc/rstc.c" framework="" version="3.27.0" source="sam\drivers\rstc\rstc.c" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/drivers/rstc/rstc.h" framework="" version="3.27.0" source="sam\drivers\rstc\rstc.h" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/drivers/rstc/example1/rstc_example1.h" framework="" version="3.27.0" source="sam\drivers\rstc\example1\rstc_example1.h" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/drivers/afec/afec.c" framework="" version="3.27.0" source="sam\drivers\afec\afec.c" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/sam/drivers/afec/afec.h" framework="" version="3.27.0" source="sam\drivers\afec\afec.h" changed="False" content-id="Atmel.ASF" />
         </files>
         <documentation help="http://asf.atmel.com/docs/3.27.0/common.applications.user_application.user_board.sam4e8c/html/index.html" />
         <offline-documentation help="" />
@@ -245,7 +259,6 @@
     <com_atmel_avrdbg_tool_atmelice>
       <ToolOptions>
         <InterfaceProperties>
-          <JtagDbgClock>7500000</JtagDbgClock>
         </InterfaceProperties>
         <InterfaceName>JTAG</InterfaceName>
       </ToolOptions>
@@ -309,9 +322,17 @@
       <Value>../src/ASF/common/services/usb/udc</Value>
       <Value>../src/ASF/common/utils/stdio/stdio_usb</Value>
       <Value>../src/ASF/sam/drivers/udp</Value>
+      <Value>../src/ASF/sam/drivers/tc</Value>
+      <Value>../src/ASF/common/services/spi/sam_spi</Value>
+      <Value>../src/ASF/sam/drivers/spi</Value>
+      <Value>../src/ASF/sam/drivers/rstc</Value>
+      <Value>../src/lwip/include</Value>
+      <Value>../src/lwip</Value>
+      <Value>../src/lwip/include/ipv4</Value>
+      <Value>../src/ASF/sam/drivers/afec</Value>
     </ListValues>
   </armgcc.compiler.directories.IncludePaths>
-  <armgcc.compiler.optimization.level>Optimize for size (-Os)</armgcc.compiler.optimization.level>
+  <armgcc.compiler.optimization.level>Optimize (-O1)</armgcc.compiler.optimization.level>
   <armgcc.compiler.optimization.OtherFlags>-fdata-sections</armgcc.compiler.optimization.OtherFlags>
   <armgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>True</armgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>
   <armgcc.compiler.warnings.AllWarnings>True</armgcc.compiler.warnings.AllWarnings>
@@ -329,6 +350,7 @@
     </ListValues>
   </armgcc.linker.libraries.LibrarySearchPaths>
   <armgcc.linker.optimization.GarbageCollectUnusedSections>True</armgcc.linker.optimization.GarbageCollectUnusedSections>
+  <armgcc.linker.memorysettings.ExternalRAM />
   <armgcc.linker.miscellaneous.LinkerFlags>-Wl,--entry=Reset_Handler -Wl,--cref -mthumb -T../src/ASF/sam/utils/linker_scripts/sam4e/sam4e8/gcc/flash.ld</armgcc.linker.miscellaneous.LinkerFlags>
   <armgcc.preprocessingassembler.general.AssemblerFlags>-DARM_MATH_CM4=true -DBOARD=USER_BOARD -Dprintf=iprintf -Dscanf=iscanf -DUDD_ENABLE</armgcc.preprocessingassembler.general.AssemblerFlags>
   <armgcc.preprocessingassembler.general.DefaultIncludePath>False</armgcc.preprocessingassembler.general.DefaultIncludePath>
@@ -367,6 +389,11 @@
       <Value>../src/ASF/common/services/usb/udc</Value>
       <Value>../src/ASF/common/utils/stdio/stdio_usb</Value>
       <Value>../src/ASF/sam/drivers/udp</Value>
+      <Value>../src/ASF/sam/drivers/tc</Value>
+      <Value>../src/ASF/common/services/spi/sam_spi</Value>
+      <Value>../src/ASF/sam/drivers/spi</Value>
+      <Value>../src/ASF/sam/drivers/rstc</Value>
+      <Value>../src/ASF/sam/drivers/afec</Value>
     </ListValues>
   </armgcc.preprocessingassembler.general.IncludePaths>
 </ArmGcc>
@@ -426,6 +453,14 @@
       <Value>../src/ASF/common/services/usb/udc</Value>
       <Value>../src/ASF/common/utils/stdio/stdio_usb</Value>
       <Value>../src/ASF/sam/drivers/udp</Value>
+      <Value>../src/lwip</Value>
+      <Value>../src/lwip/include</Value>
+      <Value>../src/lwip/include/ipv4</Value>
+      <Value>../src/ASF/sam/drivers/tc</Value>
+      <Value>../src/ASF/common/services/spi/sam_spi</Value>
+      <Value>../src/ASF/sam/drivers/spi</Value>
+      <Value>../src/ASF/sam/drivers/rstc</Value>
+      <Value>../src/ASF/sam/drivers/afec</Value>
     </ListValues>
   </armgcc.compiler.directories.IncludePaths>
   <armgcc.compiler.optimization.level>Optimize (-O1)</armgcc.compiler.optimization.level>
@@ -447,6 +482,7 @@
     </ListValues>
   </armgcc.linker.libraries.LibrarySearchPaths>
   <armgcc.linker.optimization.GarbageCollectUnusedSections>True</armgcc.linker.optimization.GarbageCollectUnusedSections>
+  <armgcc.linker.memorysettings.ExternalRAM />
   <armgcc.linker.miscellaneous.LinkerFlags>-Wl,--entry=Reset_Handler -Wl,--cref -mthumb -T../src/ASF/sam/utils/linker_scripts/sam4e/sam4e8/gcc/flash.ld</armgcc.linker.miscellaneous.LinkerFlags>
   <armgcc.assembler.debugging.DebugLevel>Default (-g)</armgcc.assembler.debugging.DebugLevel>
   <armgcc.preprocessingassembler.general.AssemblerFlags>-DARM_MATH_CM4=true -DBOARD=USER_BOARD -Dprintf=iprintf -Dscanf=iscanf -DUDD_ENABLE</armgcc.preprocessingassembler.general.AssemblerFlags>
@@ -486,6 +522,11 @@
       <Value>../src/ASF/common/services/usb/udc</Value>
       <Value>../src/ASF/common/utils/stdio/stdio_usb</Value>
       <Value>../src/ASF/sam/drivers/udp</Value>
+      <Value>../src/ASF/sam/drivers/tc</Value>
+      <Value>../src/ASF/common/services/spi/sam_spi</Value>
+      <Value>../src/ASF/sam/drivers/spi</Value>
+      <Value>../src/ASF/sam/drivers/rstc</Value>
+      <Value>../src/ASF/sam/drivers/afec</Value>
     </ListValues>
   </armgcc.preprocessingassembler.general.IncludePaths>
   <armgcc.preprocessingassembler.debugging.DebugLevel>Default (-Wa,-g)</armgcc.preprocessingassembler.debugging.DebugLevel>
@@ -520,11 +561,17 @@
     <Folder Include="src\ASF\common\utils\stdio\stdio_usb\" />
     <Folder Include="src\ASF\sam\" />
     <Folder Include="src\ASF\sam\drivers\" />
+    <Folder Include="src\ASF\sam\drivers\afec\" />
     <Folder Include="src\ASF\sam\drivers\gmac\" />
     <Folder Include="src\ASF\sam\drivers\matrix\" />
     <Folder Include="src\ASF\sam\drivers\pio\" />
     <Folder Include="src\ASF\sam\drivers\pmc\" />
+    <Folder Include="src\ASF\sam\drivers\rstc\" />
+    <Folder Include="src\ASF\sam\drivers\rstc\example1\" />
     <Folder Include="src\ASF\sam\drivers\rtc\" />
+    <Folder Include="src\ASF\sam\drivers\spi\" />
+    <Folder Include="src\ASF\sam\drivers\tc\" />
+    <Folder Include="src\ASF\sam\drivers\tc\tc_capture_waveform_example\" />
     <Folder Include="src\ASF\sam\drivers\twi\" />
     <Folder Include="src\ASF\sam\drivers\udp\" />
     <Folder Include="src\ASF\sam\drivers\usart\" />
@@ -554,6 +601,25 @@
     <Folder Include="src\ASF\thirdparty\CMSIS\Lib\" />
     <Folder Include="src\ASF\thirdparty\CMSIS\Lib\GCC\" />
     <Folder Include="src\config\" />
+    <Folder Include="src\ksz8795clx" />
+    <Folder Include="src\lwip\" />
+    <Folder Include="src\lwip\api\" />
+    <Folder Include="src\lwip\arch\" />
+    <Folder Include="src\lwip\core\" />
+    <Folder Include="src\lwip\core\ipv4\" />
+    <Folder Include="src\lwip\core\snmp\" />
+    <Folder Include="src\lwip\include\" />
+    <Folder Include="src\lwip\include\ipv4\" />
+    <Folder Include="src\lwip\include\ipv4\lwip\" />
+    <Folder Include="src\lwip\include\ipv6\" />
+    <Folder Include="src\lwip\include\ipv6\lwip\" />
+    <Folder Include="src\lwip\include\lwip\" />
+    <Folder Include="src\lwip\include\netif\" />
+    <Folder Include="src\lwip\include\posix\" />
+    <Folder Include="src\lwip\include\posix\sys\" />
+    <Folder Include="src\lwip\netif\" />
+    <Folder Include="src\lwip\netif\ppp\" />
+    <Folder Include="src\openflow_spec" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="src\ASF\common\services\sleepmgr\sam\sleepmgr.c">
@@ -571,12 +637,72 @@
     <Compile Include="src\ASF\common\utils\stdio\stdio_usb\stdio_usb.c">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\ASF\sam\drivers\afec\afec.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="src\ASF\sam\drivers\afec\afec.h">
+      <SubType>compile</SubType>
+    </None>
     <Compile Include="src\ASF\sam\drivers\gmac\gmac_raw.c">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\ASF\sam\drivers\pio\pio_handler.c">
       <SubType>compile</SubType>
     </Compile>
+    <None Include="src\ASF\sam\drivers\rstc\example1\rstc_example1.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="src\ASF\sam\drivers\rstc\rstc.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="src\ASF\sam\drivers\rstc\rstc.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="src\ASF\sam\drivers\spi\spi.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="src\ASF\sam\drivers\spi\spi.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="src\ASF\sam\drivers\tc\tc.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\config\config_zodiac.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\config\conf_usart_spi.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\of_helper.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\of_helper.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\openflow_10.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\openflow_13.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\openflow_spec\openflow_spec10.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\openflow_spec\openflow_spec13.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\timers.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\timers.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="src\ASF\sam\drivers\tc\tc.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="src\ASF\sam\drivers\tc\tc_capture_waveform_example\tc_capture_waveform_example.h">
+      <SubType>compile</SubType>
+    </None>
     <Compile Include="src\ASF\sam\drivers\udp\udp_device.c">
       <SubType>compile</SubType>
     </Compile>
@@ -586,10 +712,382 @@
     <Compile Include="src\command.h">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\config\lwipopts.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\eeprom.c">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\eeprom.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\api\api_lib.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\api\api_msg.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\api\err.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\api\netbuf.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\api\netdb.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\api\netifapi.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\api\sockets.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\api\tcpip.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\arch\cc.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\arch\perf.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\def.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\dhcp.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\dns.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\init.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\ipv4\autoip.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\ipv4\icmp.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\ipv4\igmp.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\ipv4\inet.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\ipv4\inet_chksum.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\ipv4\ip.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\ipv4\ip_addr.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\ipv4\ip_frag.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\mem.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\memp.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\netif.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\pbuf.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\raw.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\snmp\asn1_dec.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\snmp\asn1_enc.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\snmp\mib2.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\snmp\mib_structs.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\snmp\msg_in.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\snmp\msg_out.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\stats.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\sys.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\tcp.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\tcp_in.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\tcp_out.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\timers.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\core\udp.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\ipv4\lwip\autoip.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\ipv4\lwip\icmp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\ipv4\lwip\igmp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\ipv4\lwip\inet.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\ipv4\lwip\inet_chksum.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\ipv4\lwip\ip.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\ipv4\lwip\ip_addr.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\ipv4\lwip\ip_frag.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\ipv6\lwip\icmp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\ipv6\lwip\inet.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\ipv6\lwip\ip.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\ipv6\lwip\ip_addr.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\api.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\api_msg.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\arch.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\debug.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\def.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\dhcp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\dns.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\err.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\init.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\mem.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\memp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\memp_std.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\netbuf.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\netdb.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\netif.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\netifapi.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\opt.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\pbuf.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\raw.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\sio.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\snmp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\snmp_asn1.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\snmp_msg.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\snmp_structs.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\sockets.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\stats.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\sys.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\tcp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\tcpip.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\tcp_impl.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\timers.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\lwip\udp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\netif\etharp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\netif\ppp_oe.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\netif\slipif.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\posix\netdb.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\include\posix\sys\socket.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\etharp.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ethernetif.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\auth.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\auth.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\chap.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\chap.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\chpms.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\chpms.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\fsm.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\fsm.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\ipcp.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\ipcp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\lcp.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\lcp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\magic.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\magic.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\md5.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\md5.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\pap.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\pap.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\ppp.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\ppp.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\pppdebug.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\ppp_impl.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\ppp_oe.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\randm.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\randm.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\vj.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\ppp\vj.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\lwip\netif\slipif.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\openflow.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\openflow.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\switch.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\switch.h">
       <SubType>compile</SubType>
     </Compile>
     <None Include="src\ASF\sam\drivers\udp\udp_device.h">
@@ -707,9 +1205,6 @@
       <SubType>compile</SubType>
     </None>
     <None Include="src\ASF\common\services\twi\twi_slave.h">
-      <SubType>compile</SubType>
-    </None>
-    <None Include="src\config\conf_usart_spi.h">
       <SubType>compile</SubType>
     </None>
     <None Include="src\ASF\common\services\spi\usart_spi.h">
@@ -1115,6 +1610,12 @@
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\ASF\sam\utils\syscalls\gcc\syscalls.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\ksz8795clx\ethernet_phy.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\ksz8795clx\ethernet_phy.h">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\main.c">
