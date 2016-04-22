@@ -525,11 +525,11 @@ void switch_init(void)
 		/* Create KSZ8795 VLANs */
 		switch_write(5,0);		// Disable 802.1q	
 		
-// 		switch_write(20,1);	// Default ingress VID
-// 		switch_write(36,1);	// Default ingress VID
-// 		switch_write(52,1);	// Default ingress VID
-// 		switch_write(68,2);	// Default ingress VID
-// 		switch_write(84,2);	// Default ingress VID
+		switch_write(20,1);	// Default ingress VID
+		switch_write(36,1);	// Default ingress VID
+		switch_write(52,1);	// Default ingress VID
+		switch_write(68,2);	// Default ingress VID
+		switch_write(84,2);	// Default ingress VID
 
 		switch_write(110,20);	// Read VLAN flag
 		switch_write(111,0);	// Read entries 0-3
