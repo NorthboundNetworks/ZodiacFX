@@ -43,10 +43,11 @@ gmac_device_t gs_gmac_dev;
 extern struct tcp_conn tcp_conn;
 extern struct zodiac_config Zodiac_Config;
 extern int OF_Version;
-uint8_t gmacbuffer[1536];
+uint8_t gmacbuffer[GMAC_FRAME_LENTGH_MAX];
 struct ofp10_port_stats phys10_port_stats[4];
 struct ofp13_port_stats phys13_port_stats[4];
 uint8_t port_status[4];
+extern uint8_t NativePortMatrix;
 /** Buffer for ethernet packets */
 static volatile uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 
@@ -451,7 +452,8 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
 		uint8_t *last_byte;
 		last_byte = gmacbuffer + ul_size;
 		*last_byte = port;
-		gmac_dev_write(&gs_gmac_dev, &gmacbuffer, (ul_size + 1), NULL);
+		ul_size++; // Increase packet size by 1 to allow for the tail tag.
+		uint32_t write_size = gmac_dev_write(&gs_gmac_dev, &gmacbuffer, ul_size, NULL);
 	}
 	return;
 }
@@ -495,6 +497,12 @@ void switch_init(void)
 		/* Init KSZ8795 registers */
 		switch_write(86,232);	// Set CPU interface to MII
 		switch_write(12,70);	// Turn on tail tag mode
+		
+		/* Because we use the tail tag mode on the KS8795 the additional
+		byte on the end makes the frame size 1519 bytes. This causes the packet
+		to fail the Max Legal size check, so setting byte 1 on global register 4
+		disables the check */
+		switch_write(4,242);
 
 		/* Init GMAC driver structure */
 		gmac_dev_init(GMAC, &gs_gmac_dev, &gmac_option);
@@ -513,11 +521,39 @@ void switch_init(void)
 		
 		// clear port stat counters
 		memset(&phys10_port_stats, 0, sizeof(struct ofp10_port_stats)*4);
+
+		/* Create KSZ8795 VLANs */
+		switch_write(5,0);		// Disable 802.1q	
 		
+// 		switch_write(20,1);	// Default ingress VID
+// 		switch_write(36,1);	// Default ingress VID
+// 		switch_write(52,1);	// Default ingress VID
+// 		switch_write(68,2);	// Default ingress VID
+// 		switch_write(84,2);	// Default ingress VID
+
+		switch_write(110,20);	// Read VLAN flag
+		switch_write(111,0);	// Read entries 0-3
+		switch_read(117);		// Read bits[12:8]
+		switch_read(118);		// Read bits[7:0]
+		switch_read(115);		// Read bits[12:8]
+		switch_read(116);		// Read bits[7:0]
+		
+		switch_write(117,19);	// 10011
+		switch_write(118,129);	// 10000001
+		switch_write(115,28);	// 11100
+		switch_write(116,2);	// 00000010
+		
+		switch_write(110,4);	// Read VLAN flag
+		switch_write(111,0);	// Read entries 0-3
+		
+						
+		switch_write(5,128);	// Enable 802.1q
+					
 		disableOF(); // clear all port settings
 		
 		if (Zodiac_Config.OFEnabled == OF_ENABLED) enableOF();
 		//if (Zodiac_Config.OFEnabled == OF_DISABLED) disableOF();
+		
 		return;
 }
 /*
@@ -529,9 +565,11 @@ void switch_init(void)
 void task_switch(struct netif *netif)
 {
 	uint32_t ul_frm_size = 0;
+	uint32_t dev_read;
 
 	/* Main packet processing loop */
-	if (GMAC_OK == gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_frm_size))
+	dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_frm_size);
+	if (dev_read == GMAC_OK)
 	{
 		if (ul_frm_size > 0)
 		{

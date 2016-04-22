@@ -31,6 +31,7 @@
 #define COMMANDS_H_
 
 #include "config_zodiac.h"
+#include "lwip/err.h"
 #include <arch/cc.h>
 
 enum of_status{
@@ -91,5 +92,6 @@ typedef struct arp_header {
 
 void task_command(char *str, char * str_last);
 void loadConfig(void);
+void telnet_init(void);
 
 #endif /* COMMANDS_H_ */

@@ -35,6 +35,8 @@
 #include "timers.h"
 #include "lwip/init.h"
 #include "lwip/timers.h"
+#include "lwip/ip_addr.h"
+#include "lwip/tcp.h"
 #include "lwip/err.h"
 
 #include "command.h"
@@ -50,6 +52,7 @@ int charcount, charcount_last;
 bool masterselect;
 int portmap[4];
 int32_t ul_temp;
+uint8_t NativePortMatrix;
 
 /** Reference voltage for AFEC,in mv. */
 #define VOLT_REF        (3300)
@@ -70,8 +73,7 @@ static void afec_temp_sensor_end_conversion(void)
 	* According to datasheet, The output voltage VT = 1.44V at 27C
 	* and the temperature slope dVT/dT = 4.7 mV/C
 	*/
-	//Original values: ul_temp = (ul_vol - 1440)  * 100 / 470 + 27;
-	ul_temp = (ul_vol - 1405)  * 100 / 470 + 27;
+	ul_temp = (ul_vol - 1440)  * 100 / 470 + 27;
 }
 
 /*
@@ -164,6 +166,9 @@ int main (void)
 	netif_set_default(&gs_net_if);
 
 	netif_set_up(&gs_net_if);
+	
+	// Telnet to be included in v0.60
+	// telnet_init(); 
 
 	/* Initialize timer. */
 	sys_init_timing();
@@ -184,8 +189,11 @@ int main (void)
 		{
 			for(p=0;p<4;p++)
 			{
-				if (Zodiac_Config.vlan_list[v].portmap[p] == 1) Zodiac_Config.of_port[p] = 0; // Port is assigned to a Native VLAN
-
+				if (Zodiac_Config.vlan_list[v].portmap[p] == 1)
+				{
+					Zodiac_Config.of_port[p] = 0; // Port is assigned to a Native VLAN
+					NativePortMatrix += 1<<p;
+				}
 			}
 		}
 	}	

@@ -66,12 +66,16 @@ extern uint8_t port_status[4];
 extern int totaltime;
 extern int32_t ul_temp;
 extern int OF_Version;
+struct tcp_pcb *telnet_pcb;
 
 // Local Variables
-bool showintro = true;		
+bool showintro = true;	
+bool tshowintro = true;	
 uint8_t uCLIContext = 0;
 struct arp_header arp_test;
 uint8_t esc_char = 0;
+char telnet_buffer[64];		// Buffer for incoming telnet commands
+char print_buffer[1024];
 
 // Internal Functions	
 void saveConfig(void);
@@ -79,8 +83,12 @@ void command_root(char *command, char *param1, char *param2, char *param3);
 void command_config(char *command, char *param1, char *param2, char *param3);
 void command_openflow(char *command, char *param1, char *param2, char *param3);
 void command_debug(char *command, char *param1, char *param2, char *param3);
-void printintro(void);
+//void printintro(void);
+void printintro(char *buffer);
 void printhelp(void);
+static err_t telnet_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
+static err_t telnet_accept(void *arg, struct tcp_pcb *pcb, err_t err);
+void tprintf(char *buffer, struct tcp_pcb *pcb);
 
 /*
 *	Converts a 64bit value from host to network format
@@ -113,6 +121,132 @@ void saveConfig(void)
 	return;
 }
 
+void telnet_init(void)
+{
+	telnet_pcb = tcp_new();
+	tcp_bind(telnet_pcb, IP_ADDR_ANY, 23);
+	telnet_pcb = tcp_listen(telnet_pcb);
+	tcp_accept(telnet_pcb, telnet_accept);
+}
+
+static err_t telnet_accept(void *arg, struct tcp_pcb *pcb, err_t err)
+{
+	LWIP_UNUSED_ARG(arg);
+	LWIP_UNUSED_ARG(err);
+	tcp_setprio(pcb, TCP_PRIO_MIN);
+	tcp_recv(pcb, telnet_recv);
+	tcp_err(pcb, NULL);
+	tcp_poll(pcb, NULL, 4);
+	return ERR_OK;	
+}
+
+static err_t telnet_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
+{
+	int i;
+	int len;
+	char *pc;
+	char *command;
+	char *param1;
+	char *param2;
+	char *param3;
+	char *pch;
+		
+	if (err == ERR_OK && p != NULL)
+	{
+		tcp_recved(pcb, p->tot_len);
+		pc = (char*)p->payload;
+		len = p->tot_len;
+		
+		for(i=0;i<len;i++)
+		{
+			telnet_buffer[i] = pc[i];
+		}
+		len = len -2;
+		telnet_buffer[len] = '\0';
+		pch = strtok (telnet_buffer," ");
+		command = pch;
+		pch = strtok (NULL, " ");
+		param1 = pch;
+		pch = strtok (NULL, " ");
+		param2 = pch;
+		pch = strtok (NULL, " ");
+		param3 = pch;
+		printf("%s - %s - %s - %s\r\n", command, param1, param2, param3);
+		
+		if (tshowintro == true)	// Show the intro only on the first key press
+		{
+ 			printintro(&print_buffer);
+			tprintf(&print_buffer, pcb);
+			tshowintro = false;
+			return ERR_OK;
+		}
+			
+		switch(uCLIContext)
+		{
+			case CLI_ROOT:
+			command_root(command, param1, param2, param3);
+			break;
+					
+			case CLI_CONFIG:
+			command_config(command, param1, param2, param3);
+			break;
+					
+			case CLI_OPENFLOW:
+			command_openflow(command, param1, param2, param3);
+			break;
+					
+			case CLI_DEBUG:
+			command_debug(command, param1, param2, param3);
+			break;
+		};
+		printf(&print_buffer, pcb);
+		print_buffer[0] = '\0';
+						
+		switch(uCLIContext)
+		{
+			case CLI_ROOT:
+			sprintf(print_buffer, "%s# ",Zodiac_Config.device_name);
+			tprintf(&print_buffer, pcb);
+			break;
+				
+			case CLI_CONFIG:
+			sprintf(print_buffer, "%s(config)# ",Zodiac_Config.device_name);
+			tprintf(&print_buffer, pcb);
+			break;
+				
+			case CLI_OPENFLOW:
+			sprintf(print_buffer, "%s(openflow)# ",Zodiac_Config.device_name);
+			tprintf(&print_buffer, pcb);
+			break;
+				
+			case CLI_DEBUG:
+			sprintf(print_buffer, "%s(debug)# ",Zodiac_Config.device_name);
+			tprintf(&print_buffer, pcb);
+			break;
+		};
+							
+		pbuf_free(p);
+		
+	}
+	
+	pbuf_free(p);
+	
+	if (err == ERR_OK && p == NULL)
+	{
+		tcp_close(pcb);
+	}
+
+	return ERR_OK;
+}
+
+void tprintf(char *buffer, struct tcp_pcb *pcb)
+{
+	int len;
+	len = strlen(buffer);
+	tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY);
+	tcp_output(pcb);
+}
+
 /*
 *	Main command line loop
 *
@@ -127,13 +261,15 @@ void task_command(char *str, char *str_last)
 	char *param2;
 	char *param3;
 	char *pch;
-	
+		
 	while(udi_cdc_is_rx_ready()){
 		ch = udi_cdc_getc();
-		
+				
 		if (showintro == true)	// Show the intro only on the first key press
 		{
-			printintro();
+			printintro(&print_buffer);
+			printf(&print_buffer);
+			print_buffer[0] = '\0';
 			showintro = false;
 			ch = 13;
 		}	
@@ -191,6 +327,8 @@ void task_command(char *str, char *str_last)
 					command_debug(command, param1, param2, param3);
 					break;
 				};
+				printf(&print_buffer);
+				print_buffer[0] = '\0';
 			}
 			
 			switch(uCLIContext)
@@ -407,7 +545,8 @@ if (strcmp(command, "b")==0)
 }
 	
 	// Unknown Command
-	printf("Unknown command\r\n");
+	//printf("Unknown command\r\n");
+	sprintf(print_buffer,"Unknown command\r\n");
 	return;
 }
 
@@ -1192,17 +1331,17 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 *	ASCII art generated from http://patorjk.com/software/taag/
 *
 */
-void printintro(void)
-{	
-	printf("\r\n");
-	printf(" _____             ___               _______  __\r\n");
-	printf("/__  /  ____  ____/ (_)___ ______   / ____/ |/ /\r\n");
-	printf("  / /  / __ \\/ __  / / __ `/ ___/  / /_   |   /\r\n");
-	printf(" / /__/ /_/ / /_/ / / /_/ / /__   / __/  /   |  \r\n");
-	printf("/____/\\____/\\__,_/_/\\__,_/\\___/  /_/    /_/|_| \r\n");
-	printf("\t    by Northbound Networks\r\n");
-	printf("\r\n\n");
-	printf("Type 'help' for a list of available commands\r\n");
+void printintro(char *buffer)
+{
+	sprintf(buffer,"\r\n");
+	strcat(buffer," _____             ___               _______  __\r\n");
+	strcat(buffer,"/__  /  ____  ____/ (_)___ ______   / ____/ |/ /\r\n");
+	strcat(buffer,"  / /  / __ \\/ __  / / __ `/ ___/  / /_   |   /\r\n");
+	strcat(buffer," / /__/ /_/ / /_/ / / /_/ / /__   / __/  /   |  \r\n");
+	strcat(buffer,"/____/\\____/\\__,_/_/\\__,_/\\___/  /_/    /_/|_| \r\n");
+	strcat(buffer,"\t    by Northbound Networks\r\n");
+	strcat(buffer,"\r\n\n");
+	strcat(buffer,"Type 'help' for a list of available commands\r\n");
 	return;
 }
 
@@ -1213,50 +1352,50 @@ void printintro(void)
 */
 void printhelp(void)
 {
-	printf("\r\n");
-	printf("The following commands are currently available:\r\n");
-	printf("\r\n");
-	printf("Base:\r\n");
-	printf(" config\r\n");
-	printf(" openflow\r\n");
-	printf(" debug\r\n");
-	printf(" show ports\r\n");
-	printf(" show status\r\n");
-	printf(" show version\r\n");
-	printf("\r\n");
-	printf("Config:\r\n");
-	printf(" save\r\n");
-	printf(" show config\r\n");
-	printf(" show vlans\r\n");
-	printf(" set name <name>\r\n");
-	printf(" set mac-address <mac address>\r\n");
-	printf(" set ip-address <ip address>\r\n");
-	printf(" set netmask <netmasks>\r\n");
-	printf(" set gateway <gateway ip address>\r\n");
-	printf(" set of-controller <openflow controller ip address>\r\n");
-	printf(" set of-port <openflow controller tcp port>\r\n");
-	printf(" set failstate <secure|safe>\r\n");
-	printf(" add vlan <vlan id> <vlan name>\r\n");
-	printf(" delete vlan <vlan id>\r\n");
-	printf(" set vlan-type <openflow|native>\r\n");
-	printf(" add vlan-port <vlan id> <port>\r\n");
-	printf(" delete vlan-port <port>\r\n");
-	printf(" factory reset\r\n");
-	printf(" set of-version <version(0|1|4)>\r\n");
-	printf(" exit\r\n");
-	printf("\r\n");
-	printf("OpenFlow:\r\n");
-	printf(" show status\r\n");
-	printf(" show flows\r\n");
-	printf(" enable\r\n");
-	printf(" disable\r\n");
-	printf(" clear flows\r\n");
-	printf(" exit\r\n");
-	printf("\r\n");
-	printf("Debug:\r\n");
-	printf(" read <register>\r\n");
-	printf(" write <register> <value>\r\n");
-	printf(" exit\r\n");
-	printf("\r\n");
+	sprintf(print_buffer,"\r\n");
+	strcat(print_buffer,"The following commands are currently available:\r\n");
+	strcat(print_buffer,"\r\n");
+	strcat(print_buffer,"Base:\r\n");
+	strcat(print_buffer," config\r\n");
+	strcat(print_buffer," openflow\r\n");
+	strcat(print_buffer," debug\r\n");
+	strcat(print_buffer," show ports\r\n");
+	strcat(print_buffer," show status\r\n");
+	strcat(print_buffer," show version\r\n");
+	strcat(print_buffer,"\r\n");
+	strcat(print_buffer,"Config:\r\n");
+	strcat(print_buffer," save\r\n");
+	strcat(print_buffer," show config\r\n");
+	strcat(print_buffer," show vlans\r\n");
+	strcat(print_buffer," set name <name>\r\n");
+	strcat(print_buffer," set mac-address <mac address>\r\n");
+	strcat(print_buffer," set ip-address <ip address>\r\n");
+	strcat(print_buffer," set netmask <netmasks>\r\n");
+	strcat(print_buffer," set gateway <gateway ip address>\r\n");
+	strcat(print_buffer," set of-controller <openflow controller ip address>\r\n");
+	strcat(print_buffer," set of-port <openflow controller tcp port>\r\n");
+	strcat(print_buffer," set failstate <secure|safe>\r\n");
+	strcat(print_buffer," add vlan <vlan id> <vlan name>\r\n");
+	strcat(print_buffer," delete vlan <vlan id>\r\n");
+	strcat(print_buffer," set vlan-type <openflow|native>\r\n");
+	strcat(print_buffer," add vlan-port <vlan id> <port>\r\n");
+	strcat(print_buffer," delete vlan-port <port>\r\n");
+	strcat(print_buffer," factory reset\r\n");
+	strcat(print_buffer," set of-version <version(0|1|4)>\r\n");
+	strcat(print_buffer," exit\r\n");
+	strcat(print_buffer,"\r\n");
+	strcat(print_buffer,"OpenFlow:\r\n");
+	strcat(print_buffer," show status\r\n");
+	strcat(print_buffer," show flows\r\n");
+	strcat(print_buffer," enable\r\n");
+	strcat(print_buffer," disable\r\n");
+	strcat(print_buffer," clear flows\r\n");
+	strcat(print_buffer," exit\r\n");
+	strcat(print_buffer,"\r\n");
+	strcat(print_buffer,"Debug:\r\n");
+	strcat(print_buffer," read <register>\r\n");
+	strcat(print_buffer," write <register> <value>\r\n");
+	strcat(print_buffer," exit\r\n");
+	strcat(print_buffer,"\r\n");
 	return;
 }

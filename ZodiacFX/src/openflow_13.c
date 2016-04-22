@@ -55,6 +55,7 @@ extern uint8_t shared_buffer[2048];
 extern int delay_barrier;
 extern uint32_t barrier_xid;
 extern int multi_pos;
+extern uint8_t NativePortMatrix;
 
 // Internal functions
 void features_reply13(uint32_t xid);
@@ -137,7 +138,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							packet_in13(p_uc_data, pisize, port, OFPR_ACTION);
 						} else if (htonl(act_output->port) == OFPP13_FLOOD)
 						{
-							int outport = 7 - (1<< (ntohl(act_output->port)-1));	// Need to fix this, may also send out the Non-OpenFlow port
+							int outport = (15 - NativePortMatrix) - (1<< (ntohl(act_output->port)-1));
 							gmac_write(p_uc_data, packet_size, outport);
 						}
 					}
