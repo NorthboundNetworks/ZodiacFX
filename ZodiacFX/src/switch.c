@@ -524,36 +524,47 @@ void switch_init(void)
 
 		/* Create KSZ8795 VLANs */
 		switch_write(5,0);		// Disable 802.1q	
-		
-		switch_write(20,1);	// Default ingress VID
-		switch_write(36,1);	// Default ingress VID
-		switch_write(52,1);	// Default ingress VID
-		switch_write(68,2);	// Default ingress VID
-		switch_write(84,2);	// Default ingress VID
 
-		switch_write(110,20);	// Read VLAN flag
-		switch_write(111,0);	// Read entries 0-3
-		switch_read(117);		// Read bits[12:8]
-		switch_read(118);		// Read bits[7:0]
-		switch_read(115);		// Read bits[12:8]
-		switch_read(116);		// Read bits[7:0]
+		for (int x=0;x<MAX_VLANS;x++)
+		{
+			if (Zodiac_Config.vlan_list[x].uActive == 1)
+			{
+				if (Zodiac_Config.vlan_list[x].uVlanType == 2) switch_write(84,Zodiac_Config.vlan_list[x].uVlanID);	// If the VLAN is type Native then add the CPU port
+				/* Assign the default ingress VID */
+				for (int i=0;i<4;i++)
+				{
+					if (Zodiac_Config.vlan_list[x].portmap[i] == 1)
+					{
+						switch_write(20 + (i*16),Zodiac_Config.vlan_list[x].uVlanID);	// Default ingress VID
+					}
+				}
+				/* Add entry into the VLAN table */
+				int vlanoffset = Zodiac_Config.vlan_list[x].uVlanID / 4;
+				int vlanindex = Zodiac_Config.vlan_list[x].uVlanID - (vlanoffset*4);	
+				switch_write(110,20);	// Set read VLAN flag
+				switch_write(111, vlanoffset);	// Read entries 0-3
+
+				/* Calculate format */
+				uint8_t vlanmaphigh;
+				uint8_t vlanmaplow;
+				vlanmaphigh = 16; // Set valid bit
+				if (Zodiac_Config.vlan_list[x].uVlanType == 2) vlanmaphigh += 8; // Port 5 (CPU);
+				if (Zodiac_Config.vlan_list[x].portmap[3] == 1) vlanmaphigh += 4; // Port 4;
+				if (Zodiac_Config.vlan_list[x].portmap[2] == 1) vlanmaphigh += 2; // Port 3;
+				if (Zodiac_Config.vlan_list[x].portmap[1] == 1) vlanmaphigh += 1; // Port 2;
+				vlanmaplow = x+1;	// FID = VLAN index number
+				if (Zodiac_Config.vlan_list[x].portmap[0] == 1) vlanmaplow += 128; // Port 1;
+				/* Write settings back to registers */			
+				switch_write((119-(vlanindex*2)),vlanmaphigh);
+				switch_write((120-(vlanindex*2)),vlanmaplow);	
+				switch_write(110,4);	// Set read VLAN flag
+				switch_write(111,vlanoffset);	// Read entries 0-3										
+			} 
+		}
 		
-		switch_write(117,19);	// 10011
-		switch_write(118,129);	// 10000001
-		switch_write(115,28);	// 11100
-		switch_write(116,2);	// 00000010
-		
-		switch_write(110,4);	// Read VLAN flag
-		switch_write(111,0);	// Read entries 0-3
-		
-						
-		switch_write(5,128);	// Enable 802.1q
-					
-		disableOF(); // clear all port settings
-		
-		if (Zodiac_Config.OFEnabled == OF_ENABLED) enableOF();
-		//if (Zodiac_Config.OFEnabled == OF_DISABLED) disableOF();
-		
+		switch_write(5,128);	// Enable 802.1q				
+		disableOF(); // clear all port settings	
+		if (Zodiac_Config.OFEnabled == OF_ENABLED) enableOF();	
 		return;
 }
 /*
