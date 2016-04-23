@@ -54,6 +54,7 @@
 /** The GMAC driver instance */
 extern gmac_device_t gs_gmac_dev;
 extern struct zodiac_config Zodiac_Config;
+extern uint8_t NativePortMatrix;
 
 /// @cond 0
 /**INDENT-OFF**/
@@ -177,6 +178,8 @@ uint8_t ethernet_phy_set_link(Gmac *p_gmac, uint8_t uc_phy_addr,
 	gmac_enable_full_duplex(p_gmac, true);
 	gmac_enable_copy_all(p_gmac, true);
 	gmac_disable_broadcast(p_gmac, false);
+	//gmac_enable_jumbo_frames(p_gmac, true);
+	gmac_enable_big_frame(p_gmac, true);
 
 	/* Select Media Independent Interface type*/ 
 	gmac_select_mii_mode(p_gmac, ETH_PHY_MODE);
@@ -287,6 +290,7 @@ err_t ethernetif_init(struct netif *netif)
 static err_t gmac_low_level_output(struct netif *netif, struct pbuf *p)
 {
 	gmac_write(p->payload, p->len, 128);
+	//gmac_write(p->payload, p->len, NativePortMatrix);
 }
 
 

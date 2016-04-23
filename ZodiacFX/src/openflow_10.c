@@ -49,6 +49,7 @@ extern struct flows_counter flow_counters[MAX_FLOWS];
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
 extern struct table_counter table_counters;
 extern int OF_Version;
+extern uint8_t NativePortMatrix;
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern uint8_t port_status[4];
 extern uint8_t shared_buffer[2048];
@@ -177,7 +178,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						
 						if (ntohs(action_out->port) == OFPP_ALL || ntohs(action_out->port) == OFPP_FLOOD)
 						{
-							outport = 7 - (1<< (ntohs(action_out->port)-1));	// Need to fix this, may also send out the Non-OpenFlow port
+							outport = (15 - NativePortMatrix) - (1<< (ntohs(action_out->port)-1));
 							gmac_write(p_uc_data, packet_size, outport);
 						}
 						
