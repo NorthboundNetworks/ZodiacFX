@@ -833,7 +833,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		Zodiac_Config.netmask[1] = nm2;
 		Zodiac_Config.netmask[2] = nm3;
 		Zodiac_Config.netmask[3] = nm4;
-		printf("IP Address set to %d.%d.%d.%d\r\n" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);
+		printf("Netmask set to %d.%d.%d.%d\r\n" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);
 		return;
 	}
 	
@@ -851,7 +851,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		Zodiac_Config.gateway_address[1] = gw2;
 		Zodiac_Config.gateway_address[2] = gw3;
 		Zodiac_Config.gateway_address[3] = gw4;
-		printf("IP Address set to %d.%d.%d.%d\r\n" , Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
+		printf("Gateway set to %d.%d.%d.%d\r\n" , Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
 		return;
 	}
 
