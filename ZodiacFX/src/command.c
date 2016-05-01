@@ -59,7 +59,7 @@ extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
 extern int iLastFlow;
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
-extern struct table_counter table_counters;
+extern struct table_counter table_counters[MAX_TABLES];
 extern bool masterselect;
 extern struct tcp_pcb *tcp_pcb;
 extern uint8_t port_status[4];
@@ -1016,7 +1016,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf("\r Attributes:\r\n");
 					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match[i].priority), totaltime - flow_counters[i].duration);
 					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match[i].hard_timeout), ntohs(flow_match[i].idle_timeout));
-					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
+					printf("  Byte Count: %d\t\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
 					printf("\r\n Actions:\r\n");
 					for(int q=0;q<4;q++)
 					{
@@ -1024,6 +1024,8 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						if(q == 1) act_hdr = flow_actions[i].action2;
 						if(q == 2) act_hdr = flow_actions[i].action3;
 						if(q == 3) act_hdr = flow_actions[i].action4;
+						
+						if(act_hdr->len != 0 && q == 0) printf("   DROP\r\n"); // No actions = DROP
 					
 						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_OUTPUT) // Output to port action
 						{
@@ -1068,7 +1070,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				int match_size;
 				int inst_size;
 				int act_size;
-				struct ofp13_instruction *inst_ptr; 
+				struct ofp13_instruction *inst_ptr;
 				struct ofp13_instruction_actions *inst_actions;
 				struct oxm_header13 oxm_header;
 				uint8_t oxm_value8;
@@ -1168,9 +1170,17 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
 					}
 					printf("\r Attributes:\r\n");
-					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i].priority), totaltime - flow_counters[i].duration);
+					printf("  Table ID: %d\t\t\t\tCookie:0x%" PRIx64 "\r\n",flow_match13[i].table_id, htonll(flow_match13[i].cookie));
+					printf("  Priority: %d\t\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i].priority), totaltime - flow_counters[i].duration);
 					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match13[i].hard_timeout), ntohs(flow_match13[i].idle_timeout));
 					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
+					int lm = totaltime - flow_counters[i].lastmatch;
+					int hr = lm/3600;
+					int t = lm%3600;
+					int min = t/60;
+					int sec = t%60;
+					printf("  Last Match: %02d:%02d:%02d\r\n", hr, min, sec);
+					
 					if (ofp13_oxm_inst[i] != NULL)
 					{
 						printf("\r Instructions:\r\n");
@@ -1217,6 +1227,16 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 								act_size += htons(act_hdr->len);
 							}
 						}
+					} else {
+						printf("\r Instructions:\r\n");
+						printf("   DROP \r\n");
+					}
+					
+					if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
+					{
+						struct ofp13_instruction_goto_table *inst_goto_ptr; 
+						inst_goto_ptr = (struct ofp13_instruction_goto_table *) ofp13_oxm_inst[i];
+						printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
 					}
 				}
 				printf("\r\n-------------------------------------------------------------------------\r\n\n");				
@@ -1227,6 +1247,43 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
+	// List tables
+	if (strcmp(command, "show") == 0 && strcmp(param1, "tables") == 0)
+	{
+		int flow_count;
+		int lookup_count;
+		int byte_count;
+		int matched_count;
+		printf("\r\n-------------------------------------------------------------------------\r\n");
+		for (int x=0;x<MAX_TABLES;x++)
+		{
+			flow_count = 0;
+			matched_count = 0;
+			for (int i=0;i<iLastFlow;i++)
+			{
+				if(flow_match13[i].table_id == x)
+				{
+					flow_count++;
+					matched_count += table_counters[x].matched_count;
+					lookup_count += table_counters[x].lookup_count;
+					byte_count += flow_counters[i].bytes;
+				}
+			}
+			if(flow_count > 0)
+			{
+				printf("Table: %d\r\n",x);
+				printf(" Flows: %d\r\n",flow_count);
+				printf(" Lookups: %d\r\n",lookup_count);
+				printf(" Matches: %d\r\n",matched_count);
+				printf(" Bytes: %d\r\n",byte_count); 
+				printf("\r\n");	
+			}
+		}
+		printf("\r\n-------------------------------------------------------------------------\r\n");		
+		return;
+		
+	}
+
 	// Openflow status
 	if (strcmp(command, "show") == 0 && strcmp(param1, "status") == 0)
 	{
@@ -1235,15 +1292,30 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		if (tcp_pcb->state != ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED) printf(" Status: Disconnected\r\n");			
 		if (tcp_pcb->state == ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED) printf(" Status: Connected\r\n");
 		if (Zodiac_Config.OFEnabled == OF_DISABLED) printf(" Status: Disabled\r\n");
-		if (OF_Version == 1) printf(" Version: 1.0 (0x01)\r\n");
-		if (OF_Version == 4) printf(" Version: 1.3 (0x04)\r\n");
-		printf(" No tables: 1\r\n");
-		printf(" No flows: %d\r\n",iLastFlow);
-		printf(" Table Lookups: %d\r\n",table_counters.lookup_count);
-		printf(" Table Matches: %d\r\n",table_counters.matched_count);
-		
-		
-		
+		if (OF_Version == 1)
+		{
+			printf(" Version: 1.0 (0x01)\r\n");
+			printf(" No tables: 1\r\n");
+			printf(" No flows: %d\r\n", iLastFlow);
+			printf(" Table Lookups: %d\r\n",table_counters[0].lookup_count);
+			printf(" Table Matches: %d\r\n",table_counters[0].matched_count);
+		}
+		if (OF_Version == 4)
+		{
+			printf(" Version: 1.3 (0x04)\r\n");
+			printf(" No tables: %d\r\n", MAX_TABLES);
+			printf(" No flows: %d\r\n", iLastFlow);
+			// Total up all the table stats
+			int lookup_count = 0;
+			int matched_count = 0;
+			for (int x=0;x<MAX_TABLES;x++)
+			{
+				lookup_count += table_counters[x].lookup_count;
+				matched_count += table_counters[x].matched_count;
+			}
+			printf(" Table Lookups: %d\r\n",lookup_count);
+			printf(" Table Matches: %d\r\n",matched_count);	
+		}		
 		printf("\r\n-------------------------------------------------------------------------\r\n");		
 		return;
 	}
@@ -1387,6 +1459,7 @@ void printhelp(void)
 	strcat(print_buffer,"OpenFlow:\r\n");
 	strcat(print_buffer," show status\r\n");
 	strcat(print_buffer," show flows\r\n");
+	strcat(print_buffer," show tables\r\n");
 	strcat(print_buffer," enable\r\n");
 	strcat(print_buffer," disable\r\n");
 	strcat(print_buffer," clear flows\r\n");

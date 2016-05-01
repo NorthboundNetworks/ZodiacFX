@@ -53,7 +53,7 @@ uint8_t *ofp13_oxm_match[MAX_FLOWS];
 uint8_t *ofp13_oxm_inst[MAX_FLOWS];
 struct flows_counter flow_counters[MAX_FLOWS];
 struct flow_tbl_actions flow_actions[MAX_FLOWS];
-struct table_counter table_counters;
+struct table_counter table_counters[MAX_TABLES];
 int iLastFlow = 0;
 uint8_t shared_buffer[2048];
 char sysbuf[64];

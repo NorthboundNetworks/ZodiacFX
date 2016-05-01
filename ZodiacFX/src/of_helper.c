@@ -53,7 +53,7 @@ extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
 extern int totaltime;
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
-extern struct table_counter table_counters;
+extern struct table_counter table_counters[MAX_TABLES];
 
 // Local Variables
 uint8_t timer_alt;
@@ -260,7 +260,7 @@ int flowmatch10(uint8_t *pBuffer, int port)
 *	@param port - The port that the packet was received on.
 *	
 */
-int flowmatch13(uint8_t *pBuffer, int port)
+int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 {
 	int matched_flow = -1;
 	int priority_match = -1;
@@ -328,10 +328,11 @@ int flowmatch13(uint8_t *pBuffer, int port)
 	for (int i=0;i<iLastFlow;i++)
 	{
 		// Make sure its an active flow
-		if (flow_counters[i].active == false)
-		{
-			continue;
-		}		
+		if (flow_counters[i].active == false) continue;
+		
+		// If the flow is not in the requested table then fail
+		if (table_id != flow_match13[i].table_id) continue;
+					
 		// If the flow has no match fields (full wild) it is an automatic match	
 		if (ofp13_oxm_match[i] ==  NULL)
 		{
@@ -1032,8 +1033,12 @@ void clear_flows(void)
 		memset(&flow_counters[q], 0, sizeof(struct flows_counter));
 		memset(&flow_actions[q], 0, sizeof(struct flow_tbl_actions));
 	}
-	table_counters.lookup_count = 0;
-	table_counters.matched_count = 0;
+	for(int x=0; x<MAX_TABLES;x++)
+	{
+		table_counters[x].lookup_count = 0;
+		table_counters[x].matched_count = 0;
+	}
+
 
 }
 

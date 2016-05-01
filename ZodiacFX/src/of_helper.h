@@ -34,7 +34,7 @@
 #include "openflow.h"
 
 int flowmatch10(uint8_t *pBuffer, int port);
-int flowmatch13(uint8_t *pBuffer, int port);
+int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id);
 int field_match10(struct ofp_match *match_a, struct ofp_match *match_b);
 int field_match13(uint8_t *oxm_a, int len_a, uint8_t *oxm_b, int len_b);
 void nnOF_timer(void);
