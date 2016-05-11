@@ -54,6 +54,7 @@ extern struct ofp_flow_mod flow_match[MAX_FLOWS];
 extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
+extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
 extern int iLastFlow;
@@ -411,6 +412,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		return;
 
 	}	
+	
 	// Display firmware version
 	if (strcmp(command, "show") == 0 && strcmp(param1, "version") == 0)
 	{
@@ -565,7 +567,15 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		uCLIContext = CLI_ROOT;
 		return;
 	}
-	
+
+	// Display help
+	if (strcmp(command, "help") == 0)
+	{
+		printhelp();
+		return;
+
+	}
+		
 	// Load config
 	if (strcmp(command, "load")==0){
 		loadConfig();
@@ -988,7 +998,15 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		uCLIContext = CLI_ROOT;
 		return;
 	}
-		
+
+	// Display help
+	if (strcmp(command, "help") == 0)
+	{
+		printhelp();
+		return;
+
+	}
+			
 	// Openflow Flows
 	if (strcmp(command, "show") == 0 && strcmp(param1, "flows") == 0)
 	{
@@ -1007,16 +1025,28 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf("  Incoming Port: %d\t\t\tEthernet Type: 0x%.4X\r\n",ntohs(flow_match[i].match.in_port), ntohs(flow_match[i].match.dl_type));
 					printf("  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t\tDestination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",flow_match[i].match.dl_src[0], flow_match[i].match.dl_src[1], flow_match[i].match.dl_src[2], flow_match[i].match.dl_src[3], flow_match[i].match.dl_src[4], flow_match[i].match.dl_src[5] \
 					, flow_match[i].match.dl_dst[0], flow_match[i].match.dl_dst[1], flow_match[i].match.dl_dst[2], flow_match[i].match.dl_dst[3], flow_match[i].match.dl_dst[4], flow_match[i].match.dl_dst[5]);
-					printf("  VLAN ID: %d\t\t\t\tVLAN Priority: 0x%x\r\n",ntohs(flow_match[i].match.dl_vlan), flow_match[i].match.dl_vlan_pcp);
-					printf("  IP Protocol: %d\t\t\tIP ToS Bits: 0x%.2X\r\n",flow_match[i].match.nw_proto, flow_match[i].match.nw_tos);
-					printf("  TCP Source Address: %d.%d.%d.%d\r\n",ip4_addr1(&flow_match[i].match.nw_src), ip4_addr2(&flow_match[i].match.nw_src), ip4_addr3(&flow_match[i].match.nw_src), ip4_addr4(&flow_match[i].match.nw_src));
-					printf("  TCP Destination Address: %d.%d.%d.%d\r\n", ip4_addr1(&flow_match[i].match.nw_dst), ip4_addr2(&flow_match[i].match.nw_dst), ip4_addr3(&flow_match[i].match.nw_dst), ip4_addr4(&flow_match[i].match.nw_dst));
-					printf("  TCP/UDP Source Port: %d\t\tTCP/UDP Destination Port: %d\r\n",ntohs(flow_match[i].match.tp_src), ntohs(flow_match[i].match.tp_dst));
+					if (ntohs(flow_match[i].match.dl_vlan) == 0xffff)
+					{
+						printf("  VLAN ID: N/A\t\t\t\tVLAN Priority: N/A\r\n");
+					} else {
+						printf("  VLAN ID: %d\t\t\t\tVLAN Priority: 0x%x\r\n",ntohs(flow_match[i].match.dl_vlan), flow_match[i].match.dl_vlan_pcp);
+					}
+					if ((ntohs(flow_match[i].match.dl_type) == 0x0800) || (ntohs(flow_match[i].match.dl_type) == 0x8100)) printf("  IP Protocol: %d\t\t\tIP ToS Bits: 0x%.2X\r\n",flow_match[i].match.nw_proto, flow_match[i].match.nw_tos);
+					if (flow_match[i].match.nw_proto == 7 || flow_match[i].match.nw_proto == 16)
+					{
+						printf("  TCP Source Address: %d.%d.%d.%d\r\n",ip4_addr1(&flow_match[i].match.nw_src), ip4_addr2(&flow_match[i].match.nw_src), ip4_addr3(&flow_match[i].match.nw_src), ip4_addr4(&flow_match[i].match.nw_src));
+						printf("  TCP Destination Address: %d.%d.%d.%d\r\n", ip4_addr1(&flow_match[i].match.nw_dst), ip4_addr2(&flow_match[i].match.nw_dst), ip4_addr3(&flow_match[i].match.nw_dst), ip4_addr4(&flow_match[i].match.nw_dst));
+						printf("  TCP/UDP Source Port: %d\t\tTCP/UDP Destination Port: %d\r\n",ntohs(flow_match[i].match.tp_src), ntohs(flow_match[i].match.tp_dst));
+					}
+					if (flow_match[i].match.nw_proto == 1)
+					{
+						printf("  ICMP Type: %d\t\t\t\tICMP Code: %d\r\n",ntohs(flow_match[i].match.tp_src), ntohs(flow_match[i].match.tp_dst));
+					}
 					printf("  Wildcards: 0x%.8x\t\t\tCookie: 0x%" PRIx64 "\r\n",ntohl(flow_match[i].match.wildcards), htonll(flow_match[i].cookie));
 					printf("\r Attributes:\r\n");
 					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match[i].priority), totaltime - flow_counters[i].duration);
 					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match[i].hard_timeout), ntohs(flow_match[i].idle_timeout));
-					printf("  Byte Count: %d\t\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
+					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
 					printf("\r\n Actions:\r\n");
 					for(int q=0;q<4;q++)
 					{
@@ -1025,7 +1055,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						if(q == 2) act_hdr = flow_actions[i].action3;
 						if(q == 3) act_hdr = flow_actions[i].action4;
 						
-						if(act_hdr->len != 0 && q == 0) printf("   DROP\r\n"); // No actions = DROP
+						if(act_hdr->len == 0 && q == 0) printf("   DROP\r\n"); // No actions = DROP
 					
 						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_OUTPUT) // Output to port action
 						{
@@ -1058,7 +1088,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_STRIP_VLAN) //
 						{
 							printf("  Action %d:\r\n",q+1);
-							printf("   Strip VLAN ID\r\n");
+							printf("   Strip VLAN tag\r\n");
 						}			
 					}
 				}
@@ -1163,7 +1193,8 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 																																		
 							case OFPXMT_OFB_VLAN_VID:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-							printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
+							if (oxm_value16 == 0) printf("  VLAN ID: 0\r\n");
+							if (oxm_value16 != 0) printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
 							break;
 							
 						};
@@ -1180,17 +1211,19 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					int min = t/60;
 					int sec = t%60;
 					printf("  Last Match: %02d:%02d:%02d\r\n", hr, min, sec);
-					
+					// Print instruction list
 					if (ofp13_oxm_inst[i] != NULL)
 					{
 						printf("\r Instructions:\r\n");
 						inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
 						inst_size = ntohs(inst_ptr->len);
+						
 						if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
 						{
 							printf("  Apply Actions:\r\n");
 							struct ofp13_action_header *act_hdr;
 							act_size = 0;
+							if (inst_size == sizeof(struct ofp13_instruction_actions)) printf("   DROP \r\n");	// No actions
 							while (act_size < (inst_size - sizeof(struct ofp13_instruction_actions)))
 							{
 								inst_actions  = ofp13_oxm_inst[i] + act_size;
@@ -1210,6 +1243,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 									}
 									act_output = NULL;
 								}
+								
 								if (htons(act_hdr->type) == OFPAT13_SET_FIELD)
 								{
 									struct ofp13_action_set_field *act_set_field = act_hdr;
@@ -1224,19 +1258,41 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 									};													
 								}
 								
+								if (htons(act_hdr->type) == OFPAT13_PUSH_VLAN)
+								{
+									struct ofp13_action_push *act_push = act_hdr;
+									printf("   Push VLAN tag\r\n");
+								}
+
+								if (htons(act_hdr->type) == OFPAT13_POP_VLAN)
+								{
+									printf("   Pop VLAN tag\r\n");
+								}
+																
 								act_size += htons(act_hdr->len);
 							}
 						}
+						// Print goto table instruction
+						if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
+						{
+							struct ofp13_instruction_goto_table *inst_goto_ptr;
+							inst_goto_ptr = (struct ofp13_instruction_goto_table *) ofp13_oxm_inst[i];
+							printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
+							continue;
+						}
+						// Is there more then one instruction?
+						if (ofp13_oxm_inst_size[i] > inst_size)
+						{
+							uint8_t *nxt_inst;
+							nxt_inst = ofp13_oxm_inst[i] + inst_size;
+							struct ofp13_instruction_goto_table *inst_goto_ptr;
+							inst_goto_ptr = (struct ofp13_instruction_goto_table *) nxt_inst;
+							printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
+						}
 					} else {
+						// No instructions
 						printf("\r Instructions:\r\n");
 						printf("   DROP \r\n");
-					}
-					
-					if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
-					{
-						struct ofp13_instruction_goto_table *inst_goto_ptr; 
-						inst_goto_ptr = (struct ofp13_instruction_goto_table *) ofp13_oxm_inst[i];
-						printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
 					}
 				}
 				printf("\r\n-------------------------------------------------------------------------\r\n\n");				
@@ -1250,38 +1306,48 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 	// List tables
 	if (strcmp(command, "show") == 0 && strcmp(param1, "tables") == 0)
 	{
-		int flow_count;
-		int lookup_count;
-		int byte_count;
-		int matched_count;
-		printf("\r\n-------------------------------------------------------------------------\r\n");
-		for (int x=0;x<MAX_TABLES;x++)
+		if( OF_Version == 1)
 		{
-			flow_count = 0;
-			matched_count = 0;
-			for (int i=0;i<iLastFlow;i++)
+			printf("\r\n-------------------------------------------------------------------------\r\n");
+			if(iLastFlow > 0)
 			{
-				if(flow_match13[i].table_id == x)
+				printf("Table: 0\r\n");
+				printf(" Flows: %d\r\n",iLastFlow);
+				printf(" Lookups: %d\r\n",table_counters[0].lookup_count);
+				printf(" Matches: %d\r\n",table_counters[0].matched_count);
+				printf(" Bytes: %d\r\n",table_counters[0].byte_count);
+				printf("\r\n");
+			} else printf("No Flows.\r\n");
+			printf("-------------------------------------------------------------------------\r\n");			
+		}
+		
+		if( OF_Version == 4)
+		{
+			int flow_count;
+			printf("\r\n-------------------------------------------------------------------------\r\n");
+			for (int x=0;x<MAX_TABLES;x++)
+			{
+				flow_count = 0;
+				for (int i=0;i<iLastFlow;i++)
 				{
-					flow_count++;
-					matched_count += table_counters[x].matched_count;
-					lookup_count += table_counters[x].lookup_count;
-					byte_count += flow_counters[i].bytes;
+					if(flow_match13[i].table_id == x)
+					{
+						flow_count++;
+					}
+				}
+				if(flow_count > 0)
+				{
+					printf("Table: %d\r\n",x);
+					printf(" Flows: %d\r\n",flow_count);
+					printf(" Lookups: %d\r\n",table_counters[x].lookup_count);
+					printf(" Matches: %d\r\n",table_counters[x].matched_count);
+					printf(" Bytes: %d\r\n",table_counters[x].byte_count); 
+					printf("\r\n");	
 				}
 			}
-			if(flow_count > 0)
-			{
-				printf("Table: %d\r\n",x);
-				printf(" Flows: %d\r\n",flow_count);
-				printf(" Lookups: %d\r\n",lookup_count);
-				printf(" Matches: %d\r\n",matched_count);
-				printf(" Bytes: %d\r\n",byte_count); 
-				printf("\r\n");	
-			}
+			printf("-------------------------------------------------------------------------\r\n");
 		}
-		printf("\r\n-------------------------------------------------------------------------\r\n");		
 		return;
-		
 	}
 
 	// Openflow status
@@ -1297,13 +1363,27 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 			printf(" Version: 1.0 (0x01)\r\n");
 			printf(" No tables: 1\r\n");
 			printf(" No flows: %d\r\n", iLastFlow);
-			printf(" Table Lookups: %d\r\n",table_counters[0].lookup_count);
-			printf(" Table Matches: %d\r\n",table_counters[0].matched_count);
+			printf(" Total Lookups: %d\r\n",table_counters[0].lookup_count);
+			printf(" Total Matches: %d\r\n",table_counters[0].matched_count);
 		}
 		if (OF_Version == 4)
 		{
+			int flow_count;
+			int tables = 0;
+			for (int x=0;x<MAX_TABLES;x++)
+			{
+				flow_count = 0;
+				for (int i=0;i<iLastFlow;i++)
+				{
+					if(flow_match13[i].table_id == x)
+					{
+						flow_count++;
+					}
+				}
+				if(flow_count > 0) tables++;
+			}
 			printf(" Version: 1.3 (0x04)\r\n");
-			printf(" No tables: %d\r\n", MAX_TABLES);
+			printf(" No tables: %d\r\n", tables);
 			printf(" No flows: %d\r\n", iLastFlow);
 			// Total up all the table stats
 			int lookup_count = 0;
@@ -1313,8 +1393,8 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				lookup_count += table_counters[x].lookup_count;
 				matched_count += table_counters[x].matched_count;
 			}
-			printf(" Table Lookups: %d\r\n",lookup_count);
-			printf(" Table Matches: %d\r\n",matched_count);	
+			printf(" Total Lookups: %d\r\n",lookup_count);
+			printf(" Total Matches: %d\r\n",matched_count);	
 		}		
 		printf("\r\n-------------------------------------------------------------------------\r\n");		
 		return;
@@ -1366,7 +1446,15 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		uCLIContext = CLI_ROOT;
 		return;
 	}
-		
+
+	// Display help
+	if (strcmp(command, "help") == 0)
+	{
+		printhelp();
+		return;
+
+	}
+			
 	if (strcmp(command, "read")==0)
 	{
 		int n = switch_read(atoi(param1));

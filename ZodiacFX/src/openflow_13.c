@@ -46,6 +46,7 @@ extern int totaltime;
 extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
+extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
@@ -113,6 +114,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				flow_counters[i].bytes += packet_size;
 				flow_counters[i].lastmatch = totaltime; // Increment flow hit count
 				table_counters[table_id].matched_count++;
+				table_counters[table_id].byte_count += packet_size;
 				
 				// If there are no instructions then it's a DROP so just return
 				if(ofp13_oxm_inst[i] == NULL) return;
@@ -123,6 +125,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				struct ofp13_instruction *inst_ptr; 
 				inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
 				int inst_size = ntohs(inst_ptr->len);
+				
 				if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
 				{
 					int act_size = 0;
@@ -130,6 +133,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					{
 						inst_actions  = ofp13_oxm_inst[i] + act_size;
 						act_hdr = &inst_actions->actions;
+						//printf("Apply Action:%d\r\n", htons(act_hdr->type));
 						// Output Action
 						if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 						{
@@ -143,12 +147,31 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 								int pisize = ntohs(act_output->max_len);
 								if (pisize > packet_size) pisize = packet_size;
 								packet_in13(p_uc_data, pisize, port, OFPR_ACTION);
-							} else if (htonl(act_output->port) == OFPP13_FLOOD)
+							} else if (htonl(act_output->port) == OFPP13_FLOOD || htonl(act_output->port) == OFPP13_ALL)
 							{
-								int outport = (15 - NativePortMatrix) - (1<< (ntohl(act_output->port)-1));
+								int outport = (15 - NativePortMatrix) - (1<<(port-1));
 								gmac_write(p_uc_data, packet_size, outport);
 							}
 						}
+						
+						// Push a VLAN tag
+						if (htons(act_hdr->type) == OFPAT13_PUSH_VLAN && eth_prot != vlantag)
+						{						
+							memmove(p_uc_data + 16, p_uc_data + 12, packet_size - 12);
+							memcpy(p_uc_data + 12, &vlantag,2);
+							memcpy(p_uc_data + 14, 0, 2);
+							packet_size += 4;
+							memcpy(ul_size, &packet_size, 2);
+						}
+
+						// Pop a VLAN tag
+						if (htons(act_hdr->type) == OFPAT13_POP_VLAN && eth_prot == vlantag)
+						{
+							memmove(p_uc_data + 12, p_uc_data + 16, packet_size - 16);
+							packet_size -= 4;
+							memcpy(ul_size, &packet_size, 2);
+						}
+												
 						// Set Field Action
 						if (htons(act_hdr->type) == OFPAT13_SET_FIELD)
 						{
@@ -223,15 +246,25 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						}								
 						act_size += htons(act_hdr->len);
 					}
-					return;
+					
+					if (ofp13_oxm_inst_size[i] > inst_size)
+					{
+						//printf("inst %d:%d\r\n", ofp13_oxm_inst_size[i], inst_size);
+						uint8_t *nxt_inst;
+						nxt_inst = ofp13_oxm_inst[i] + inst_size;
+						inst_ptr = (struct ofp13_instruction *) nxt_inst;
+						inst_size = ntohs(inst_ptr->len);
+					} else return;
 				}
+				
 				if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
 				{
 					struct ofp13_instruction_goto_table *inst_goto_ptr;
-					inst_goto_ptr = (struct ofp13_instruction_goto_table *) ofp13_oxm_inst[i];
+					inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
 					table_id = inst_goto_ptr->table_id;
+					//printf("Goto table:%d\r\n", table_id);
 				}
-			} else return;
+			} //else return;
 		}
 	}
 	return;
@@ -788,11 +821,12 @@ void flow_add13(struct ofp_header *msg)
 		of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_BAD_TABLE_ID);
 		return;
 	}
-		
 	memcpy(&flow_match13[iLastFlow], ptr_fm, sizeof(struct ofp13_flow_mod));
+	//printf("\r\nAdd: %d - %d", iLastFlow, (ntohs(ptr_fm->match.length)-4));
 	if (ntohs(ptr_fm->match.length) > 4)
 	{
 		ofp13_oxm_match[iLastFlow] = malloc(ntohs(flow_match13[iLastFlow].match.length)-4);	// Allocate a space to store match fields
+		//printf(" : %d",ofp13_oxm_match[iLastFlow]);
 		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, ntohs(flow_match13[iLastFlow].match.length)-4);
 	} else {
 		ofp13_oxm_match[iLastFlow] = NULL;
@@ -808,7 +842,7 @@ void flow_add13(struct ofp_header *msg)
 	} else {
 		ofp13_oxm_inst[iLastFlow] = NULL;
 	}	
-			
+	ofp13_oxm_inst_size[iLastFlow] = instruction_size;	
 	flow_counters[iLastFlow].duration = totaltime;
 	flow_counters[iLastFlow].lastmatch = totaltime;
 	flow_counters[iLastFlow].active = true;
@@ -824,43 +858,45 @@ void flow_delete13(struct ofp_header *msg)
 		if(flow_counters[q].active == true)
 		{
 			if (ptr_fm->table_id != OFPTT_ALL && ptr_fm->table_id != flow_match13[q].table_id)
+			{
+				continue;
+			}
+			
+			if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q].cookie & ptr_fm->cookie_mask)
+			{
+				continue;
+			}
+			if (ptr_fm->out_port != OFPP13_ANY)
+			{
+				bool out_port_match = false;
+				int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
+				int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+				struct ofp13_instruction *inst;
+				for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
 				{
-						continue;
-				}
-				if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q].cookie & ptr_fm->cookie_mask)
-				{
-						continue;
-				}
-				if (ptr_fm->out_port != OFPP13_ANY)
-				{
-						bool out_port_match = false;
-						int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
-						int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
-						struct ofp13_instruction *inst;
-						for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
-						{
-								if(inst->type == OFPIT13_APPLY_ACTIONS || inst->type == OFPIT13_WRITE_ACTIONS)
-								{
-									struct ofp13_instruction_actions *ia = inst;
-									struct ofp13_action_header *action;
-									for(action=ia->actions; action<inst+inst->len; action+=action->len)
-									{
-										if(action->type==OFPAT13_OUTPUT)
-										{
-											struct ofp13_action_output *output = action;
-											if (output->port == ptr_fm->out_port)
-											{
-												out_port_match = true;
-											}
-									}
-								}
-						}
-				}
-					if(out_port_match==false)
+					if(inst->type == OFPIT13_APPLY_ACTIONS || inst->type == OFPIT13_WRITE_ACTIONS)
 					{
-						continue;
+						struct ofp13_instruction_actions *ia = inst;
+						struct ofp13_action_header *action;
+						for(action=ia->actions; action<inst+inst->len; action+=action->len)
+						{
+							if(action->type==OFPAT13_OUTPUT)
+							{
+								struct ofp13_action_output *output = action;
+								if (output->port == ptr_fm->out_port)
+								{
+									out_port_match = true;
+								}
+							}
+						}
 					}
 				}
+				
+				if(out_port_match==false)
+				{
+					continue;
+				}
+				
 				if (ptr_fm->out_group != OFPG13_ANY)
 				{
 					bool out_group_match = false;
@@ -885,44 +921,26 @@ void flow_delete13(struct ofp_header *msg)
 								}
 							}
 						}
-								}
-								if(out_group_match==false)
-								{
-										continue;
-								}
+						if(out_group_match==false)
+						{
+							continue;
 						}
+						
 						if(field_match13(ofp13_oxm_match[q], ntohs(flow_match13[q].match.length)-4, ptr_fm->match.oxm_fields, ntohs(ptr_fm->match.length)-4) == 0)
 						{
 								continue;
 						}
+						
 						if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
-						// Clear the counters and action
-						memset(&flow_counters[q], 0, sizeof(struct flows_counter));
-						if(ofp13_oxm_match[q] != NULL)
-						{
-								free(ofp13_oxm_match[q]);
-						}
-						if(ofp13_oxm_inst[q] != NULL)
-						{
-								free(ofp13_oxm_inst[q]);
-						}
+						// Remove the flow entry
+						printf("Delete: %d\r\n", q);
+						remove_flow13(q);
+						q--;
+					}
 				}
-		}
-	
-		int flow_count = 0;
-		for(int q=0;q<iLastFlow;q++)
-		{
-			if (flow_counters[q].active){
-			if (flow_count != q) {
-			memcpy(&flow_match13[flow_count], &flow_match13[q], sizeof(struct ofp13_flow_mod));
-			memcpy(&flow_counters[flow_count], &flow_counters[q], sizeof(struct flows_counter));
-			ofp13_oxm_match[flow_count] = ofp13_oxm_match[q];
-			ofp13_oxm_inst[flow_count] = ofp13_oxm_inst[q];
 			}
-			flow_count++;
 		}
 	}
-	iLastFlow = flow_count;
 	return;
 }
 
@@ -937,32 +955,17 @@ void flow_delete_strict13(struct ofp_header *msg)
 	struct ofp13_flow_mod * ptr_fm;
 	ptr_fm = (struct ofp13_flow_mod *) msg;
 	int q;
-	// Look for flows with the exact match fields and cookie values
+	// Look for flows with the exact match fields, cookie value and table id
 	for(q=0;q<iLastFlow;q++)
 	{
 		if(flow_counters[q].active == true)
 		{
-			if((memcmp(&flow_match13[q].match, &ptr_fm->match, sizeof(struct ofp13_match)) == 0) && (memcmp(&flow_match13[q].cookie, &ptr_fm->cookie,8) == 0))
+			if((memcmp(&flow_match13[q].match, &ptr_fm->match, sizeof(struct ofp13_match)) == 0) && (memcmp(&flow_match13[q].cookie, &ptr_fm->cookie,8) == 0) && (flow_match13[q].table_id == ptr_fm->table_id))
 			{
 				if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
-				// Free the memory allocated for the match and instructions
-				if(ofp13_oxm_match[q] != NULL)
-				{
-						free(ofp13_oxm_match[q]);
-				}
-				if(ofp13_oxm_inst[q] != NULL)
-				{
-						free(ofp13_oxm_inst[q]);
-				}
-				// Copy the last flow to here to fill the gap
-				memcpy(&flow_match13[q], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));
-				ofp13_oxm_match[q] = ofp13_oxm_match[iLastFlow-1];
-				ofp13_oxm_inst[q] = ofp13_oxm_inst[iLastFlow-1];
-				memcpy(&flow_counters[q], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-				// Clear the counters and action from the last flow that was moved
-				memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-				iLastFlow --;
-				break;
+				remove_flow13(q);
+				//break;
+				q--;
 			}
 		}
 	}

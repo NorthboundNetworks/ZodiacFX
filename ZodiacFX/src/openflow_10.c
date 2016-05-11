@@ -102,9 +102,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	memcpy(&packet_size, ul_size, 2);
 	uint16_t eth_prot;
 	memcpy(&eth_prot, p_uc_data + 12, 2);
-	
-	if (Zodiac_Config.failstate == 0 && tcp_pcb->state != ESTABLISHED) return;	// If the controller is not connected and fail secure is enabled drop the packet
-	
+
 	struct ofp_action_output *action_out;	// Need to move these
 	struct ofp_action_dl_addr *action_setdl;
 	struct ofp_action_nw_addr *action_setnw;
@@ -148,6 +146,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			flow_counters[i].bytes += packet_size;
 			flow_counters[i].lastmatch = totaltime; // Increment flow hit count
 			table_counters[0].matched_count++;
+			table_counters[0].byte_count += packet_size;
 			
 			// If there are no actions DROP the packet
 			act_hdr = flow_actions[i].action1;
@@ -178,7 +177,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						
 						if (ntohs(action_out->port) == OFPP_ALL || ntohs(action_out->port) == OFPP_FLOOD)
 						{
-							outport = (15 - NativePortMatrix) - (1<< (ntohs(action_out->port)-1));
+							outport = (15 - NativePortMatrix) - (1<<(port-1));
 							gmac_write(p_uc_data, packet_size, outport);
 						}
 						
@@ -727,11 +726,18 @@ void packet_out(struct ofp_header *msg)
 	eport = ptr - 4;
 	int outPort = NTOHS(*eport);
 	int inPort = NTOHS(*iport);
-	
-	if (outPort == OFPP_FLOOD)
+
+	if (outPort == OFPP_TABLE)
 	{
-		outPort = 7 - (1 << (inPort-1));	// Need to fix this, may also send out the Non-OpenFlow port
-		} else {
+		nnOF_tablelookup(ptr, &size, inPort);
+		return;
+	}
+	
+	if (outPort == OFPP_FLOOD || outPort == OFPP13_ALL)
+	{
+		outPort = (15 - NativePortMatrix) - (1<<(inPort-1));
+	} else 
+	{
 		outPort = 1 << (outPort-1);
 	}
 	gmac_write(ptr, size, outPort);
@@ -839,7 +845,7 @@ void flow_add(struct ofp_header *msg)
 	
 	action_hdr = &ptr_fm->actions;
 	memcpy(&flow_match[iLastFlow], ptr_fm, action_hdr->len);
-	
+
 	if(action_size > 0)
 	{
 		for(int q=0;q<4;q++)

@@ -430,6 +430,11 @@ void update_port_status(void)
 */
 void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
 {	
+	if (ul_size > GMAC_FRAME_LENTGH_MAX)
+	{
+		return;
+	}
+
 	if (port & 1) phys10_port_stats[0].tx_packets++;
 	if (port & 2) phys10_port_stats[1].tx_packets++;
 	if (port & 4) phys10_port_stats[2].tx_packets++;

@@ -43,5 +43,6 @@ void clear_flows(void);
 int flow_stats_msg10(char *buffer, int first, int last);
 int flow_stats_msg13(char *buffer, int first, int last);
 void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset);
+void remove_flow13(int flow_id);
 
 #endif /* OF_HELPER_H_ */
