@@ -955,12 +955,15 @@ void flow_delete_strict13(struct ofp_header *msg)
 	struct ofp13_flow_mod * ptr_fm;
 	ptr_fm = (struct ofp13_flow_mod *) msg;
 	int q;
-	// Look for flows with the exact match fields, cookie value and table id
+	// Look for flows with the exact match fields, priority, cookie value and table id
 	for(q=0;q<iLastFlow;q++)
 	{
 		if(flow_counters[q].active == true)
 		{
-			if((memcmp(&flow_match13[q].match, &ptr_fm->match, sizeof(struct ofp13_match)) == 0) && (memcmp(&flow_match13[q].cookie, &ptr_fm->cookie,8) == 0) && (flow_match13[q].table_id == ptr_fm->table_id))
+			if((memcmp(&flow_match13[q].match, &ptr_fm->match, sizeof(struct ofp13_match)) == 0) 
+				&& (memcmp(&flow_match13[q].priority, &ptr_fm->priority, 16) == 0)
+				&& (memcmp(&flow_match13[q].cookie, &ptr_fm->cookie,8) == 0) 
+				&& (flow_match13[q].table_id == ptr_fm->table_id))
 			{
 				if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
 				remove_flow13(q);
