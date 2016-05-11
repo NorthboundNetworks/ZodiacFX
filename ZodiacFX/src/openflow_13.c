@@ -46,9 +46,10 @@ extern int totaltime;
 extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
+extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
 extern struct ofp13_port_stats phys13_port_stats[4];
-extern struct table_counter table_counters;
+extern struct table_counter table_counters[MAX_TABLES];
 extern uint8_t port_status[4];
 extern struct ofp_switch_config Switch_config;
 extern uint8_t shared_buffer[2048];
@@ -89,6 +90,7 @@ static inline uint64_t (htonll)(uint64_t n)
 
 void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 {
+	uint8_t table_id = 0;
 	uint16_t eth_prot;
 	memcpy(&eth_prot, p_uc_data + 12, 2);
 	uint16_t packet_size;
@@ -97,110 +99,172 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				
 	if (Zodiac_Config.OFEnabled == OF_ENABLED) // Main lookup
 	{
-		table_counters.lookup_count++;
-		
-		int i = -1;
-		// Check if packet matches an existing flow
-		i = flowmatch13(p_uc_data, port);
-		if (i == -2) return;	// Error packet
-		if (i == -1) return;	// No match
-		
-		if ( i > -1)
+		while(1)	// Loop through until we get a miss
 		{
-			flow_counters[i].hitCount++; // Increment flow hit count
-			flow_counters[i].bytes += packet_size;
-			flow_counters[i].lastmatch = totaltime; // Increment flow hit count
-			table_counters.matched_count++;
-			
-			struct ofp13_instruction_actions *inst_actions;
-			struct ofp13_action_header *act_hdr;
-			struct ofp13_instruction *inst_ptr; 
-			inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
-			int inst_size = ntohs(inst_ptr->len);
-			if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
+			table_counters[table_id].lookup_count++;
+			int i = -1;
+			// Check if packet matches an existing flow
+			i = flowmatch13(p_uc_data, port, table_id);
+			if (i == -2) return;	// Error packet
+			if (i == -1) return;	// No match
+		
+			if ( i > -1)
 			{
-				int act_size = 0;
-				while (act_size < (inst_size - sizeof(struct ofp13_instruction_actions)))
+				flow_counters[i].hitCount++; // Increment flow hit count
+				flow_counters[i].bytes += packet_size;
+				flow_counters[i].lastmatch = totaltime; // Increment flow hit count
+				table_counters[table_id].matched_count++;
+				table_counters[table_id].byte_count += packet_size;
+				
+				// If there are no instructions then it's a DROP so just return
+				if(ofp13_oxm_inst[i] == NULL) return;
+				
+				// Process Instructions
+				struct ofp13_instruction_actions *inst_actions;
+				struct ofp13_action_header *act_hdr;
+				struct ofp13_instruction *inst_ptr; 
+				inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
+				int inst_size = ntohs(inst_ptr->len);
+				
+				if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
 				{
-					inst_actions  = ofp13_oxm_inst[i] + act_size;
-					act_hdr = &inst_actions->actions;
-					if (htons(act_hdr->type) == OFPAT13_OUTPUT)
+					int act_size = 0;
+					while (act_size < (inst_size - sizeof(struct ofp13_instruction_actions)))
 					{
-						struct ofp13_action_output *act_output = act_hdr;
-						if (htonl(act_output->port) < OFPP13_MAX)
+						inst_actions  = ofp13_oxm_inst[i] + act_size;
+						act_hdr = &inst_actions->actions;
+						//printf("Apply Action:%d\r\n", htons(act_hdr->type));
+						// Output Action
+						if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 						{
-							int outport = (1<< (ntohl(act_output->port)-1));
-							gmac_write(p_uc_data, packet_size, outport);
-						} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
-						{
-							int pisize = ntohs(act_output->max_len);
-							if (pisize > packet_size) pisize = packet_size;
-							packet_in13(p_uc_data, pisize, port, OFPR_ACTION);
-						} else if (htonl(act_output->port) == OFPP13_FLOOD)
-						{
-							int outport = (15 - NativePortMatrix) - (1<< (ntohl(act_output->port)-1));
-							gmac_write(p_uc_data, packet_size, outport);
-						}
-					}
-					if (htons(act_hdr->type) == OFPAT13_SET_FIELD)
-					{
-						struct ofp13_action_set_field *act_set_field = act_hdr;
-						struct oxm_header13 oxm_header;
-						uint16_t oxm_value16;
-						uint32_t oxm_value32;
-						memcpy(&oxm_header, act_set_field->field,4);
-						oxm_header.oxm_field = oxm_header.oxm_field >> 1;		
-						switch(oxm_header.oxm_field)
-						{
-							case OFPXMT_OFB_VLAN_VID:
-							memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
-							uint16_t vlan_vid = (oxm_value16 - 0x10);
-							uint16_t action_vlanid  = act_hdr;
-							uint16_t pcp;
-							uint16_t vlanid;
-							uint16_t vlanid_mask = htons(0x0fff);
-						
-							if (eth_prot == vlantag)
+							struct ofp13_action_output *act_output = act_hdr;
+							if (htonl(act_output->port) < OFPP13_MAX)
 							{
-								memcpy(pcp, p_uc_data + 14, 2);
-							} else {
-								pcp = 0;
+								int outport = (1<< (ntohl(act_output->port)-1));
+								gmac_write(p_uc_data, packet_size, outport);
+							} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
+							{
+								int pisize = ntohs(act_output->max_len);
+								if (pisize > packet_size) pisize = packet_size;
+								packet_in13(p_uc_data, pisize, port, OFPR_ACTION);
+							} else if (htonl(act_output->port) == OFPP13_FLOOD || htonl(act_output->port) == OFPP13_ALL)
+							{
+								int outport = (15 - NativePortMatrix) - (1<<(port-1));
+								gmac_write(p_uc_data, packet_size, outport);
 							}
-							if (vlan_vid == 0xffff)
+						}
+						
+						// Push a VLAN tag
+						if (htons(act_hdr->type) == OFPAT13_PUSH_VLAN && eth_prot != vlantag)
+						{						
+							memmove(p_uc_data + 16, p_uc_data + 12, packet_size - 12);
+							memcpy(p_uc_data + 12, &vlantag,2);
+							memcpy(p_uc_data + 14, 0, 2);
+							packet_size += 4;
+							memcpy(ul_size, &packet_size, 2);
+						}
+
+						// Pop a VLAN tag
+						if (htons(act_hdr->type) == OFPAT13_POP_VLAN && eth_prot == vlantag)
+						{
+							memmove(p_uc_data + 12, p_uc_data + 16, packet_size - 16);
+							packet_size -= 4;
+							memcpy(ul_size, &packet_size, 2);
+						}
+												
+						// Set Field Action
+						if (htons(act_hdr->type) == OFPAT13_SET_FIELD)
+						{
+							struct ofp13_action_set_field *act_set_field = act_hdr;
+							struct oxm_header13 oxm_header;
+							uint16_t oxm_value16;
+							uint32_t oxm_value32;
+							memcpy(&oxm_header, act_set_field->field,4);
+							oxm_header.oxm_field = oxm_header.oxm_field >> 1;		
+							switch(oxm_header.oxm_field)
 							{
-								vlanid = pcp & ~vlanid_mask;
-							} else {
-									vlanid = (vlan_vid & vlanid_mask) | (pcp & ~vlanid_mask);
-							}						
-							// Does the packet have a VLAN header?
-							if (eth_prot == vlantag)
-							{
-								if (vlan_vid == 0)	// If the packet has a tag but the action is to set it to 0 then remove it
+								// Set VLAN ID
+								case OFPXMT_OFB_VLAN_VID:
+								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+								uint16_t vlan_vid = (oxm_value16 - 0x10);
+								uint16_t action_vlanid  = act_hdr;
+								uint16_t pcp;
+								uint16_t vlanid;
+								uint16_t vlanid_mask = htons(0x0fff);
+						
+								if (eth_prot == vlantag)
 								{
-									memmove(p_uc_data + 12, p_uc_data + 16, packet_size - 16);
-									packet_size -= 4;
-									memcpy(ul_size, &packet_size, 2);
+									memcpy(pcp, p_uc_data + 14, 2);
 								} else {
-									memcpy(p_uc_data + 14, &vlanid, 2);
+									pcp = 0;
 								}
-							} else {
-								if (vlan_vid > 0)		// Only add the tag if the VLAN ID is greater then 0
+								if (vlan_vid == 0xffff)
 								{
-									memmove(p_uc_data + 16, p_uc_data + 12, packet_size - 12);
-									memcpy(p_uc_data + 12, &vlantag,2);
-									memcpy(p_uc_data + 14, &vlanid, 2);
-									packet_size += 4;
-									memcpy(ul_size, &packet_size, 2);
-								}
-							}				
-							break;
-							
-							
-						};													
-					}								
-					act_size += htons(act_hdr->len);
+									vlanid = pcp & ~vlanid_mask;
+								} else {
+										vlanid = (vlan_vid & vlanid_mask) | (pcp & ~vlanid_mask);
+								}						
+								// Does the packet have a VLAN header?
+								if (eth_prot == vlantag)
+								{
+									if (vlan_vid == 0)	// If the packet has a tag but the action is to set it to 0 then remove it
+									{
+										memmove(p_uc_data + 12, p_uc_data + 16, packet_size - 16);
+										packet_size -= 4;
+										memcpy(ul_size, &packet_size, 2);
+									} else {
+										memcpy(p_uc_data + 14, &vlanid, 2);
+									}
+								} else {
+									if (vlan_vid > 0)		// Only add the tag if the VLAN ID is greater then 0
+									{
+										memmove(p_uc_data + 16, p_uc_data + 12, packet_size - 12);
+										memcpy(p_uc_data + 12, &vlantag,2);
+										memcpy(p_uc_data + 14, &vlanid, 2);
+										packet_size += 4;
+										memcpy(ul_size, &packet_size, 2);
+									}
+								}				
+								break;
+								// Set Source Ethernet Address
+								case OFPXMT_OFB_ETH_SRC:
+								memcpy(p_uc_data + 6,act_set_field->field + sizeof(struct oxm_header13), 6);							
+								break;
+								// Set Destination Ethernet Address
+								case OFPXMT_OFB_ETH_DST:
+								memcpy(p_uc_data,act_set_field->field + sizeof(struct oxm_header13), 6);
+								break;
+								// Set Source Ethernet Address
+								case OFPXMT_OFB_IPV4_SRC:
+								
+								break;
+								// Set Destination Ethernet Address
+								case OFPXMT_OFB_IPV6_DST:
+								
+								break;									
+							};													
+						}								
+						act_size += htons(act_hdr->len);
+					}
+					
+					if (ofp13_oxm_inst_size[i] > inst_size)
+					{
+						//printf("inst %d:%d\r\n", ofp13_oxm_inst_size[i], inst_size);
+						uint8_t *nxt_inst;
+						nxt_inst = ofp13_oxm_inst[i] + inst_size;
+						inst_ptr = (struct ofp13_instruction *) nxt_inst;
+						inst_size = ntohs(inst_ptr->len);
+					} else return;
 				}
-			}
+				
+				if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
+				{
+					struct ofp13_instruction_goto_table *inst_goto_ptr;
+					inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
+					table_id = inst_goto_ptr->table_id;
+					//printf("Goto table:%d\r\n", table_id);
+				}
+			} //else return;
 		}
 	}
 	return;
@@ -311,7 +375,7 @@ void features_reply13(uint32_t xid)
 	memcpy(&datapathid, &Zodiac_Config.MAC_address, 6);
 	features.datapath_id = datapathid << 16;
 	features.n_buffers = htonl(0);		// Number of packets that can be buffered
-	features.n_tables = 1;		// Number of flow tables
+	features.n_tables = MAX_TABLES;		// Number of flow tables
 	features.capabilities = htonl(OFPC13_FLOW_STATS + OFPC13_TABLE_STATS + OFPC13_PORT_STATS);	// Switch Capabilities
 	features.auxiliary_id = 0;	// Primary connection
 
@@ -465,7 +529,6 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 */
 int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
-	// XXX: no multi table support for now
 	int len = offsetof(struct ofp13_multipart_reply, body) + sizeof(struct ofp13_table_stats);
 	struct ofp13_multipart_reply *reply = buffer;
 	reply->header.version = OF_Version;
@@ -483,8 +546,8 @@ int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 		}
 	}
 	stats->active_count = htonl(active);
-	stats->matched_count = htonll(table_counters.matched_count);
-	stats->lookup_count = htonll(table_counters.lookup_count);
+	stats->matched_count = htonll(table_counters[0].matched_count);		// !!Need to add multi-table response!!
+	stats->lookup_count = htonll(table_counters[0].lookup_count);
 	return len;
 }
 
@@ -511,8 +574,8 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 	reply->flags = 0;
 	reply->type = htons(OFPMP13_TABLE_FEATURES);
 	
-	tbl_feats.table_id = 100;
-	sprintf(tablename, "table_100");
+	tbl_feats.table_id = 0;
+	sprintf(tablename, "table_0");
 	strcpy(tbl_feats.name, tablename);	
 	tbl_feats.metadata_match = 0;
 	tbl_feats.metadata_write = 0;
@@ -595,7 +658,7 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 	memcpy(buffer + (len-(prop_size-104)), &inst_prop, 4);
 	oxm_header.oxm_field = OFPXMT_OFB_VLAN_VID << 1;		
 	memcpy(buffer + (len-(prop_size-108)), &oxm_header, 4);		
-
+	// !!Need to add additional set field values!!
 	return len;
 }
 
@@ -744,23 +807,31 @@ void flow_mod13(struct ofp_header *msg)
 */
 void flow_add13(struct ofp_header *msg)
 {
-	
+	// Return an error if tables are full
 	if (iLastFlow > (MAX_FLOWS-1))
 	{
 		of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 		return;
 	}
-	
 	struct ofp13_flow_mod * ptr_fm;
 	ptr_fm = (struct ofp13_flow_mod *) msg;
+	// Tables are numbered from 0 to (MAX_TABLES-1). If higher then (MAX_TABLES-1) return bad table error
+	if (ptr_fm->table_id > (MAX_TABLES-1))
+	{
+		of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_BAD_TABLE_ID);
+		return;
+	}
 	memcpy(&flow_match13[iLastFlow], ptr_fm, sizeof(struct ofp13_flow_mod));
+	//printf("\r\nAdd: %d - %d", iLastFlow, (ntohs(ptr_fm->match.length)-4));
 	if (ntohs(ptr_fm->match.length) > 4)
 	{
 		ofp13_oxm_match[iLastFlow] = malloc(ntohs(flow_match13[iLastFlow].match.length)-4);	// Allocate a space to store match fields
+		//printf(" : %d",ofp13_oxm_match[iLastFlow]);
 		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, ntohs(flow_match13[iLastFlow].match.length)-4);
 	} else {
 		ofp13_oxm_match[iLastFlow] = NULL;
 	}
+	
 	int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
 	int instruction_size = ntohs(ptr_fm->header.length) - mod_size;
 	if (instruction_size > 0)
@@ -771,7 +842,7 @@ void flow_add13(struct ofp_header *msg)
 	} else {
 		ofp13_oxm_inst[iLastFlow] = NULL;
 	}	
-			
+	ofp13_oxm_inst_size[iLastFlow] = instruction_size;	
 	flow_counters[iLastFlow].duration = totaltime;
 	flow_counters[iLastFlow].lastmatch = totaltime;
 	flow_counters[iLastFlow].active = true;
@@ -787,43 +858,45 @@ void flow_delete13(struct ofp_header *msg)
 		if(flow_counters[q].active == true)
 		{
 			if (ptr_fm->table_id != OFPTT_ALL && ptr_fm->table_id != flow_match13[q].table_id)
+			{
+				continue;
+			}
+			
+			if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q].cookie & ptr_fm->cookie_mask)
+			{
+				continue;
+			}
+			if (ptr_fm->out_port != OFPP13_ANY)
+			{
+				bool out_port_match = false;
+				int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
+				int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+				struct ofp13_instruction *inst;
+				for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
 				{
-						continue;
-				}
-				if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q].cookie & ptr_fm->cookie_mask)
-				{
-						continue;
-				}
-				if (ptr_fm->out_port != OFPP13_ANY)
-				{
-						bool out_port_match = false;
-						int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
-						int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
-						struct ofp13_instruction *inst;
-						for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
-						{
-								if(inst->type == OFPIT13_APPLY_ACTIONS || inst->type == OFPIT13_WRITE_ACTIONS)
-								{
-									struct ofp13_instruction_actions *ia = inst;
-									struct ofp13_action_header *action;
-									for(action=ia->actions; action<inst+inst->len; action+=action->len)
-									{
-										if(action->type==OFPAT13_OUTPUT)
-										{
-											struct ofp13_action_output *output = action;
-											if (output->port == ptr_fm->out_port)
-											{
-												out_port_match = true;
-											}
-									}
-								}
-						}
-				}
-					if(out_port_match==false)
+					if(inst->type == OFPIT13_APPLY_ACTIONS || inst->type == OFPIT13_WRITE_ACTIONS)
 					{
-						continue;
+						struct ofp13_instruction_actions *ia = inst;
+						struct ofp13_action_header *action;
+						for(action=ia->actions; action<inst+inst->len; action+=action->len)
+						{
+							if(action->type==OFPAT13_OUTPUT)
+							{
+								struct ofp13_action_output *output = action;
+								if (output->port == ptr_fm->out_port)
+								{
+									out_port_match = true;
+								}
+							}
+						}
 					}
 				}
+				
+				if(out_port_match==false)
+				{
+					continue;
+				}
+				
 				if (ptr_fm->out_group != OFPG13_ANY)
 				{
 					bool out_group_match = false;
@@ -848,43 +921,26 @@ void flow_delete13(struct ofp_header *msg)
 								}
 							}
 						}
-								}
-								if(out_group_match==false)
-								{
-										continue;
-								}
+						if(out_group_match==false)
+						{
+							continue;
 						}
+						
 						if(field_match13(ofp13_oxm_match[q], ntohs(flow_match13[q].match.length)-4, ptr_fm->match.oxm_fields, ntohs(ptr_fm->match.length)-4) == 0)
 						{
 								continue;
 						}
+						
 						if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
-						// Clear the counters and action
-						memset(&flow_counters[q], 0, sizeof(struct flows_counter));
-						if(ofp13_oxm_match[q] != NULL)
-						{
-								free(ofp13_oxm_match[q]);
-						}
-						if(ofp13_oxm_inst[q] != NULL)
-						{
-								free(ofp13_oxm_inst[q]);
-						}
+						// Remove the flow entry
+						printf("Delete: %d\r\n", q);
+						remove_flow13(q);
+						q--;
+					}
 				}
-		}
-	
-		int flow_count = 0;
-		for(int q=0;q<iLastFlow;q++)
-		{
-			if (flow_counters[q].active){
-			if (flow_count != q) {
-			memcpy(&flow_counters[flow_count], &flow_counters[q], sizeof(struct flows_counter));
-			ofp13_oxm_match[flow_count] = ofp13_oxm_match[q];
-			ofp13_oxm_inst[flow_count] = ofp13_oxm_inst[q];
 			}
-			flow_count++;
 		}
 	}
-	iLastFlow = flow_count;
 	return;
 }
 
@@ -899,40 +955,20 @@ void flow_delete_strict13(struct ofp_header *msg)
 	struct ofp13_flow_mod * ptr_fm;
 	ptr_fm = (struct ofp13_flow_mod *) msg;
 	int q;
-	
+	// Look for flows with the exact match fields, cookie value and table id
 	for(q=0;q<iLastFlow;q++)
 	{
 		if(flow_counters[q].active == true)
 		{
-			if((memcmp(&flow_match13[q].match, &ptr_fm->match, sizeof(struct ofp13_match)) == 0) && (memcmp(&flow_match13[q].cookie, &ptr_fm->cookie,4) == 0))
+			if((memcmp(&flow_match13[q].match, &ptr_fm->match, sizeof(struct ofp13_match)) == 0) && (memcmp(&flow_match13[q].cookie, &ptr_fm->cookie,8) == 0) && (flow_match13[q].table_id == ptr_fm->table_id))
 			{
 				if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
-				// Clear the counters and action
-				memset(&flow_counters[q], 0, sizeof(struct flows_counter));
-				if(ofp13_oxm_match[q] != NULL)
-				{
-						free(ofp13_oxm_match[q]);
-				}
-				if(ofp13_oxm_inst[q] != NULL)
-				{
-						free(ofp13_oxm_inst[q]);
-				}
+				remove_flow13(q);
+				//break;
+				q--;
 			}
 		}
 	}
-	int flow_count = 0;
-	for(int q=0;q<iLastFlow;q++)
-	{
-		if (flow_counters[q].active){
-			if (flow_count != q) {
-				memcpy(&flow_counters[flow_count], &flow_counters[q], sizeof(struct flows_counter));
-				ofp13_oxm_match[flow_count] = ofp13_oxm_match[q];
-				ofp13_oxm_inst[flow_count] = ofp13_oxm_inst[q];
-			}
-			flow_count++;
-		}
-	}
-	iLastFlow = flow_count;
 	return;
 }
 

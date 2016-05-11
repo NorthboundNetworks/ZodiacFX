@@ -48,6 +48,7 @@ struct table_counter
 {
 	int lookup_count;
 	int matched_count;
+	int byte_count;
 };
 
 struct flow_tbl_actions

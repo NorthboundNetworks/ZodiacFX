@@ -51,9 +51,10 @@ struct ofp_flow_mod flow_match[MAX_FLOWS];
 struct ofp13_flow_mod flow_match13[MAX_FLOWS];
 uint8_t *ofp13_oxm_match[MAX_FLOWS];
 uint8_t *ofp13_oxm_inst[MAX_FLOWS];
+uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
 struct flows_counter flow_counters[MAX_FLOWS];
 struct flow_tbl_actions flow_actions[MAX_FLOWS];
-struct table_counter table_counters;
+struct table_counter table_counters[MAX_TABLES];
 int iLastFlow = 0;
 uint8_t shared_buffer[2048];
 char sysbuf[64];
@@ -91,6 +92,15 @@ static inline uint64_t (htonll)(uint64_t n)
 
 void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 {
+	if( tcp_pcb != tcp_pcb_check)	// Check if the connect pointer is still valid
+	{
+		tcp_con_state = -1;
+		tcp_pcb = NULL;
+		return;
+	}
+	
+	if (Zodiac_Config.failstate == 0 && tcp_pcb->state != ESTABLISHED) return;	// If the controller is not connected and fail secure is enabled drop the packet
+			
 	if (OF_Version == 0x01) nnOF10_tablelookup(p_uc_data, ul_size, port);
 	if (OF_Version == 0x04) nnOF13_tablelookup(p_uc_data, ul_size, port);
 	return;
