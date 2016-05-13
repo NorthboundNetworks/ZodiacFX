@@ -50,6 +50,7 @@ extern struct ofp_flow_mod flow_match[MAX_FLOWS];
 extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
+extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
 extern int totaltime;
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
@@ -985,6 +986,7 @@ void remove_flow13(int flow_id)
 	memcpy(&flow_match13[flow_id], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));
 	ofp13_oxm_match[flow_id] = ofp13_oxm_match[iLastFlow-1];
 	ofp13_oxm_inst[flow_id] = ofp13_oxm_inst[iLastFlow-1];
+	ofp13_oxm_inst_size[flow_id] = ofp13_oxm_inst_size[iLastFlow - 1];
 	memcpy(&flow_counters[flow_id], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
 	// Clear the counters and action from the last flow that was moved
 	memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));

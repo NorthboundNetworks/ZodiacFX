@@ -96,6 +96,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	uint16_t packet_size;
 	memcpy(&packet_size, ul_size, 2);
 	uint16_t vlantag = htons(0x8100);
+	uint16_t empty_vid = 0;
 				
 	if (Zodiac_Config.OFEnabled == OF_ENABLED) // Main lookup
 	{
@@ -158,9 +159,10 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						{						
 							memmove(p_uc_data + 16, p_uc_data + 12, packet_size - 12);
 							memcpy(p_uc_data + 12, &vlantag,2);
-							memcpy(p_uc_data + 14, 0, 2);
+							memcpy(p_uc_data + 14, &empty_vid, 2);
 							packet_size += 4;
 							memcpy(ul_size, &packet_size, 2);
+							eth_prot = vlantag;
 						}
 
 						// Pop a VLAN tag
@@ -169,6 +171,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							memmove(p_uc_data + 12, p_uc_data + 16, packet_size - 16);
 							packet_size -= 4;
 							memcpy(ul_size, &packet_size, 2);
+							memcpy(eth_prot, p_uc_data + 12, 2); 
 						}
 												
 						// Set Field Action
@@ -248,7 +251,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					
 					if (ofp13_oxm_inst_size[i] > inst_size)
 					{
-						//printf("inst %d:%d\r\n", ofp13_oxm_inst_size[i], inst_size);
+						//printf("%d : inst %d-%d\r\n", i, ofp13_oxm_inst_size[i], inst_size);
 						uint8_t *nxt_inst;
 						nxt_inst = ofp13_oxm_inst[i] + inst_size;
 						inst_ptr = (struct ofp13_instruction *) nxt_inst;
@@ -863,7 +866,7 @@ void flow_add13(struct ofp_header *msg)
 					remove_flow13(q);	// remove the matching flow
 				} else
 				{
-					printf("replacing flow %d\r\n", q);
+					//printf("replacing flow %d\r\n", q);
 					memcpy(&flow_count_old, &flow_counters[q], sizeof(struct flows_counter));	// Copy counters from the old flow to temp location
 					remove_flow13(q);	// remove the matching flow
 					memcpy(&flow_counters[iLastFlow], &flow_count_old, sizeof(struct flows_counter));	// Copy counters from the temp location to the new flow
@@ -904,7 +907,7 @@ void flow_add13(struct ofp_header *msg)
 	} else {
 		ofp13_oxm_inst[iLastFlow] = NULL;
 	}
-	printf("%d : inst size = %d - %x\r\n", iLastFlow+1, instruction_size, ofp13_oxm_inst[iLastFlow]);	
+	//printf("%d : inst size = %d - %x\r\n", iLastFlow+1, instruction_size, ofp13_oxm_inst[iLastFlow]);	
 	ofp13_oxm_inst_size[iLastFlow] = instruction_size;	
 	flow_counters[iLastFlow].duration = totaltime;
 	flow_counters[iLastFlow].lastmatch = totaltime;

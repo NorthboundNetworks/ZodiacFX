@@ -1218,15 +1218,15 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						printf("\r Instructions:\r\n");
 						inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
 						inst_size = ntohs(inst_ptr->len);
-						printf("Inst size %d\r\n", inst_size);
+						//printf("Inst size %d\r\n", inst_size);
 						if(ntohs(inst_ptr->type) > 6)
 						{
-							printf("Inst %d\r\n", ntohs(inst_ptr->type));	
+							printf("Error Inst %d\r\n", ntohs(inst_ptr->type));	
 						}
 
 						if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
 						{
-							printf("  Apply Actions: %d\r\n", inst_size);
+							//printf("  Apply Actions: %d\r\n", inst_size);
 							struct ofp13_action_header *act_hdr;
 							act_size = 0;
 							if (inst_size == sizeof(struct ofp13_instruction_actions)) printf("   DROP \r\n");	// No actions
@@ -1234,7 +1234,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							{
 								inst_actions  = ofp13_oxm_inst[i] + act_size;
 								act_hdr = &inst_actions->actions;
-								printf("action %d\r\n", htons(act_hdr->type));
+								//printf("action %d\r\n", htons(act_hdr->type));
 								if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 								{
 									struct ofp13_action_output *act_output = act_hdr;
