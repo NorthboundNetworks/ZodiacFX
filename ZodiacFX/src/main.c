@@ -147,6 +147,7 @@ int main (void)
 	spi_init();
 	eeprom_init();
 	temp_init();
+	membag_init();
 		
 	loadConfig(); // Load Config
 	

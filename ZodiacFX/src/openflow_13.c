@@ -133,7 +133,6 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					{
 						inst_actions  = ofp13_oxm_inst[i] + act_size;
 						act_hdr = &inst_actions->actions;
-						//printf("Apply Action:%d\r\n", htons(act_hdr->type));
 						// Output Action
 						if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 						{
@@ -261,8 +260,8 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				{
 					struct ofp13_instruction_goto_table *inst_goto_ptr;
 					inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
+					if(table_id == inst_goto_ptr->table_id) return;		// Stop a goto instruction that goes to the same table as it would create a loop
 					table_id = inst_goto_ptr->table_id;
-					//printf("Goto table:%d\r\n", table_id);
 				}
 			} //else return;
 		}
@@ -821,12 +820,69 @@ void flow_add13(struct ofp_header *msg)
 		of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_BAD_TABLE_ID);
 		return;
 	}
+	
+	// Check for an existing flow the same
+	struct flows_counter flow_count_old;
+	for(int q=0;q<iLastFlow;q++)
+	{
+		if(ofp13_oxm_match[q] == NULL)
+		{
+			if((memcmp(&flow_match13[q].match.oxm_fields, ptr_fm->match.oxm_fields, 4) == 0) && (flow_match13[q].priority == ptr_fm->priority) && (flow_match13[q].table_id == ptr_fm->table_id))
+			{
+				// Check for overlap flag
+				if (ptr_fm->flags &  OFPFF13_CHECK_OVERLAP)
+				{
+					of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_OVERLAP);
+					return;
+				}
+				// Check if we need to reset the counters
+				if (ptr_fm->flags &  OFPFF13_RESET_COUNTS)
+				{
+					remove_flow13(q);	// remove the matching flow
+				} else
+				{
+					printf("replacing flow %d\r\n", q);
+					memcpy(&flow_count_old, &flow_counters[q], sizeof(struct flows_counter));	// Copy counters from the old flow to temp location
+					remove_flow13(q);	// remove the matching flow
+					memcpy(&flow_counters[iLastFlow], &flow_count_old, sizeof(struct flows_counter));	// Copy counters from the temp location to the new flow
+					flow_counters[iLastFlow].duration = 0;
+				}
+			}
+		} else
+		{
+			if((memcmp(ofp13_oxm_match[q], ptr_fm->match.oxm_fields, ntohs(flow_match13[q].match.length)-4) == 0) && (flow_match13[q].priority == ptr_fm->priority) && (flow_match13[q].table_id == ptr_fm->table_id))
+			{
+				if (ptr_fm->flags &  OFPFF13_CHECK_OVERLAP)
+				{
+					of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_OVERLAP);
+					return;
+				}
+				// Check if we need to reset the counters
+				if (ptr_fm->flags &  OFPFF13_RESET_COUNTS)
+				{
+					remove_flow13(q);	// remove the matching flow
+				} else
+				{
+					printf("replacing flow %d\r\n", q);
+					memcpy(&flow_count_old, &flow_counters[q], sizeof(struct flows_counter));	// Copy counters from the old flow to temp location
+					remove_flow13(q);	// remove the matching flow
+					memcpy(&flow_counters[iLastFlow], &flow_count_old, sizeof(struct flows_counter));	// Copy counters from the temp location to the new flow
+					flow_counters[iLastFlow].duration = 0;
+				}
+			}	
+		} 
+	}
+	
 	memcpy(&flow_match13[iLastFlow], ptr_fm, sizeof(struct ofp13_flow_mod));
-	//printf("\r\nAdd: %d - %d", iLastFlow, (ntohs(ptr_fm->match.length)-4));
 	if (ntohs(ptr_fm->match.length) > 4)
 	{
-		ofp13_oxm_match[iLastFlow] = malloc(ntohs(flow_match13[iLastFlow].match.length)-4);	// Allocate a space to store match fields
-		//printf(" : %d",ofp13_oxm_match[iLastFlow]);
+		ofp13_oxm_match[iLastFlow] = membag_alloc(ntohs(flow_match13[iLastFlow].match.length)-4);	// Allocate a space to store match fields
+		if (ofp13_oxm_match[iLastFlow] == NULL) 
+		{
+			printf("Out of memory!!\r\n");
+			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
+			return;
+		}
 		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, ntohs(flow_match13[iLastFlow].match.length)-4);
 	} else {
 		ofp13_oxm_match[iLastFlow] = NULL;
@@ -836,12 +892,19 @@ void flow_add13(struct ofp_header *msg)
 	int instruction_size = ntohs(ptr_fm->header.length) - mod_size;
 	if (instruction_size > 0)
 	{
-		ofp13_oxm_inst[iLastFlow] = malloc(instruction_size);	// Allocate a space to store instructions and actions
+		ofp13_oxm_inst[iLastFlow] = membag_alloc(instruction_size);	// Allocate a space to store instructions and actions
+		if (ofp13_oxm_inst[iLastFlow] == NULL)
+		{
+			printf("Out of memory!!\r\n");
+			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
+			return;
+		}
 		uint8_t *inst_ptr = (uint8_t *)ptr_fm + mod_size;
 		memcpy(ofp13_oxm_inst[iLastFlow], inst_ptr, instruction_size);
 	} else {
 		ofp13_oxm_inst[iLastFlow] = NULL;
-	}	
+	}
+	printf("%d : inst size = %d - %x\r\n", iLastFlow+1, instruction_size, ofp13_oxm_inst[iLastFlow]);	
 	ofp13_oxm_inst_size[iLastFlow] = instruction_size;	
 	flow_counters[iLastFlow].duration = totaltime;
 	flow_counters[iLastFlow].lastmatch = totaltime;
@@ -933,7 +996,6 @@ void flow_delete13(struct ofp_header *msg)
 						
 						if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
 						// Remove the flow entry
-						printf("Delete: %d\r\n", q);
 						remove_flow13(q);
 						q--;
 					}
@@ -960,7 +1022,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 	{
 		if(flow_counters[q].active == true)
 		{
-			if((memcmp(&flow_match13[q].match, &ptr_fm->match, sizeof(struct ofp13_match)) == 0) && (memcmp(&flow_match13[q].cookie, &ptr_fm->cookie,8) == 0) && (flow_match13[q].table_id == ptr_fm->table_id))
+			if((memcmp(&flow_match13[q].match, &ptr_fm->match, sizeof(struct ofp13_match)) == 0) && (memcmp(&flow_match13[q].cookie, &ptr_fm->cookie,8) == 0) && (flow_match13[q].priority == ptr_fm->priority) && (flow_match13[q].table_id == ptr_fm->table_id))
 			{
 				if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
 				remove_flow13(q);

@@ -1116,6 +1116,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf("\r\nFlow %d\r\n",i+1);
 					printf(" Match:\r\n");
 					match_size = 0;
+
 					while (match_size < (ntohs(flow_match13[i].match.length)-4))
 					{
 						memcpy(&oxm_header, ofp13_oxm_match[i] + match_size,4);
@@ -1217,10 +1218,15 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						printf("\r Instructions:\r\n");
 						inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
 						inst_size = ntohs(inst_ptr->len);
-						
+						printf("Inst size %d\r\n", inst_size);
+						if(ntohs(inst_ptr->type) > 6)
+						{
+							printf("Inst %d\r\n", ntohs(inst_ptr->type));	
+						}
+
 						if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
 						{
-							printf("  Apply Actions:\r\n");
+							printf("  Apply Actions: %d\r\n", inst_size);
 							struct ofp13_action_header *act_hdr;
 							act_size = 0;
 							if (inst_size == sizeof(struct ofp13_instruction_actions)) printf("   DROP \r\n");	// No actions
@@ -1228,6 +1234,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							{
 								inst_actions  = ofp13_oxm_inst[i] + act_size;
 								act_hdr = &inst_actions->actions;
+								printf("action %d\r\n", htons(act_hdr->type));
 								if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 								{
 									struct ofp13_action_output *act_output = act_hdr;
@@ -1276,7 +1283,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
 						{
 							struct ofp13_instruction_goto_table *inst_goto_ptr;
-							inst_goto_ptr = (struct ofp13_instruction_goto_table *) ofp13_oxm_inst[i];
+							inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
 							printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
 							continue;
 						}
@@ -1285,9 +1292,14 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						{
 							uint8_t *nxt_inst;
 							nxt_inst = ofp13_oxm_inst[i] + inst_size;
-							struct ofp13_instruction_goto_table *inst_goto_ptr;
-							inst_goto_ptr = (struct ofp13_instruction_goto_table *) nxt_inst;
-							printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
+							inst_ptr = (struct ofp13_instruction *) nxt_inst;
+							inst_size = ntohs(inst_ptr->len);
+							if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
+							{
+								struct ofp13_instruction_goto_table *inst_goto_ptr;
+								inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
+								printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
+							}
 						}
 					} else {
 						// No instructions
@@ -1480,7 +1492,14 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		rstc_start_software_reset(RSTC);	// Need to fix this, board resets but can't connect to CLI again
 		while (1);
 	}
-	
+
+	if (strcmp(command, "mem")==0)
+	{
+		printf("mem total: %d\r\n", membag_get_total());
+		printf("mem free: %d\r\n", membag_get_total_free());
+		return;
+	}
+		
 	// Unknown Command response
 	printf("Unknown command\r\n");
 	return;	

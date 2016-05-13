@@ -264,7 +264,6 @@ int flowmatch10(uint8_t *pBuffer, int port)
 			tcp_src_match = true;
 			tcp_dst_match = true;
 		}		
-		//printf("%d - %d %d %d %d %d %d %d %d %d %d : 0x%.4X - 0x%.4X\r\n", i, port_match , eth_src_match, eth_dst_match , eth_prot_match, ip_src_match, ip_dst_match,ip_prot_match, tcp_src_match, tcp_dst_match, vlan_match, ntohs(eth_prot), ntohs(flow_match[i].match.dl_type));
 		if (port_match && eth_src_match && eth_dst_match && eth_prot_match && ip_src_match && ip_dst_match && ip_prot_match && tcp_src_match && tcp_dst_match && vlan_match)
 		{
 			if (matched_flow > -1)
@@ -546,6 +545,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 			matched_flow = i;
 		}
 	}
+	//printf("matched flow %d\r\n",matched_flow);
 	return matched_flow;
 }
 
@@ -973,11 +973,13 @@ void remove_flow13(int flow_id)
 	// Free the memory allocated for the match and instructions
 	if(ofp13_oxm_match[flow_id] != NULL)
 	{
-		free(ofp13_oxm_match[flow_id]);
+		membag_free(ofp13_oxm_match[flow_id]);
+		ofp13_oxm_match[flow_id] = NULL;
 	}
 	if(ofp13_oxm_inst[flow_id] != NULL)
 	{
-		free(ofp13_oxm_inst[flow_id]);
+		membag_free(ofp13_oxm_inst[flow_id]);
+		ofp13_oxm_inst[flow_id] = NULL;
 	}
 	// Copy the last flow to here to fill the gap
 	memcpy(&flow_match13[flow_id], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));
@@ -1088,14 +1090,17 @@ void clear_flows(void)
 	{
 		memset(&flow_counters[q], 0, sizeof(struct flows_counter));
 		memset(&flow_actions[q], 0, sizeof(struct flow_tbl_actions));
+		if (ofp13_oxm_match[q] != NULL) ofp13_oxm_match[q] = NULL;
+		if (ofp13_oxm_inst[q] != NULL) ofp13_oxm_inst[q] = NULL;
+		membag_init();
+// 		if (ofp13_oxm_match[q] != NULL) membag_free(ofp13_oxm_match[q]);
+// 		if (ofp13_oxm_inst[q] != NULL) membag_free(ofp13_oxm_inst[q]);
 	}
 	for(int x=0; x<MAX_TABLES;x++)
 	{
 		table_counters[x].lookup_count = 0;
 		table_counters[x].matched_count = 0;
 	}
-
-
 }
 
 /*
