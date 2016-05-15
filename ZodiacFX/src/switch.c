@@ -48,6 +48,7 @@ struct ofp10_port_stats phys10_port_stats[4];
 struct ofp13_port_stats phys13_port_stats[4];
 uint8_t port_status[4];
 extern uint8_t NativePortMatrix;
+extern bool trace;
 /** Buffer for ethernet packets */
 static volatile uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 
@@ -580,30 +581,31 @@ void switch_init(void)
 */
 void task_switch(struct netif *netif)
 {
-	uint32_t ul_frm_size = 0;
+	uint32_t ul_rcv_size = 0;
 	uint32_t dev_read;
 
 	/* Main packet processing loop */
-	dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_frm_size);
+	dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_rcv_size);
 	if (dev_read == GMAC_OK)
 	{
-		if (ul_frm_size > 0)
+		if (ul_rcv_size > 0)
 		{
-			uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_frm_size)-1);
+			uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
 			uint8_t tag = *tail_tag + 1;
 			if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[tag-1] == 1)
 			{
 				phys10_port_stats[tag-1].rx_packets++;
 				phys13_port_stats[tag-1].rx_packets++;
-				ul_frm_size--; // remove the tail first
-				nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_frm_size, tag);
+				ul_rcv_size--; // remove the tail first
+				nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
 				return;
 			} else {
+				if (trace == true) printf("%d byte received from controller\r\n", ul_rcv_size);
 				struct pbuf *p;
-				p = pbuf_alloc(PBUF_RAW, ul_frm_size+1, PBUF_POOL);	
-				memcpy(p->payload, &gs_uc_eth_buffer,(ul_frm_size-1));
-				p->len = ul_frm_size-1;
-				p->tot_len = ul_frm_size-1;
+				p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);	
+				memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));
+				p->len = ul_rcv_size-1;
+				p->tot_len = ul_rcv_size-1;
 				netif->input(p, netif);
 				pbuf_free(p);
 				return;	
