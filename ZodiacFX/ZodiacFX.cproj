@@ -40,8 +40,9 @@
           <option id="sam.drivers.pmc" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.rstc" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.rtc" value="Add" config="" content-id="Atmel.ASF" />
-          <option id="sam.drivers.tc.appnote" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.spi" value="Add" config="" content-id="Atmel.ASF" />
+          <option id="sam.drivers.tc.appnote" value="Add" config="" content-id="Atmel.ASF" />
+          <option id="common.utils.membag" value="Add" config="" content-id="Atmel.ASF" />
         </options>
         <configurations>
           <configuration key="config.compiler.armgcc.fpu_used" value="yes" default="yes" content-id="Atmel.ASF" />
@@ -245,6 +246,9 @@
           <file path="src/ASF/sam/drivers/rstc/example1/rstc_example1.h" framework="" version="3.27.0" source="sam\drivers\rstc\example1\rstc_example1.h" changed="False" content-id="Atmel.ASF" />
           <file path="src/ASF/sam/drivers/afec/afec.c" framework="" version="3.27.0" source="sam\drivers\afec\afec.c" changed="False" content-id="Atmel.ASF" />
           <file path="src/ASF/sam/drivers/afec/afec.h" framework="" version="3.27.0" source="sam\drivers\afec\afec.h" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/common/utils/membag/membag.c" framework="" version="3.27.0" source="common\utils\membag\membag.c" changed="False" content-id="Atmel.ASF" />
+          <file path="src/ASF/common/utils/membag/membag.h" framework="" version="3.27.0" source="common\utils\membag\membag.h" changed="False" content-id="Atmel.ASF" />
+          <file path="src/Config/conf_membag.h" framework="" version="3.27.0" source="common\utils\membag\module_config\conf_membag.h" changed="False" content-id="Atmel.ASF" />
         </files>
         <documentation help="http://asf.atmel.com/docs/3.27.0/common.applications.user_application.user_board.sam4e8c/html/index.html" />
         <offline-documentation help="" />
@@ -330,6 +334,7 @@
       <Value>../src/lwip</Value>
       <Value>../src/lwip/include/ipv4</Value>
       <Value>../src/ASF/sam/drivers/afec</Value>
+      <Value>../src/ASF/common/utils/membag</Value>
     </ListValues>
   </armgcc.compiler.directories.IncludePaths>
   <armgcc.compiler.optimization.level>Optimize (-O1)</armgcc.compiler.optimization.level>
@@ -394,6 +399,7 @@
       <Value>../src/ASF/sam/drivers/spi</Value>
       <Value>../src/ASF/sam/drivers/rstc</Value>
       <Value>../src/ASF/sam/drivers/afec</Value>
+      <Value>../src/ASF/common/utils/membag</Value>
     </ListValues>
   </armgcc.preprocessingassembler.general.IncludePaths>
 </ArmGcc>
@@ -461,9 +467,9 @@
       <Value>../src/ASF/sam/drivers/spi</Value>
       <Value>../src/ASF/sam/drivers/rstc</Value>
       <Value>../src/ASF/sam/drivers/afec</Value>
+      <Value>../src/ASF/common/utils/membag</Value>
     </ListValues>
   </armgcc.compiler.directories.IncludePaths>
-  <armgcc.compiler.optimization.level>Optimize (-O1)</armgcc.compiler.optimization.level>
   <armgcc.compiler.optimization.OtherFlags>-fdata-sections</armgcc.compiler.optimization.OtherFlags>
   <armgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>True</armgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>
   <armgcc.compiler.optimization.DebugLevel>Maximum (-g3)</armgcc.compiler.optimization.DebugLevel>
@@ -527,6 +533,7 @@
       <Value>../src/ASF/sam/drivers/spi</Value>
       <Value>../src/ASF/sam/drivers/rstc</Value>
       <Value>../src/ASF/sam/drivers/afec</Value>
+      <Value>../src/ASF/common/utils/membag</Value>
     </ListValues>
   </armgcc.preprocessingassembler.general.IncludePaths>
   <armgcc.preprocessingassembler.debugging.DebugLevel>Default (-Wa,-g)</armgcc.preprocessingassembler.debugging.DebugLevel>
@@ -557,6 +564,7 @@
     <Folder Include="src\ASF\common\services\usb\udc\" />
     <Folder Include="src\ASF\common\utils\" />
     <Folder Include="src\ASF\common\utils\interrupt\" />
+    <Folder Include="src\ASF\common\utils\membag\" />
     <Folder Include="src\ASF\common\utils\stdio\" />
     <Folder Include="src\ASF\common\utils\stdio\stdio_usb\" />
     <Folder Include="src\ASF\sam\" />
@@ -631,6 +639,12 @@
     <Compile Include="src\ASF\common\services\usb\udc\udc.c">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\ASF\common\utils\membag\membag.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="src\ASF\common\utils\membag\membag.h">
+      <SubType>compile</SubType>
+    </None>
     <Compile Include="src\ASF\common\utils\stdio\read.c">
       <SubType>compile</SubType>
     </Compile>
@@ -670,6 +684,9 @@
     <Compile Include="src\config\config_zodiac.h">
       <SubType>compile</SubType>
     </Compile>
+    <None Include="src\config\conf_membag.h">
+      <SubType>compile</SubType>
+    </None>
     <Compile Include="src\config\conf_usart_spi.h">
       <SubType>compile</SubType>
     </Compile>

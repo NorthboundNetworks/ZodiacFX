@@ -62,6 +62,7 @@ extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
 extern bool masterselect;
+extern bool trace = false;
 extern struct tcp_pcb *tcp_pcb;
 extern uint8_t port_status[4];
 extern int totaltime;
@@ -265,6 +266,8 @@ void task_command(char *str, char *str_last)
 		
 	while(udi_cdc_is_rx_ready()){
 		ch = udi_cdc_getc();
+		
+		if (trace == true) trace = false;
 				
 		if (showintro == true)	// Show the intro only on the first key press
 		{
@@ -484,68 +487,68 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
-// Build shortcut - b XX:XX, where XX:XX are the last 4 digits of the new mac address
-if (strcmp(command, "b")==0)
-{
-	uint8_t mac5,mac6;
-	sscanf(param1, "%x:%x", &mac5, &mac6);
-	Zodiac_Config.MAC_address[0] = 0x70;
-	Zodiac_Config.MAC_address[1] = 0xb3;
-	Zodiac_Config.MAC_address[2] = 0xd5;
-	Zodiac_Config.MAC_address[3] = 0x6c;
-	Zodiac_Config.MAC_address[4] = mac5;
-	Zodiac_Config.MAC_address[5] = mac6;
-		
-	struct zodiac_config reset_config =
+	// Build shortcut - b XX:XX, where XX:XX are the last 4 digits of the new mac address
+	if (strcmp(command, "b")==0)
 	{
-		"Zodiac_FX",		// Name
-		0,0,0,0,0,0,		// MAC Address
-		10,0,1,99,			// IP Address
-		255,255,255,0,		// Netmask
-		10,0,1,1,			// Gateway Address
-		10,0,1,8,			// IP Address of the SDN Controller
-		6633,				// TCP port of SDN Controller
-		1					// OpenFlow enabled
-	};
-	memset(&reset_config.vlan_list, 0, sizeof(struct virtlan)* MAX_VLANS); // Clear vlan array
+		uint8_t mac5,mac6;
+		sscanf(param1, "%x:%x", &mac5, &mac6);
+		Zodiac_Config.MAC_address[0] = 0x70;
+		Zodiac_Config.MAC_address[1] = 0xb3;
+		Zodiac_Config.MAC_address[2] = 0xd5;
+		Zodiac_Config.MAC_address[3] = 0x6c;
+		Zodiac_Config.MAC_address[4] = mac5;
+		Zodiac_Config.MAC_address[5] = mac6;
+		
+		struct zodiac_config reset_config =
+		{
+			"Zodiac_FX",		// Name
+			0,0,0,0,0,0,		// MAC Address
+			10,0,1,99,			// IP Address
+			255,255,255,0,		// Netmask
+			10,0,1,1,			// Gateway Address
+			10,0,1,8,			// IP Address of the SDN Controller
+			6633,				// TCP port of SDN Controller
+			1					// OpenFlow enabled
+		};
+		memset(&reset_config.vlan_list, 0, sizeof(struct virtlan)* MAX_VLANS); // Clear vlan array
 	
-	// Config VLAN 100
-	sprintf(&reset_config.vlan_list[0].cVlanName, "Openflow");	// Vlan name
-	reset_config.vlan_list[0].portmap[0] = 1;		// Assign port 1 to this vlan
-	reset_config.vlan_list[0].portmap[1] = 1;		// Assign port 2 to this vlan
-	reset_config.vlan_list[0].portmap[2] = 1;		// Assign port 3 to this vlan
-	reset_config.vlan_list[0].uActive = 1;		// Vlan is active
-	reset_config.vlan_list[0].uVlanID = 100;	// Vlan ID is 100
-	reset_config.vlan_list[0].uVlanType = 1;	// Set as an Openflow Vlan
-	reset_config.vlan_list[0].uTagged = 0;		// Set as untagged
+		// Config VLAN 100
+		sprintf(&reset_config.vlan_list[0].cVlanName, "Openflow");	// Vlan name
+		reset_config.vlan_list[0].portmap[0] = 1;		// Assign port 1 to this vlan
+		reset_config.vlan_list[0].portmap[1] = 1;		// Assign port 2 to this vlan
+		reset_config.vlan_list[0].portmap[2] = 1;		// Assign port 3 to this vlan
+		reset_config.vlan_list[0].uActive = 1;		// Vlan is active
+		reset_config.vlan_list[0].uVlanID = 100;	// Vlan ID is 100
+		reset_config.vlan_list[0].uVlanType = 1;	// Set as an Openflow Vlan
+		reset_config.vlan_list[0].uTagged = 0;		// Set as untagged
 	
-	// Config VLAN 200
-	sprintf(&reset_config.vlan_list[1].cVlanName, "Controller");
-	reset_config.vlan_list[1].portmap[3] = 1;		// Assign port 4 to this vlan
-	reset_config.vlan_list[1].uActive = 1;		// Vlan is active
-	reset_config.vlan_list[1].uVlanID = 200;	// Vlan ID is 200
-	reset_config.vlan_list[1].uVlanType = 2;	// Set as an Native Vlan
-	reset_config.vlan_list[1].uTagged = 0;		// Set as untagged
+		// Config VLAN 200
+		sprintf(&reset_config.vlan_list[1].cVlanName, "Controller");
+		reset_config.vlan_list[1].portmap[3] = 1;		// Assign port 4 to this vlan
+		reset_config.vlan_list[1].uActive = 1;		// Vlan is active
+		reset_config.vlan_list[1].uVlanID = 200;	// Vlan ID is 200
+		reset_config.vlan_list[1].uVlanType = 2;	// Set as an Native Vlan
+		reset_config.vlan_list[1].uTagged = 0;		// Set as untagged
 	
-	// Set ports
-	reset_config.of_port[0] = 1;		// Port 1 is an OpenFlow port
-	reset_config.of_port[1] = 1;		// Port 2 is an Openflow port
-	reset_config.of_port[2] = 1;		// Port 3 is an OpenFlow port
-	reset_config.of_port[3] = 2;		// Port 4 is an Native port
+		// Set ports
+		reset_config.of_port[0] = 1;		// Port 1 is an OpenFlow port
+		reset_config.of_port[1] = 1;		// Port 2 is an Openflow port
+		reset_config.of_port[2] = 1;		// Port 3 is an OpenFlow port
+		reset_config.of_port[3] = 2;		// Port 4 is an Native port
 	
-	// Failstate
-	reset_config.failstate = 0;			// Failstate Secure
+		// Failstate
+		reset_config.failstate = 0;			// Failstate Secure
 	
-	// Force OpenFlow version
-	reset_config.of_version = 0;			// Force version disabled
+		// Force OpenFlow version
+		reset_config.of_version = 0;			// Force version disabled
 	
-	memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existng MAC address so it is not reset
-	memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
-	saveConfig();
-	printf("Setup complete, MAC Address = %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
-	return;
-}
-	
+		memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existng MAC address so it is not reset
+		memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
+		saveConfig();
+		printf("Setup complete, MAC Address = %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
+		return;
+	}
+		
 	// Unknown Command
 	//printf("Unknown command\r\n");
 	sprintf(print_buffer,"Unknown command\r\n");
@@ -1116,6 +1119,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf("\r\nFlow %d\r\n",i+1);
 					printf(" Match:\r\n");
 					match_size = 0;
+
 					while (match_size < (ntohs(flow_match13[i].match.length)-4))
 					{
 						memcpy(&oxm_header, ofp13_oxm_match[i] + match_size,4);
@@ -1193,7 +1197,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 																																		
 							case OFPXMT_OFB_VLAN_VID:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-							if (oxm_value16 == 0) printf("  VLAN ID: 0\r\n");
+							//if (oxm_value16 == 0) printf("  VLAN ID: 0\r\n");
 							if (oxm_value16 != 0) printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
 							break;
 							
@@ -1217,10 +1221,9 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						printf("\r Instructions:\r\n");
 						inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
 						inst_size = ntohs(inst_ptr->len);
-						
 						if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
 						{
-							printf("  Apply Actions:\r\n");
+							//printf("  Apply Actions: %d\r\n", inst_size);
 							struct ofp13_action_header *act_hdr;
 							act_size = 0;
 							if (inst_size == sizeof(struct ofp13_instruction_actions)) printf("   DROP \r\n");	// No actions
@@ -1228,6 +1231,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							{
 								inst_actions  = ofp13_oxm_inst[i] + act_size;
 								act_hdr = &inst_actions->actions;
+								//printf("action %d\r\n", htons(act_hdr->type));
 								if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 								{
 									struct ofp13_action_output *act_output = act_hdr;
@@ -1276,7 +1280,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
 						{
 							struct ofp13_instruction_goto_table *inst_goto_ptr;
-							inst_goto_ptr = (struct ofp13_instruction_goto_table *) ofp13_oxm_inst[i];
+							inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
 							printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
 							continue;
 						}
@@ -1285,9 +1289,14 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						{
 							uint8_t *nxt_inst;
 							nxt_inst = ofp13_oxm_inst[i] + inst_size;
-							struct ofp13_instruction_goto_table *inst_goto_ptr;
-							inst_goto_ptr = (struct ofp13_instruction_goto_table *) nxt_inst;
-							printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
+							inst_ptr = (struct ofp13_instruction *) nxt_inst;
+							inst_size = ntohs(inst_ptr->len);
+							if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
+							{
+								struct ofp13_instruction_goto_table *inst_goto_ptr;
+								inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
+								printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
+							}
 						}
 					} else {
 						// No instructions
@@ -1426,7 +1435,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		clear_flows();
 		return;
 	}
-
+	
 	// Unknown Command
 	printf("Unknown command\r\n");
 	return;	
@@ -1480,7 +1489,21 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		rstc_start_software_reset(RSTC);	// Need to fix this, board resets but can't connect to CLI again
 		while (1);
 	}
-	
+
+	if (strcmp(command, "mem")==0)
+	{
+		printf("mem total: %d\r\n", membag_get_total());
+		printf("mem free: %d\r\n", membag_get_total_free());
+		return;
+	}
+
+	if (strcmp(command, "trace")==0)
+	{
+		trace = true;
+		printf("Starting trace...\r\n"); 
+		return;
+	}
+			
 	// Unknown Command response
 	printf("Unknown command\r\n");
 	return;	
@@ -1556,6 +1579,8 @@ void printhelp(void)
 	strcat(print_buffer,"Debug:\r\n");
 	strcat(print_buffer," read <register>\r\n");
 	strcat(print_buffer," write <register> <value>\r\n");
+	strcat(print_buffer," mem\r\n");
+	strcat(print_buffer," trace\r\n");
 	strcat(print_buffer," exit\r\n");
 	strcat(print_buffer,"\r\n");
 	return;
