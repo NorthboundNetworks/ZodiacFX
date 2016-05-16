@@ -1,4 +1,13 @@
+# .gitignore -- files not to be tracked by configuration management
 
+# ZodiacFX project
+ZodiacFX.bin
+ZodiacFX.elf
+ZodiacFX.map
+ZodiacFX.lss
+ZodiacFX.lss.gz
+
+# Remainder of file was
 # Created by https://www.gitignore.io/api/c,atmelstudio,emacs,vim,tags,archives
 
 ### C ###
