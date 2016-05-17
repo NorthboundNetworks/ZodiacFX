@@ -149,6 +149,7 @@ CPPFLAGS += -I./src/ASF/common/services/usb/class/cdc
 CPPFLAGS += -I./src/ASF/common/services/usb/class/cdc/device
 CPPFLAGS += -I./src/ASF/common/services/usb/udc
 CPPFLAGS += -I./src/ASF/common/utils/stdio/stdio_usb
+CPPFLAGS += -I./src/ASF/common/utils/membag
 CPPFLAGS += -I./src/ASF/sam/drivers/udp
 CPPFLAGS += -I./src/ASF/sam/drivers/tc
 CPPFLAGS += -I./src/ASF/common/services/spi/sam_spi
@@ -306,6 +307,7 @@ $(PROJECT).elf: \
  src/ASF/common/services/usb/class/cdc/device/udi_cdc_desc.o \
  src/ASF/common/services/usb/udc/udc.o \
  src/ASF/common/utils/interrupt/interrupt_sam_nvic.o \
+ src/ASF/common/utils/membag/membag.o \
  src/ASF/common/utils/stdio/read.o \
  src/ASF/common/utils/stdio/stdio_usb/stdio_usb.o \
  src/ASF/common/utils/stdio/write.o \
@@ -490,6 +492,12 @@ src/ASF/common/services/usb/class/cdc/device/udi_cdc_desc.o: src/ASF/common/serv
 src/ASF/common/services/usb/udc/udc.o: src/ASF/common/services/usb/udc/udc.c
 
 src/ASF/common/utils/interrupt/interrupt_sam_nvic.o: src/ASF/common/utils/interrupt/interrupt_sam_nvic.c
+
+src/ASF/common/utils/membag/membag.o: src/ASF/common/utils/membag/membag.c
+
+src/ASF/common/utils/membag/membag.c: \
+ src/ASF/common/utils/membag/membag.h \
+ src/config/conf_membag.h
 
 src/ASF/common/utils/stdio/read.o: src/ASF/common/utils/stdio/read.c
 
