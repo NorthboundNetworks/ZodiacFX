@@ -371,12 +371,7 @@ ZodiacFX/src/lwip
 
 ## Copyright
 
-Copyright © AARNet Pty Ltd (ACN 084 540 518), 2016.
-AARNet is
-[Australia's Academic and Research Network](http://www.aarnet.edu.au/).
-
-Glen Turner of Semaphore, South Australia asserts his moral rights to
-be identified as an author of this work.
+Copyright © Glen Turner, 2016
 
 Licensed to you under the Creative Commons Attribution-ShareAlike 4.0
 International license. For the text of the license see
