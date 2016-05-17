@@ -44,6 +44,7 @@ extern struct zodiac_config Zodiac_Config;
 extern uint8_t port_status[4];
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
+extern bool trace;
 
 // Local Variables
 struct ofp_switch_config Switch_config;
@@ -51,9 +52,10 @@ struct ofp_flow_mod flow_match[MAX_FLOWS];
 struct ofp13_flow_mod flow_match13[MAX_FLOWS];
 uint8_t *ofp13_oxm_match[MAX_FLOWS];
 uint8_t *ofp13_oxm_inst[MAX_FLOWS];
+uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
 struct flows_counter flow_counters[MAX_FLOWS];
 struct flow_tbl_actions flow_actions[MAX_FLOWS];
-struct table_counter table_counters;
+struct table_counter table_counters[MAX_TABLES];
 int iLastFlow = 0;
 uint8_t shared_buffer[2048];
 char sysbuf[64];
@@ -69,6 +71,7 @@ uint32_t barrier_xid;
 int totaltime = 0;
 int heartbeat = 0;
 int multi_pos;
+
 
 // Internal Functions
 void OF_hello(void);
@@ -91,11 +94,19 @@ static inline uint64_t (htonll)(uint64_t n)
 
 void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 {
+	if( tcp_pcb != tcp_pcb_check)	// Check if the connect pointer is still valid
+	{
+		tcp_con_state = -1;
+		tcp_pcb = NULL;
+		return;
+	}
+	
+	if (Zodiac_Config.failstate == 0 && tcp_pcb->state != ESTABLISHED) return;	// If the controller is not connected and fail secure is enabled drop the packet
+			
 	if (OF_Version == 0x01) nnOF10_tablelookup(p_uc_data, ul_size, port);
 	if (OF_Version == 0x04) nnOF13_tablelookup(p_uc_data, ul_size, port);
 	return;
 }
-
 
 /*
 *	Main OpenFlow message function
@@ -119,7 +130,7 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
         int len = p->tot_len;	//size of the payload
         for (int i=0; i<len; i++)packetbuffer[i] = pc[i];	//copy to our own buffer
         pbuf_free(p);	//Free the packet buffer	
-		
+		if (trace == true) printf("OpenFlow data received (%d bytes)\r\n", len);
 		struct ofp_header *ofph;
 		int size = 0;
 		int plen = 0;
@@ -129,11 +140,12 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 			ofph = &packetbuffer[size];
 			if (size == 0) multi_pos = 0;
 			if (ofph->length == 0 || ofph->version == 0){
-				//printf("Corrupt OF packet! version = %d : length = %d\r\n", ofph->version, ofph->length);
 				return ERR_OK;	//Not an OpenFlow packet
 			}
 			plen = htons(ofph->length);
 			size = size + plen;
+			if (trace == true) printf("Processing %d byte OpenFlow message %u (%d)\r\n",plen, htonl(ofph->xid), size);
+			
 			switch(ofph->type)
 			{
 				case OFPT10_HELLO:
@@ -192,6 +204,7 @@ void OF_hello(void)
 	ofph.length = HTONS(sizeof(ofph));
 	ofph.xid = HTONL(1);
 	sendtcp(&ofph, sizeof(ofph));
+	if (trace == true) printf("Sent HELLO, version 0x%d\r\n", ofph.version);
 	return;
 }
 
@@ -209,6 +222,7 @@ void echo_reply(uint32_t xid)
 	echo.type   = OFPT10_ECHO_REPLY;
 	echo.xid = xid;
 	sendtcp(&echo, sizeof(echo));
+	if (trace == true) printf("Sent ECHO reply\r\n");
 	return;
 }
 
@@ -224,6 +238,7 @@ void echo_request(void)
 	echo.type   = OFPT10_ECHO_REQUEST;
 	echo.xid = 1234;
 	sendtcp(&echo, sizeof(echo));
+	if (trace == true) printf("Sent ECHO request\r\n");
 	return;
 }
 
@@ -332,6 +347,8 @@ err_t TCPready(void *arg, struct tcp_pcb *tpcb, err_t err)
 	tcp_recv(tpcb, of_receive);
 	tcp_poll(tpcb, NULL, 4);
 	tcp_err(tpcb, NULL);
+	if(Zodiac_Config.failstate == 0) clear_flows();		// Clear the flow if in secure mode
+	if (trace == true) printf("Connected to controller\r\n");
 	OF_hello();
 	return ERR_OK;
 }

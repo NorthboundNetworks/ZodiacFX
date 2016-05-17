@@ -81,7 +81,7 @@ lwip_ntohs(u16_t n)
 /**
  * Convert an u32_t from host- to network byte order.
  *
- * @param n u32_t in host byte order
+ * @param n u32_t in host byte order		
  * @return n in network byte order
  */
 u32_t

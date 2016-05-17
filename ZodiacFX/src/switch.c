@@ -43,10 +43,12 @@ gmac_device_t gs_gmac_dev;
 extern struct tcp_conn tcp_conn;
 extern struct zodiac_config Zodiac_Config;
 extern int OF_Version;
-uint8_t gmacbuffer[1536];
+uint8_t gmacbuffer[GMAC_FRAME_LENTGH_MAX];
 struct ofp10_port_stats phys10_port_stats[4];
 struct ofp13_port_stats phys13_port_stats[4];
 uint8_t port_status[4];
+extern uint8_t NativePortMatrix;
+extern bool trace;
 /** Buffer for ethernet packets */
 static volatile uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 
@@ -429,6 +431,11 @@ void update_port_status(void)
 */
 void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
 {	
+	if (ul_size > GMAC_FRAME_LENTGH_MAX)
+	{
+		return;
+	}
+
 	if (port & 1) phys10_port_stats[0].tx_packets++;
 	if (port & 2) phys10_port_stats[1].tx_packets++;
 	if (port & 4) phys10_port_stats[2].tx_packets++;
@@ -451,7 +458,8 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
 		uint8_t *last_byte;
 		last_byte = gmacbuffer + ul_size;
 		*last_byte = port;
-		gmac_dev_write(&gs_gmac_dev, &gmacbuffer, (ul_size + 1), NULL);
+		ul_size++; // Increase packet size by 1 to allow for the tail tag.
+		uint32_t write_size = gmac_dev_write(&gs_gmac_dev, &gmacbuffer, ul_size, NULL);
 	}
 	return;
 }
@@ -495,6 +503,12 @@ void switch_init(void)
 		/* Init KSZ8795 registers */
 		switch_write(86,232);	// Set CPU interface to MII
 		switch_write(12,70);	// Turn on tail tag mode
+		
+		/* Because we use the tail tag mode on the KS8795 the additional
+		byte on the end makes the frame size 1519 bytes. This causes the packet
+		to fail the Max Legal size check, so setting byte 1 on global register 4
+		disables the check */
+		switch_write(4,242);
 
 		/* Init GMAC driver structure */
 		gmac_dev_init(GMAC, &gs_gmac_dev, &gmac_option);
@@ -513,11 +527,50 @@ void switch_init(void)
 		
 		// clear port stat counters
 		memset(&phys10_port_stats, 0, sizeof(struct ofp10_port_stats)*4);
+
+		/* Create KSZ8795 VLANs */
+		switch_write(5,0);		// Disable 802.1q	
+
+		for (int x=0;x<MAX_VLANS;x++)
+		{
+			if (Zodiac_Config.vlan_list[x].uActive == 1)
+			{
+				if (Zodiac_Config.vlan_list[x].uVlanType == 2) switch_write(84,Zodiac_Config.vlan_list[x].uVlanID);	// If the VLAN is type Native then add the CPU port
+				/* Assign the default ingress VID */
+				for (int i=0;i<4;i++)
+				{
+					if (Zodiac_Config.vlan_list[x].portmap[i] == 1)
+					{
+						switch_write(20 + (i*16),Zodiac_Config.vlan_list[x].uVlanID);	// Default ingress VID
+					}
+				}
+				/* Add entry into the VLAN table */
+				int vlanoffset = Zodiac_Config.vlan_list[x].uVlanID / 4;
+				int vlanindex = Zodiac_Config.vlan_list[x].uVlanID - (vlanoffset*4);	
+				switch_write(110,20);	// Set read VLAN flag
+				switch_write(111, vlanoffset);	// Read entries 0-3
+
+				/* Calculate format */
+				uint8_t vlanmaphigh;
+				uint8_t vlanmaplow;
+				vlanmaphigh = 16; // Set valid bit
+				if (Zodiac_Config.vlan_list[x].uVlanType == 2) vlanmaphigh += 8; // Port 5 (CPU);
+				if (Zodiac_Config.vlan_list[x].portmap[3] == 1) vlanmaphigh += 4; // Port 4;
+				if (Zodiac_Config.vlan_list[x].portmap[2] == 1) vlanmaphigh += 2; // Port 3;
+				if (Zodiac_Config.vlan_list[x].portmap[1] == 1) vlanmaphigh += 1; // Port 2;
+				vlanmaplow = x+1;	// FID = VLAN index number
+				if (Zodiac_Config.vlan_list[x].portmap[0] == 1) vlanmaplow += 128; // Port 1;
+				/* Write settings back to registers */			
+				switch_write((119-(vlanindex*2)),vlanmaphigh);
+				switch_write((120-(vlanindex*2)),vlanmaplow);	
+				switch_write(110,4);	// Set read VLAN flag
+				switch_write(111,vlanoffset);	// Read entries 0-3										
+			} 
+		}
 		
-		disableOF(); // clear all port settings
-		
-		if (Zodiac_Config.OFEnabled == OF_ENABLED) enableOF();
-		//if (Zodiac_Config.OFEnabled == OF_DISABLED) disableOF();
+		switch_write(5,128);	// Enable 802.1q				
+		disableOF(); // clear all port settings	
+		if (Zodiac_Config.OFEnabled == OF_ENABLED) enableOF();	
 		return;
 }
 /*
@@ -528,28 +581,31 @@ void switch_init(void)
 */
 void task_switch(struct netif *netif)
 {
-	uint32_t ul_frm_size = 0;
+	uint32_t ul_rcv_size = 0;
+	uint32_t dev_read;
 
 	/* Main packet processing loop */
-	if (GMAC_OK == gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_frm_size))
+	dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_rcv_size);
+	if (dev_read == GMAC_OK)
 	{
-		if (ul_frm_size > 0)
+		if (ul_rcv_size > 0)
 		{
-			uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_frm_size)-1);
+			uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
 			uint8_t tag = *tail_tag + 1;
 			if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[tag-1] == 1)
 			{
 				phys10_port_stats[tag-1].rx_packets++;
 				phys13_port_stats[tag-1].rx_packets++;
-				ul_frm_size--; // remove the tail first
-				nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_frm_size, tag);
+				ul_rcv_size--; // remove the tail first
+				nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
 				return;
 			} else {
+				if (trace == true) printf("%d byte received from controller\r\n", ul_rcv_size);
 				struct pbuf *p;
-				p = pbuf_alloc(PBUF_RAW, ul_frm_size+1, PBUF_POOL);	
-				memcpy(p->payload, &gs_uc_eth_buffer,(ul_frm_size-1));
-				p->len = ul_frm_size-1;
-				p->tot_len = ul_frm_size-1;
+				p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);	
+				memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));
+				p->len = ul_rcv_size-1;
+				p->tot_len = ul_rcv_size-1;
 				netif->input(p, netif);
 				pbuf_free(p);
 				return;	

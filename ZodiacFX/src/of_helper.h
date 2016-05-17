@@ -34,7 +34,7 @@
 #include "openflow.h"
 
 int flowmatch10(uint8_t *pBuffer, int port);
-int flowmatch13(uint8_t *pBuffer, int port);
+int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id);
 int field_match10(struct ofp_match *match_a, struct ofp_match *match_b);
 int field_match13(uint8_t *oxm_a, int len_a, uint8_t *oxm_b, int len_b);
 void nnOF_timer(void);
@@ -43,5 +43,6 @@ void clear_flows(void);
 int flow_stats_msg10(char *buffer, int first, int last);
 int flow_stats_msg13(char *buffer, int first, int last);
 void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset);
+void remove_flow13(int flow_id);
 
 #endif /* OF_HELPER_H_ */

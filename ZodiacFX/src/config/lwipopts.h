@@ -223,7 +223,7 @@
  * when opening a connection. For the transmit size, this MSS sets
  * an upper limit on the MSS advertised by the remote host.
  */
-#define TCP_MSS                 1400 //1460
+#define TCP_MSS                 1460
 
 /**
  * TCP_WND: The size of a TCP window.  This must be at least

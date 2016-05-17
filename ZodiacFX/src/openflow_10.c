@@ -47,8 +47,9 @@ extern int iLastFlow;
 extern struct ofp_flow_mod flow_match[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
-extern struct table_counter table_counters;
+extern struct table_counter table_counters[MAX_TABLES];
 extern int OF_Version;
+extern uint8_t NativePortMatrix;
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern uint8_t port_status[4];
 extern uint8_t shared_buffer[2048];
@@ -101,9 +102,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	memcpy(&packet_size, ul_size, 2);
 	uint16_t eth_prot;
 	memcpy(&eth_prot, p_uc_data + 12, 2);
-	
-	if (Zodiac_Config.failstate == 0 && tcp_pcb->state != ESTABLISHED) return;	// If the controller is not connected and fail secure is enabled drop the packet
-	
+
 	struct ofp_action_output *action_out;	// Need to move these
 	struct ofp_action_dl_addr *action_setdl;
 	struct ofp_action_nw_addr *action_setnw;
@@ -121,7 +120,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	uint16_t vlantag = htons(0x8100);
 	int outport = 0;
 	
-	table_counters.lookup_count++;
+	table_counters[0].lookup_count++;
 	
 	if (Zodiac_Config.OFEnabled == OF_ENABLED && iLastFlow == 0) // Check to if the flow table is empty
 	{
@@ -146,7 +145,8 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			flow_counters[i].hitCount++; // Increment flow hit count
 			flow_counters[i].bytes += packet_size;
 			flow_counters[i].lastmatch = totaltime; // Increment flow hit count
-			table_counters.matched_count++;
+			table_counters[0].matched_count++;
+			table_counters[0].byte_count += packet_size;
 			
 			// If there are no actions DROP the packet
 			act_hdr = flow_actions[i].action1;
@@ -177,7 +177,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						
 						if (ntohs(action_out->port) == OFPP_ALL || ntohs(action_out->port) == OFPP_FLOOD)
 						{
-							outport = 7 - (1<< (ntohs(action_out->port)-1));	// Need to fix this, may also send out the Non-OpenFlow port
+							outport = (15 - NativePortMatrix) - (1<<(port-1));
 							gmac_write(p_uc_data, packet_size, outport);
 						}
 						
@@ -618,8 +618,8 @@ void stats_table_reply(struct ofp_stats_request *msg)
 	tbl_stats.table_id = 0;
 	tbl_stats.max_entries = htonl(MAX_FLOWS);
 	tbl_stats.active_count = htonl(iLastFlow);
-	tbl_stats.lookup_count = htonll(table_counters.lookup_count);
-	tbl_stats.matched_count = htonll(table_counters.matched_count);
+	tbl_stats.lookup_count = htonll(table_counters[0].lookup_count);
+	tbl_stats.matched_count = htonll(table_counters[0].matched_count);
 	memcpy(buf, &reply, sizeof(struct ofp10_stats_reply));
 	memcpy(buf + sizeof(struct ofp10_stats_reply), &tbl_stats, sizeof(struct ofp_table_stats));
 	sendtcp(&buf, len);
@@ -726,11 +726,18 @@ void packet_out(struct ofp_header *msg)
 	eport = ptr - 4;
 	int outPort = NTOHS(*eport);
 	int inPort = NTOHS(*iport);
-	
-	if (outPort == OFPP_FLOOD)
+
+	if (outPort == OFPP_TABLE)
 	{
-		outPort = 7 - (1 << (inPort-1));	// Need to fix this, may also send out the Non-OpenFlow port
-		} else {
+		nnOF_tablelookup(ptr, &size, inPort);
+		return;
+	}
+	
+	if (outPort == OFPP_FLOOD || outPort == OFPP13_ALL)
+	{
+		outPort = (15 - NativePortMatrix) - (1<<(inPort-1));
+	} else 
+	{
 		outPort = 1 << (outPort-1);
 	}
 	gmac_write(ptr, size, outPort);
@@ -838,7 +845,7 @@ void flow_add(struct ofp_header *msg)
 	
 	action_hdr = &ptr_fm->actions;
 	memcpy(&flow_match[iLastFlow], ptr_fm, action_hdr->len);
-	
+
 	if(action_size > 0)
 	{
 		for(int q=0;q<4;q++)
@@ -1083,7 +1090,7 @@ void flow_delete_strict(struct ofp_header *msg)
 	{
 		if(flow_counters[q].active == true)
 		{
-			if((memcmp(&flow_match[q].match, &ptr_fm->match, sizeof(struct ofp_match)) == 0) && (memcmp(&flow_match[q].cookie, &ptr_fm->cookie,4) == 0))
+			if((memcmp(&flow_match[q].match, &ptr_fm->match, sizeof(struct ofp_match)) == 0) && (memcmp(&flow_match[q].cookie, &ptr_fm->cookie,8) == 0))
 			{
 				if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
 				// Clear flow counters and actions

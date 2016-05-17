@@ -54,24 +54,30 @@ extern struct ofp_flow_mod flow_match[MAX_FLOWS];
 extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
+extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
 extern struct flows_counter flow_counters[MAX_FLOWS];
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
 extern int iLastFlow;
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
-extern struct table_counter table_counters;
+extern struct table_counter table_counters[MAX_TABLES];
 extern bool masterselect;
+extern bool trace = false;
 extern struct tcp_pcb *tcp_pcb;
 extern uint8_t port_status[4];
 extern int totaltime;
 extern int32_t ul_temp;
 extern int OF_Version;
+struct tcp_pcb *telnet_pcb;
 
 // Local Variables
-bool showintro = true;		
+bool showintro = true;	
+bool tshowintro = true;	
 uint8_t uCLIContext = 0;
 struct arp_header arp_test;
 uint8_t esc_char = 0;
+char telnet_buffer[64];		// Buffer for incoming telnet commands
+char print_buffer[1024];
 
 // Internal Functions	
 void saveConfig(void);
@@ -79,8 +85,12 @@ void command_root(char *command, char *param1, char *param2, char *param3);
 void command_config(char *command, char *param1, char *param2, char *param3);
 void command_openflow(char *command, char *param1, char *param2, char *param3);
 void command_debug(char *command, char *param1, char *param2, char *param3);
-void printintro(void);
+//void printintro(void);
+void printintro(char *buffer);
 void printhelp(void);
+static err_t telnet_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
+static err_t telnet_accept(void *arg, struct tcp_pcb *pcb, err_t err);
+void tprintf(char *buffer, struct tcp_pcb *pcb);
 
 /*
 *	Converts a 64bit value from host to network format
@@ -113,6 +123,132 @@ void saveConfig(void)
 	return;
 }
 
+void telnet_init(void)
+{
+	telnet_pcb = tcp_new();
+	tcp_bind(telnet_pcb, IP_ADDR_ANY, 23);
+	telnet_pcb = tcp_listen(telnet_pcb);
+	tcp_accept(telnet_pcb, telnet_accept);
+}
+
+static err_t telnet_accept(void *arg, struct tcp_pcb *pcb, err_t err)
+{
+	LWIP_UNUSED_ARG(arg);
+	LWIP_UNUSED_ARG(err);
+	tcp_setprio(pcb, TCP_PRIO_MIN);
+	tcp_recv(pcb, telnet_recv);
+	tcp_err(pcb, NULL);
+	tcp_poll(pcb, NULL, 4);
+	return ERR_OK;	
+}
+
+static err_t telnet_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
+{
+	int i;
+	int len;
+	char *pc;
+	char *command;
+	char *param1;
+	char *param2;
+	char *param3;
+	char *pch;
+		
+	if (err == ERR_OK && p != NULL)
+	{
+		tcp_recved(pcb, p->tot_len);
+		pc = (char*)p->payload;
+		len = p->tot_len;
+		
+		for(i=0;i<len;i++)
+		{
+			telnet_buffer[i] = pc[i];
+		}
+		len = len -2;
+		telnet_buffer[len] = '\0';
+		pch = strtok (telnet_buffer," ");
+		command = pch;
+		pch = strtok (NULL, " ");
+		param1 = pch;
+		pch = strtok (NULL, " ");
+		param2 = pch;
+		pch = strtok (NULL, " ");
+		param3 = pch;
+		printf("%s - %s - %s - %s\r\n", command, param1, param2, param3);
+		
+		if (tshowintro == true)	// Show the intro only on the first key press
+		{
+ 			printintro(&print_buffer);
+			tprintf(&print_buffer, pcb);
+			tshowintro = false;
+			return ERR_OK;
+		}
+			
+		switch(uCLIContext)
+		{
+			case CLI_ROOT:
+			command_root(command, param1, param2, param3);
+			break;
+					
+			case CLI_CONFIG:
+			command_config(command, param1, param2, param3);
+			break;
+					
+			case CLI_OPENFLOW:
+			command_openflow(command, param1, param2, param3);
+			break;
+					
+			case CLI_DEBUG:
+			command_debug(command, param1, param2, param3);
+			break;
+		};
+		printf(&print_buffer, pcb);
+		print_buffer[0] = '\0';
+						
+		switch(uCLIContext)
+		{
+			case CLI_ROOT:
+			sprintf(print_buffer, "%s# ",Zodiac_Config.device_name);
+			tprintf(&print_buffer, pcb);
+			break;
+				
+			case CLI_CONFIG:
+			sprintf(print_buffer, "%s(config)# ",Zodiac_Config.device_name);
+			tprintf(&print_buffer, pcb);
+			break;
+				
+			case CLI_OPENFLOW:
+			sprintf(print_buffer, "%s(openflow)# ",Zodiac_Config.device_name);
+			tprintf(&print_buffer, pcb);
+			break;
+				
+			case CLI_DEBUG:
+			sprintf(print_buffer, "%s(debug)# ",Zodiac_Config.device_name);
+			tprintf(&print_buffer, pcb);
+			break;
+		};
+							
+		pbuf_free(p);
+		
+	}
+	
+	pbuf_free(p);
+	
+	if (err == ERR_OK && p == NULL)
+	{
+		tcp_close(pcb);
+	}
+
+	return ERR_OK;
+}
+
+void tprintf(char *buffer, struct tcp_pcb *pcb)
+{
+	int len;
+	len = strlen(buffer);
+	tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY);
+	tcp_output(pcb);
+}
+
 /*
 *	Main command line loop
 *
@@ -127,13 +263,17 @@ void task_command(char *str, char *str_last)
 	char *param2;
 	char *param3;
 	char *pch;
-	
+		
 	while(udi_cdc_is_rx_ready()){
 		ch = udi_cdc_getc();
 		
+		if (trace == true) trace = false;
+				
 		if (showintro == true)	// Show the intro only on the first key press
 		{
-			printintro();
+			printintro(&print_buffer);
+			printf(&print_buffer);
+			print_buffer[0] = '\0';
 			showintro = false;
 			ch = 13;
 		}	
@@ -191,6 +331,8 @@ void task_command(char *str, char *str_last)
 					command_debug(command, param1, param2, param3);
 					break;
 				};
+				printf(&print_buffer);
+				print_buffer[0] = '\0';
 			}
 			
 			switch(uCLIContext)
@@ -273,6 +415,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		return;
 
 	}	
+	
 	// Display firmware version
 	if (strcmp(command, "show") == 0 && strcmp(param1, "version") == 0)
 	{
@@ -343,9 +486,72 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		printf("\r\n-------------------------------------------------------------------------\r\n\n");	
 		return;
 	}
+
+	// Build shortcut - b XX:XX, where XX:XX are the last 4 digits of the new mac address
+	if (strcmp(command, "b")==0)
+	{
+		uint8_t mac5,mac6;
+		sscanf(param1, "%x:%x", &mac5, &mac6);
+		Zodiac_Config.MAC_address[0] = 0x70;
+		Zodiac_Config.MAC_address[1] = 0xb3;
+		Zodiac_Config.MAC_address[2] = 0xd5;
+		Zodiac_Config.MAC_address[3] = 0x6c;
+		Zodiac_Config.MAC_address[4] = mac5;
+		Zodiac_Config.MAC_address[5] = mac6;
+		
+		struct zodiac_config reset_config =
+		{
+			"Zodiac_FX",		// Name
+			0,0,0,0,0,0,		// MAC Address
+			10,0,1,99,			// IP Address
+			255,255,255,0,		// Netmask
+			10,0,1,1,			// Gateway Address
+			10,0,1,8,			// IP Address of the SDN Controller
+			6633,				// TCP port of SDN Controller
+			1					// OpenFlow enabled
+		};
+		memset(&reset_config.vlan_list, 0, sizeof(struct virtlan)* MAX_VLANS); // Clear vlan array
 	
+		// Config VLAN 100
+		sprintf(&reset_config.vlan_list[0].cVlanName, "Openflow");	// Vlan name
+		reset_config.vlan_list[0].portmap[0] = 1;		// Assign port 1 to this vlan
+		reset_config.vlan_list[0].portmap[1] = 1;		// Assign port 2 to this vlan
+		reset_config.vlan_list[0].portmap[2] = 1;		// Assign port 3 to this vlan
+		reset_config.vlan_list[0].uActive = 1;		// Vlan is active
+		reset_config.vlan_list[0].uVlanID = 100;	// Vlan ID is 100
+		reset_config.vlan_list[0].uVlanType = 1;	// Set as an Openflow Vlan
+		reset_config.vlan_list[0].uTagged = 0;		// Set as untagged
+	
+		// Config VLAN 200
+		sprintf(&reset_config.vlan_list[1].cVlanName, "Controller");
+		reset_config.vlan_list[1].portmap[3] = 1;		// Assign port 4 to this vlan
+		reset_config.vlan_list[1].uActive = 1;		// Vlan is active
+		reset_config.vlan_list[1].uVlanID = 200;	// Vlan ID is 200
+		reset_config.vlan_list[1].uVlanType = 2;	// Set as an Native Vlan
+		reset_config.vlan_list[1].uTagged = 0;		// Set as untagged
+	
+		// Set ports
+		reset_config.of_port[0] = 1;		// Port 1 is an OpenFlow port
+		reset_config.of_port[1] = 1;		// Port 2 is an Openflow port
+		reset_config.of_port[2] = 1;		// Port 3 is an OpenFlow port
+		reset_config.of_port[3] = 2;		// Port 4 is an Native port
+	
+		// Failstate
+		reset_config.failstate = 0;			// Failstate Secure
+	
+		// Force OpenFlow version
+		reset_config.of_version = 0;			// Force version disabled
+	
+		memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existng MAC address so it is not reset
+		memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
+		saveConfig();
+		printf("Setup complete, MAC Address = %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
+		return;
+	}
+		
 	// Unknown Command
-	printf("Unknown command\r\n");
+	//printf("Unknown command\r\n");
+	sprintf(print_buffer,"Unknown command\r\n");
 	return;
 }
 
@@ -364,7 +570,15 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		uCLIContext = CLI_ROOT;
 		return;
 	}
-	
+
+	// Display help
+	if (strcmp(command, "help") == 0)
+	{
+		printhelp();
+		return;
+
+	}
+		
 	// Load config
 	if (strcmp(command, "load")==0){
 		loadConfig();
@@ -632,7 +846,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		Zodiac_Config.netmask[1] = nm2;
 		Zodiac_Config.netmask[2] = nm3;
 		Zodiac_Config.netmask[3] = nm4;
-		printf("IP Address set to %d.%d.%d.%d\r\n" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);
+		printf("Netmask set to %d.%d.%d.%d\r\n" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);
 		return;
 	}
 	
@@ -650,7 +864,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		Zodiac_Config.gateway_address[1] = gw2;
 		Zodiac_Config.gateway_address[2] = gw3;
 		Zodiac_Config.gateway_address[3] = gw4;
-		printf("IP Address set to %d.%d.%d.%d\r\n" , Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
+		printf("Gateway set to %d.%d.%d.%d\r\n" , Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
 		return;
 	}
 
@@ -787,7 +1001,15 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		uCLIContext = CLI_ROOT;
 		return;
 	}
-		
+
+	// Display help
+	if (strcmp(command, "help") == 0)
+	{
+		printhelp();
+		return;
+
+	}
+			
 	// Openflow Flows
 	if (strcmp(command, "show") == 0 && strcmp(param1, "flows") == 0)
 	{
@@ -806,11 +1028,23 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf("  Incoming Port: %d\t\t\tEthernet Type: 0x%.4X\r\n",ntohs(flow_match[i].match.in_port), ntohs(flow_match[i].match.dl_type));
 					printf("  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t\tDestination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",flow_match[i].match.dl_src[0], flow_match[i].match.dl_src[1], flow_match[i].match.dl_src[2], flow_match[i].match.dl_src[3], flow_match[i].match.dl_src[4], flow_match[i].match.dl_src[5] \
 					, flow_match[i].match.dl_dst[0], flow_match[i].match.dl_dst[1], flow_match[i].match.dl_dst[2], flow_match[i].match.dl_dst[3], flow_match[i].match.dl_dst[4], flow_match[i].match.dl_dst[5]);
-					printf("  VLAN ID: %d\t\t\t\tVLAN Priority: 0x%x\r\n",ntohs(flow_match[i].match.dl_vlan), flow_match[i].match.dl_vlan_pcp);
-					printf("  IP Protocol: %d\t\t\tIP ToS Bits: 0x%.2X\r\n",flow_match[i].match.nw_proto, flow_match[i].match.nw_tos);
-					printf("  TCP Source Address: %d.%d.%d.%d\r\n",ip4_addr1(&flow_match[i].match.nw_src), ip4_addr2(&flow_match[i].match.nw_src), ip4_addr3(&flow_match[i].match.nw_src), ip4_addr4(&flow_match[i].match.nw_src));
-					printf("  TCP Destination Address: %d.%d.%d.%d\r\n", ip4_addr1(&flow_match[i].match.nw_dst), ip4_addr2(&flow_match[i].match.nw_dst), ip4_addr3(&flow_match[i].match.nw_dst), ip4_addr4(&flow_match[i].match.nw_dst));
-					printf("  TCP/UDP Source Port: %d\t\tTCP/UDP Destination Port: %d\r\n",ntohs(flow_match[i].match.tp_src), ntohs(flow_match[i].match.tp_dst));
+					if (ntohs(flow_match[i].match.dl_vlan) == 0xffff)
+					{
+						printf("  VLAN ID: N/A\t\t\t\tVLAN Priority: N/A\r\n");
+					} else {
+						printf("  VLAN ID: %d\t\t\t\tVLAN Priority: 0x%x\r\n",ntohs(flow_match[i].match.dl_vlan), flow_match[i].match.dl_vlan_pcp);
+					}
+					if ((ntohs(flow_match[i].match.dl_type) == 0x0800) || (ntohs(flow_match[i].match.dl_type) == 0x8100)) printf("  IP Protocol: %d\t\t\tIP ToS Bits: 0x%.2X\r\n",flow_match[i].match.nw_proto, flow_match[i].match.nw_tos);
+					if (flow_match[i].match.nw_proto == 7 || flow_match[i].match.nw_proto == 16)
+					{
+						printf("  TCP Source Address: %d.%d.%d.%d\r\n",ip4_addr1(&flow_match[i].match.nw_src), ip4_addr2(&flow_match[i].match.nw_src), ip4_addr3(&flow_match[i].match.nw_src), ip4_addr4(&flow_match[i].match.nw_src));
+						printf("  TCP Destination Address: %d.%d.%d.%d\r\n", ip4_addr1(&flow_match[i].match.nw_dst), ip4_addr2(&flow_match[i].match.nw_dst), ip4_addr3(&flow_match[i].match.nw_dst), ip4_addr4(&flow_match[i].match.nw_dst));
+						printf("  TCP/UDP Source Port: %d\t\tTCP/UDP Destination Port: %d\r\n",ntohs(flow_match[i].match.tp_src), ntohs(flow_match[i].match.tp_dst));
+					}
+					if (flow_match[i].match.nw_proto == 1)
+					{
+						printf("  ICMP Type: %d\t\t\t\tICMP Code: %d\r\n",ntohs(flow_match[i].match.tp_src), ntohs(flow_match[i].match.tp_dst));
+					}
 					printf("  Wildcards: 0x%.8x\t\t\tCookie: 0x%" PRIx64 "\r\n",ntohl(flow_match[i].match.wildcards), htonll(flow_match[i].cookie));
 					printf("\r Attributes:\r\n");
 					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match[i].priority), totaltime - flow_counters[i].duration);
@@ -823,6 +1057,8 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						if(q == 1) act_hdr = flow_actions[i].action2;
 						if(q == 2) act_hdr = flow_actions[i].action3;
 						if(q == 3) act_hdr = flow_actions[i].action4;
+						
+						if(act_hdr->len == 0 && q == 0) printf("   DROP\r\n"); // No actions = DROP
 					
 						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_OUTPUT) // Output to port action
 						{
@@ -855,7 +1091,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_STRIP_VLAN) //
 						{
 							printf("  Action %d:\r\n",q+1);
-							printf("   Strip VLAN ID\r\n");
+							printf("   Strip VLAN tag\r\n");
 						}			
 					}
 				}
@@ -867,7 +1103,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				int match_size;
 				int inst_size;
 				int act_size;
-				struct ofp13_instruction *inst_ptr; 
+				struct ofp13_instruction *inst_ptr;
 				struct ofp13_instruction_actions *inst_actions;
 				struct oxm_header13 oxm_header;
 				uint8_t oxm_value8;
@@ -883,6 +1119,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf("\r\nFlow %d\r\n",i+1);
 					printf(" Match:\r\n");
 					match_size = 0;
+
 					while (match_size < (ntohs(flow_match13[i].match.length)-4))
 					{
 						memcpy(&oxm_header, ofp13_oxm_match[i] + match_size,4);
@@ -960,16 +1197,25 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 																																		
 							case OFPXMT_OFB_VLAN_VID:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-							printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
+							//if (oxm_value16 == 0) printf("  VLAN ID: 0\r\n");
+							if (oxm_value16 != 0) printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
 							break;
 							
 						};
 						match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
 					}
 					printf("\r Attributes:\r\n");
-					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i].priority), totaltime - flow_counters[i].duration);
+					printf("  Table ID: %d\t\t\t\tCookie:0x%" PRIx64 "\r\n",flow_match13[i].table_id, htonll(flow_match13[i].cookie));
+					printf("  Priority: %d\t\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i].priority), totaltime - flow_counters[i].duration);
 					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match13[i].hard_timeout), ntohs(flow_match13[i].idle_timeout));
 					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
+					int lm = totaltime - flow_counters[i].lastmatch;
+					int hr = lm/3600;
+					int t = lm%3600;
+					int min = t/60;
+					int sec = t%60;
+					printf("  Last Match: %02d:%02d:%02d\r\n", hr, min, sec);
+					// Print instruction list
 					if (ofp13_oxm_inst[i] != NULL)
 					{
 						printf("\r Instructions:\r\n");
@@ -977,13 +1223,15 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						inst_size = ntohs(inst_ptr->len);
 						if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
 						{
-							printf("  Apply Actions:\r\n");
+							//printf("  Apply Actions: %d\r\n", inst_size);
 							struct ofp13_action_header *act_hdr;
 							act_size = 0;
+							if (inst_size == sizeof(struct ofp13_instruction_actions)) printf("   DROP \r\n");	// No actions
 							while (act_size < (inst_size - sizeof(struct ofp13_instruction_actions)))
 							{
 								inst_actions  = ofp13_oxm_inst[i] + act_size;
 								act_hdr = &inst_actions->actions;
+								//printf("action %d\r\n", htons(act_hdr->type));
 								if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 								{
 									struct ofp13_action_output *act_output = act_hdr;
@@ -999,6 +1247,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 									}
 									act_output = NULL;
 								}
+								
 								if (htons(act_hdr->type) == OFPAT13_SET_FIELD)
 								{
 									struct ofp13_action_set_field *act_set_field = act_hdr;
@@ -1013,15 +1262,99 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 									};													
 								}
 								
+								if (htons(act_hdr->type) == OFPAT13_PUSH_VLAN)
+								{
+									struct ofp13_action_push *act_push = act_hdr;
+									printf("   Push VLAN tag\r\n");
+								}
+
+								if (htons(act_hdr->type) == OFPAT13_POP_VLAN)
+								{
+									printf("   Pop VLAN tag\r\n");
+								}
+																
 								act_size += htons(act_hdr->len);
 							}
 						}
+						// Print goto table instruction
+						if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
+						{
+							struct ofp13_instruction_goto_table *inst_goto_ptr;
+							inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
+							printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
+							continue;
+						}
+						// Is there more then one instruction?
+						if (ofp13_oxm_inst_size[i] > inst_size)
+						{
+							uint8_t *nxt_inst;
+							nxt_inst = ofp13_oxm_inst[i] + inst_size;
+							inst_ptr = (struct ofp13_instruction *) nxt_inst;
+							inst_size = ntohs(inst_ptr->len);
+							if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
+							{
+								struct ofp13_instruction_goto_table *inst_goto_ptr;
+								inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
+								printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
+							}
+						}
+					} else {
+						// No instructions
+						printf("\r Instructions:\r\n");
+						printf("   DROP \r\n");
 					}
 				}
 				printf("\r\n-------------------------------------------------------------------------\r\n\n");				
 			}
 		} else {
 			printf("No Flows installed!\r\n");
+		}
+		return;
+	}
+
+	// List tables
+	if (strcmp(command, "show") == 0 && strcmp(param1, "tables") == 0)
+	{
+		if( OF_Version == 1)
+		{
+			printf("\r\n-------------------------------------------------------------------------\r\n");
+			if(iLastFlow > 0)
+			{
+				printf("Table: 0\r\n");
+				printf(" Flows: %d\r\n",iLastFlow);
+				printf(" Lookups: %d\r\n",table_counters[0].lookup_count);
+				printf(" Matches: %d\r\n",table_counters[0].matched_count);
+				printf(" Bytes: %d\r\n",table_counters[0].byte_count);
+				printf("\r\n");
+			} else printf("No Flows.\r\n");
+			printf("-------------------------------------------------------------------------\r\n");			
+		}
+		
+		if( OF_Version == 4)
+		{
+			int flow_count;
+			printf("\r\n-------------------------------------------------------------------------\r\n");
+			for (int x=0;x<MAX_TABLES;x++)
+			{
+				flow_count = 0;
+				for (int i=0;i<iLastFlow;i++)
+				{
+					if(flow_match13[i].table_id == x)
+					{
+						flow_count++;
+					}
+				}
+				if(flow_count > 0)
+				{
+					printf("Table: %d\r\n",x);
+					printf(" Flows: %d\r\n",flow_count);
+					printf(" Lookups: %d\r\n",table_counters[x].lookup_count);
+					printf(" Matches: %d\r\n",table_counters[x].matched_count);
+					printf(" Bytes: %d\r\n",table_counters[x].byte_count); 
+					printf("\r\n");	
+				}
+			}
+			printf("-------------------------------------------------------------------------\r\n");
 		}
 		return;
 	}
@@ -1034,15 +1367,44 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		if (tcp_pcb->state != ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED) printf(" Status: Disconnected\r\n");			
 		if (tcp_pcb->state == ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED) printf(" Status: Connected\r\n");
 		if (Zodiac_Config.OFEnabled == OF_DISABLED) printf(" Status: Disabled\r\n");
-		if (OF_Version == 1) printf(" Version: 1.0 (0x01)\r\n");
-		if (OF_Version == 4) printf(" Version: 1.3 (0x04)\r\n");
-		printf(" No tables: 1\r\n");
-		printf(" No flows: %d\r\n",iLastFlow);
-		printf(" Table Lookups: %d\r\n",table_counters.lookup_count);
-		printf(" Table Matches: %d\r\n",table_counters.matched_count);
-		
-		
-		
+		if (OF_Version == 1)
+		{
+			printf(" Version: 1.0 (0x01)\r\n");
+			printf(" No tables: 1\r\n");
+			printf(" No flows: %d\r\n", iLastFlow);
+			printf(" Total Lookups: %d\r\n",table_counters[0].lookup_count);
+			printf(" Total Matches: %d\r\n",table_counters[0].matched_count);
+		}
+		if (OF_Version == 4)
+		{
+			int flow_count;
+			int tables = 0;
+			for (int x=0;x<MAX_TABLES;x++)
+			{
+				flow_count = 0;
+				for (int i=0;i<iLastFlow;i++)
+				{
+					if(flow_match13[i].table_id == x)
+					{
+						flow_count++;
+					}
+				}
+				if(flow_count > 0) tables++;
+			}
+			printf(" Version: 1.3 (0x04)\r\n");
+			printf(" No tables: %d\r\n", tables);
+			printf(" No flows: %d\r\n", iLastFlow);
+			// Total up all the table stats
+			int lookup_count = 0;
+			int matched_count = 0;
+			for (int x=0;x<MAX_TABLES;x++)
+			{
+				lookup_count += table_counters[x].lookup_count;
+				matched_count += table_counters[x].matched_count;
+			}
+			printf(" Total Lookups: %d\r\n",lookup_count);
+			printf(" Total Matches: %d\r\n",matched_count);	
+		}		
 		printf("\r\n-------------------------------------------------------------------------\r\n");		
 		return;
 	}
@@ -1073,7 +1435,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		clear_flows();
 		return;
 	}
-
+	
 	// Unknown Command
 	printf("Unknown command\r\n");
 	return;	
@@ -1093,7 +1455,15 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		uCLIContext = CLI_ROOT;
 		return;
 	}
-		
+
+	// Display help
+	if (strcmp(command, "help") == 0)
+	{
+		printhelp();
+		return;
+
+	}
+			
 	if (strcmp(command, "read")==0)
 	{
 		int n = switch_read(atoi(param1));
@@ -1119,7 +1489,21 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		rstc_start_software_reset(RSTC);	// Need to fix this, board resets but can't connect to CLI again
 		while (1);
 	}
-	
+
+	if (strcmp(command, "mem")==0)
+	{
+		printf("mem total: %d\r\n", membag_get_total());
+		printf("mem free: %d\r\n", membag_get_total_free());
+		return;
+	}
+
+	if (strcmp(command, "trace")==0)
+	{
+		trace = true;
+		printf("Starting trace...\r\n"); 
+		return;
+	}
+			
 	// Unknown Command response
 	printf("Unknown command\r\n");
 	return;	
@@ -1130,17 +1514,17 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 *	ASCII art generated from http://patorjk.com/software/taag/
 *
 */
-void printintro(void)
-{	
-	printf("\r\n");
-	printf(" _____             ___               _______  __\r\n");
-	printf("/__  /  ____  ____/ (_)___ ______   / ____/ |/ /\r\n");
-	printf("  / /  / __ \\/ __  / / __ `/ ___/  / /_   |   /\r\n");
-	printf(" / /__/ /_/ / /_/ / / /_/ / /__   / __/  /   |  \r\n");
-	printf("/____/\\____/\\__,_/_/\\__,_/\\___/  /_/    /_/|_| \r\n");
-	printf("\t    by Northbound Networks\r\n");
-	printf("\r\n\n");
-	printf("Type 'help' for a list of available commands\r\n");
+void printintro(char *buffer)
+{
+	sprintf(buffer,"\r\n");
+	strcat(buffer," _____             ___               _______  __\r\n");
+	strcat(buffer,"/__  /  ____  ____/ (_)___ ______   / ____/ |/ /\r\n");
+	strcat(buffer,"  / /  / __ \\/ __  / / __ `/ ___/  / /_   |   /\r\n");
+	strcat(buffer," / /__/ /_/ / /_/ / / /_/ / /__   / __/  /   |  \r\n");
+	strcat(buffer,"/____/\\____/\\__,_/_/\\__,_/\\___/  /_/    /_/|_| \r\n");
+	strcat(buffer,"\t    by Northbound Networks\r\n");
+	strcat(buffer,"\r\n\n");
+	strcat(buffer,"Type 'help' for a list of available commands\r\n");
 	return;
 }
 
@@ -1151,50 +1535,53 @@ void printintro(void)
 */
 void printhelp(void)
 {
-	printf("\r\n");
-	printf("The following commands are currently available:\r\n");
-	printf("\r\n");
-	printf("Base:\r\n");
-	printf(" config\r\n");
-	printf(" openflow\r\n");
-	printf(" debug\r\n");
-	printf(" show ports\r\n");
-	printf(" show status\r\n");
-	printf(" show version\r\n");
-	printf("\r\n");
-	printf("Config:\r\n");
-	printf(" save\r\n");
-	printf(" show config\r\n");
-	printf(" show vlans\r\n");
-	printf(" set name <name>\r\n");
-	printf(" set mac-address <mac address>\r\n");
-	printf(" set ip-address <ip address>\r\n");
-	printf(" set netmask <netmasks>\r\n");
-	printf(" set gateway <gateway ip address>\r\n");
-	printf(" set of-controller <openflow controller ip address>\r\n");
-	printf(" set of-port <openflow controller tcp port>\r\n");
-	printf(" set failstate <secure|safe>\r\n");
-	printf(" add vlan <vlan id> <vlan name>\r\n");
-	printf(" delete vlan <vlan id>\r\n");
-	printf(" set vlan-type <openflow|native>\r\n");
-	printf(" add vlan-port <vlan id> <port>\r\n");
-	printf(" delete vlan-port <port>\r\n");
-	printf(" factory reset\r\n");
-	printf(" set of-version <version(0|1|4)>\r\n");
-	printf(" exit\r\n");
-	printf("\r\n");
-	printf("OpenFlow:\r\n");
-	printf(" show status\r\n");
-	printf(" show flows\r\n");
-	printf(" enable\r\n");
-	printf(" disable\r\n");
-	printf(" clear flows\r\n");
-	printf(" exit\r\n");
-	printf("\r\n");
-	printf("Debug:\r\n");
-	printf(" read <register>\r\n");
-	printf(" write <register> <value>\r\n");
-	printf(" exit\r\n");
-	printf("\r\n");
+	sprintf(print_buffer,"\r\n");
+	strcat(print_buffer,"The following commands are currently available:\r\n");
+	strcat(print_buffer,"\r\n");
+	strcat(print_buffer,"Base:\r\n");
+	strcat(print_buffer," config\r\n");
+	strcat(print_buffer," openflow\r\n");
+	strcat(print_buffer," debug\r\n");
+	strcat(print_buffer," show ports\r\n");
+	strcat(print_buffer," show status\r\n");
+	strcat(print_buffer," show version\r\n");
+	strcat(print_buffer,"\r\n");
+	strcat(print_buffer,"Config:\r\n");
+	strcat(print_buffer," save\r\n");
+	strcat(print_buffer," show config\r\n");
+	strcat(print_buffer," show vlans\r\n");
+	strcat(print_buffer," set name <name>\r\n");
+	strcat(print_buffer," set mac-address <mac address>\r\n");
+	strcat(print_buffer," set ip-address <ip address>\r\n");
+	strcat(print_buffer," set netmask <netmasks>\r\n");
+	strcat(print_buffer," set gateway <gateway ip address>\r\n");
+	strcat(print_buffer," set of-controller <openflow controller ip address>\r\n");
+	strcat(print_buffer," set of-port <openflow controller tcp port>\r\n");
+	strcat(print_buffer," set failstate <secure|safe>\r\n");
+	strcat(print_buffer," add vlan <vlan id> <vlan name>\r\n");
+	strcat(print_buffer," delete vlan <vlan id>\r\n");
+	strcat(print_buffer," set vlan-type <openflow|native>\r\n");
+	strcat(print_buffer," add vlan-port <vlan id> <port>\r\n");
+	strcat(print_buffer," delete vlan-port <port>\r\n");
+	strcat(print_buffer," factory reset\r\n");
+	strcat(print_buffer," set of-version <version(0|1|4)>\r\n");
+	strcat(print_buffer," exit\r\n");
+	strcat(print_buffer,"\r\n");
+	strcat(print_buffer,"OpenFlow:\r\n");
+	strcat(print_buffer," show status\r\n");
+	strcat(print_buffer," show flows\r\n");
+	strcat(print_buffer," show tables\r\n");
+	strcat(print_buffer," enable\r\n");
+	strcat(print_buffer," disable\r\n");
+	strcat(print_buffer," clear flows\r\n");
+	strcat(print_buffer," exit\r\n");
+	strcat(print_buffer,"\r\n");
+	strcat(print_buffer,"Debug:\r\n");
+	strcat(print_buffer," read <register>\r\n");
+	strcat(print_buffer," write <register> <value>\r\n");
+	strcat(print_buffer," mem\r\n");
+	strcat(print_buffer," trace\r\n");
+	strcat(print_buffer," exit\r\n");
+	strcat(print_buffer,"\r\n");
 	return;
 }

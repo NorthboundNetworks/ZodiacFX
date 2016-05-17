@@ -74,6 +74,9 @@
 // From module: MATRIX - Bus Matrix
 #include <matrix.h>
 
+// From module: MEMBAG Memory Bag Allocator
+#include <membag.h>
+
 // From module: PHY Ethernet MAC (GMAC)
 #include <gmac.h>
 
