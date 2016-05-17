@@ -89,16 +89,11 @@
 #  apt-get install gcc-arm-none-eabi binutils-arm-none-eabi 
 #                  gdb-arm-none-eabi libstdc++-arm-none-eabi-newlib
 ARMGCC = arm-none-eabi-
-ifeq ($(OS),Windows_NT)
-EXE =.exe
-else
-EXE =
-endif
-CC = $(ARMGCC)gcc$(EXE)
-LD = $(ARMGCC)ld$(EXE)
-OBJCOPY = $(ARMGCC)objcopy$(EXE)
-OBJDUMP = $(ARMGCC)objdump$(EXE)
-SIZE = $(ARMGCC)size$(EXE)
+CC = $(ARMGCC)gcc
+LD = $(ARMGCC)ld
+OBJCOPY = $(ARMGCC)objcopy
+OBJDUMP = $(ARMGCC)objdump
+SIZE = $(ARMGCC)size
 
 PROJECT=ZodiacFX
 
@@ -759,5 +754,15 @@ clean:
 	$(RM) src/lwip/netif/slipif.o
 	$(RM) tags
 	$(RM) TAGS
+
+OPENOCD = openocd
+.PHONY: jtaginstall
+jtaginstall: $(PROJECT).bin
+	$(OPENOCD) --file openocd.cfg --command "zodiacfx_bin_name $<"
+
+BOSSA = bossa
+.PHONY: bossainstall
+bossainstall: $(PROJECT).bin
+	$(BOSSA) --write --boot=1 --port ttyat91sam4e8-ek $<
 
 # EOF

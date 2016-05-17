@@ -6,6 +6,8 @@ ZodiacFX.elf
 ZodiacFX.map
 ZodiacFX.lss
 ZodiacFX.lss.gz
+# Don't leak JTAG programmer serial numbers
+openocd.secret
 
 # Remainder of file was
 # Created by https://www.gitignore.io/api/c,atmelstudio,emacs,vim,tags,archives
