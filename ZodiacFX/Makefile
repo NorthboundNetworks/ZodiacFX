@@ -687,6 +687,7 @@ clean:
 	$(RM) src/ASF/common/utils/stdio/read.o
 	$(RM) src/ASF/common/utils/stdio/stdio_usb/stdio_usb.o
 	$(RM) src/ASF/common/utils/stdio/write.o
+	$(RM) src/ASF/common/utils/membag/membag.o
 	$(RM) src/ASF/sam/drivers/afec/afec.o
 	$(RM) src/ASF/sam/drivers/gmac/gmac_phy.o
 	$(RM) src/ASF/sam/drivers/gmac/gmac_raw.o
