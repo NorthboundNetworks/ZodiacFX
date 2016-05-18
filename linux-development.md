@@ -31,17 +31,18 @@ consequences.
 
 The rest of this document is an exposition of the development cycle
 for the Zodiac FX on a Debian computer. The instructions are readily
-transferrable to other Linux distributions which have a GNU-inspired
+transferrable to other Linux distributions which have GNU-inspired
 user programs.
 
 ## Building the binary image
 
 ### Install ARM Ltd's port of GNU Compiler Collection
 
-ARM Ltd have a variant of the GCC C and C++ compiler which they
-maintain for cross-compiling to ARM embedded systems. This can be
-found in the Ubuntu PPA team-gcc-arm-embedded. Other Linux
-distributions typically pick up the source code from here.
+ARM Ltd have a variant of the GNU Compiler Collection's C and C++
+compiler for cross-compiling to ARM embedded systems. They maintain
+this variant in the Ubuntu Personal Package Archive
+‘team-gcc-arm-embedded’. Other Linux distributions typically pick up
+the compiler's source code from that PPA.
 
 Under Debian Jessie say
 
@@ -49,11 +50,13 @@ Under Debian Jessie say
 sudo apt-get install binutils-arm-none-eabi gcc-arm-none-eabi gdb-arm-none-eabi  libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
 ```
 
-A future version of Debian might change these packages' names to
-…-arm-embedded to track the name change in Ubuntu.
+A future version of Debian might change these packages' names from
+‘…-arm-none-eabi’ to  to track the change of name in
+ARM Ltd's Ubuntu PPA.
 
 The version in Debian Testing more closely follows the releases in
-Ubuntu, making Testing the first recourse upon a compiler bug.
+Ubuntu, making installing ‘gcc-arm-none-eabi’ from Testing the first
+recourse upon a compiler bug.
 
 ### Install GNU make
 
@@ -66,13 +69,13 @@ sudo apt-get install make
 ```
 
 A special embedded version of make is not needed, as make runs
-entirely on the computer, not on the ZodiacFX's system-on-chip.
+entirely on the computer, not on the Zodiac FX's system-on-chip.
 
 ### Install git
 
 Git is a program for source code configuration control. The Zodiac FX
 source code can be found on
-[GitHub](https://github.com/NorthboundNetworks/ZodiacFX). Github is a
+[GitHub](https://github.com/NorthboundNetworks/ZodiacFX). GitHub is a
 sourse code repository designed to host projects maintained using Git.
 
 Under Debian say
@@ -87,10 +90,14 @@ Change to your home directory, or some similar working directory.
 
 ```sh
 git clone https://github.com/NorthboundNetworks/ZodiacFX.git
+git remote add upstream https://github.com/NorthboundNetworks/ZodiacFX.git
 ```
 
 This create a ZodiacFX subdirectory and will copy into the
 subdirectory the entire source code and history.
+
+We set the `upstream` remote name to note the canonical location of
+Zodiac FX's source code.
 
 ### Compile and link
 
@@ -100,21 +107,26 @@ cd ZodiacFX
 make -j4
 ```
 
-The subdirectory should already contain a Makefile.
+The subdirectory should already contain a file named `Makefile`.
 
-This will compile all C files — found under src/ — into object files,
-link the object files to produce ZodiacFX.elf, then transform
-ZodiacFX.elf into ZodiacFX.bin.
+This will compile all the project's C files — found under src/ — into
+object files, link the object files to produce ZodiacFX.elf, then
+transform ZodiacFX.elf into the flashable image ZodiacFX.bin.
+
+The `-j` parameter is the number of concurrent processes supervised by
+make. Set it to the number of CPU cores available. In this example the
+Raspberry Pi 3 has four cores.
 
 ## Use JTAG to flash the ZodiacFX with the binary image
 
-The next task is to get the ZodiacFX.bin onto the flash on the
-ZodiacFX.
+The next task is to get the image in the file ZodiacFX.bin onto the
+flash on the Zodiac FX.
 
 There are currently two ways to do this: the
 [Atmel-ICE JTAG/SWD debugger](http://northboundnetworks.com/products/zodiac-fx-hardware-debugger)
-or the
-[Atmel SAM-BA USB in-system programmer](http://www.atmel.com/tools/atmelsam-bain-systemprogrammer.aspx).
+a hardware device or the
+[Atmel SAM-BA USB in-system programmer](http://www.atmel.com/tools/atmelsam-bain-systemprogrammer.aspx)
+software program.
 
 SAM-BA has no source code: only pre-compiled versions for Windows and
 Linux on Intel x86 and AMD64 are available. There is a open source
@@ -123,7 +135,7 @@ BOSSA currently has no support for the SAM4 family of systems-on-chip.
 
 The Northbound Networks manual descibes how to download a .bin file
 using SAM-BA. The remainder of this section will explain how to do so
-using the JTAG programmer.
+using a JTAG programmer.
 
 ### Install OpenOCD
 
@@ -131,7 +143,8 @@ using the JTAG programmer.
 0.9.0. Do not use an earlier version; in any case, they have no
 support for the Atmel SAM4.
 
-OpenOCD v0.9.0 can be found in Debian Jessie Backports.
+OpenOCD v0.9.0 can be found in Debian Jessie's Backports
+repository. Install OpenOCD from there with:
 
 ```sh
 echo 'deb http://ftp.debian.org/debian jessie-backports main' | sudo tee --append /etc/apt/sources.list.d/backports.list > /dev/null
@@ -139,21 +152,36 @@ sudo apt-get update
 sudo apt-get --target-release jessie-backports install openocd
 ```
 
-Raspbian doesn't have a backports repository. In that case download
-the latest .deb source and re-build the package.  For guidance see
+The Raspberry Pi's ‘Raspbian’ port of Debian doesn't have a Backports
+repository. In that case download the latest .deb source and re-build
+the package.  For guidance see
 [Rebuilding a Debian package](http://vk5tu.livejournal.com/46855.html).
 
 ### Configure OpenOCD
 
-OpenOCD looks for a openocd.cfg file in the current directory. A
-working configuration for the Atmel-ICE JTAG programmer connected to
-the Zodiac FX can be found in …/ZodiacFX/ZodiacFx/openocd.cfg.
+OpenOCD looks for a configuration file named openocd.cfg in the
+current directory. A working configuration for the Atmel-ICE JTAG
+programmer connected to the Zodiac FX can be found in
+…/ZodiacFX/ZodiacFx/openocd.cfg.
 
 Connecting the Atmel ICE to the Zodiac FX is straightforward. Power
-down both units. The cable goes into the "SAM" port on the ICE. The
-ribbon cable has pin 1 marked, this goes furthest from the "JTAG" silk
-screen printing on the Zodiac FX's printed circuit board. Power up the
-Ateml ICE, then power up the Zodiac FX.
+down both units. The cable goes into the ‘SAM’ port on the ICE. The
+ribbon cable has pin 1 coloured red, this goes furthest from the
+‘JTAG’ silk screen printing on the Zodiac FX's printed circuit
+board. Power up the Atmel-ICE, then power up the Zodiac FX.
+
+If you have multiple JTAG units then place the serial number of this
+JTAG unit into …/ZodiacFX/ZodiacFx/openocd.secret. For example:
+
+```
+cmsis_dap_serial J12300012345
+```
+
+The file openocd.secret will be ignored by git, and so the device's
+serial number (needed for warranty service) won't be uploaded to
+GitHub and become widely known. You can find the serial number of the
+unit by plugging the unit's USB cable into the computer and then
+looking at the output of `dmesg`.
 
 More details on the configuration and use of OpenOCD can be found in
 [Using Atmel-ICE JTAG/USB dongle and OpenOCD with ZodiacFX OpenFlow switch](http://vk5tu.livejournal.com/56648.html).
@@ -163,25 +191,31 @@ More details on the configuration and use of OpenOCD can be found in
 Change to the directory containing openocd.cfg and ZodiacFX.bin.
 
 To save error the openocd.cfg file defines a convenience function to
-program the flash, so we use it:
+program the flash:
 
 ```sh
 openocd -f openocd.cfg -c zodiacfx_bin
 ```
 
-This is called by `make jtaginstall'.
+If this fails with an access permission then check the group ownership
+set in /etc/udev/rules.d/77-northbound-networks.rules.
 
-Alternatively from within the debugger `zodiacfx_write_image' is a
-wrapper for `flash write_image' which gives the correct load address.
+For further convenience, `make jtaginstall' will compile, link and
+program the ZodiacFX's flash.
 
-```sh
+If you are in the OpenOCD command line for other reasons then
+`zodiacfx_write_image` is a wrapper for `flash write_image` which
+gives the correct load address:
+
+```
 telnet localhost 4444
 halt
 zodiacfx_write_image ZodiacFX.bin
 exit
 ```
 
-Underneath this runs the OpenOCD commands
+Underneath the hood, all of these alternatives run the same OpenOCD
+commands:
 
 ```
 init
@@ -197,26 +231,43 @@ exit
 
 These are brief instructions for using the Zodiac FX from Linux.
 
-### Install and configure terminal emulator
+### Configure udev
+
+Create a group for Zodiac FX users:
 
 ```sh
-sudo apt-get install minicom
+sudo groupadd --system zodiacfx
 ```
 
+Create a group for Zodiac FX development. Such a group is
+traditionally named ‘eng’, short for ‘engineering’:
+
+```sh
+sudo groupadd --system eng
+```
+
+Add yourself to these groups:
+
+```sh
+sudo usermod --append --groups zodiacfx,eng $USER
+```
+
+Log out and log back in again.
+
 Create a file /etc/udev/rules.d/77-northbound-networks.rules
-containing
+containing:
 
 ```
 # Northbound Networks
 #  Zodiac FX OpenFlow switch
-ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="2404", ENV{ID_MM_DEVICE_IGNORE}="1", GROUP="adm", MODE="0660", SYMLINK+="ttyzodiacfx"
+ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="2404", ENV{ID_MM_DEVICE_IGNORE}="1", GROUP="zodiacfx", MODE="0660", SYMLINK+="ttyzodiacfx"
 #  Zodiac FX OpenFlow switch after flash "erase" jumper has been run
 #  The Atmel SAM4E Cortex-M4F CPU is running a bootloader waiting for software
 #  download via USB and the SAM-BA tool (the CPU is Atmel part ATSAM4E8C-AU,
 #  use board description "at91sam4e8-ek").
-ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="6124", ENV{ID_MM_DEVICE_IGNORE}="1", GROUP="adm", MODE="0660", SYMLINK+="ttyat91sam4e8-ek"
+ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="6124", ENV{ID_MM_DEVICE_IGNORE}="1", GROUP="eng", MODE="0660", SYMLINK+="ttyat91sam4e8-ek"
 # Atmel-ICE JTAG/SWD
-ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="2141", MODE="664", GROUP="plugdev"
+ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="2141", MODE="664", GROUP="eng"
 ```
 
 Activate this udev configuration with
@@ -225,19 +276,10 @@ Activate this udev configuration with
 sudo udevadm control --reload
 ```
 
-
-Depending upon your environment you could create a new group to
-control access to the Zodiac FX command prompt. For example
+### Install and configure terminal emulator
 
 ```sh
-sudo groupadd --system zodiacfx
-```
-
-and then set GROUP="zodiacfx" in the udev rules.  You add yourself to
-the zodiacfx group with
-
-```sh
-sudo usermod --append --groups zodiacfx $USER
+sudo apt-get install minicom
 ```
 
 Create a file /etc/minicom/minirc.zodiacfx containing
@@ -264,9 +306,9 @@ Pressing Enter will bring up the Zodiac FX logo and prompt
 Zodiac_FX#
 ```
 
-Type "help" and press Enter to see what commands are available.
+Type `help` and press Enter to see what commands are available.
 
-To exit Minicom type Crtl+A X Enter.
+To exit Minicom type Ctrl+A X Enter.
 
 ### Networking
 
@@ -296,7 +338,7 @@ For more information on getting started with the Zodiac FX under Linux
 see
 [Getting started with Northbound Networks' Zodiac FX OpenFlow switch](http://vk5tu.livejournal.com/55803.html).
 
-## Debugging
+## Development
 
 ### Decoding the OpenFlow protocol
 
@@ -320,30 +362,55 @@ Wireshark.
 ```sh
 sudo tcpdump -i eth0 -s 0 -w openflow.pcap 'tcp port 6633 or tcp port 6653 or icmp'
 sudo chown $USER:$USER openflow.pcap
-gzip -9 openflow.pcap
+gzip --best openflow.pcap
+scp openflow.pcap.gz eg.example.com:
 ```
+
+True Unix masochists can combine all of the above into one pipe from
+hell. As well as the intellectual exercise, that can be useful if the
+capturing machine lacks disk space.
 
 Tshark is a Wireshark program which can dump the protocol in
 text. This is particularly useful for including a packet in bug
-reports. To decode the capture file above say
+reports. To decode the capture file above say:
 
 ```sh
 tshark -V -x -2 -d tcp.port==6633,openflow -r openflow.pcap.gz
 ```
 
-The manual page explains how to choose a particular frame of a capture file.
+The manual page explains how to choose a particular frame of a capture
+file.
 
-These programs can be installed with
+These programs can be installed with:
 
 ```sh
-apt-get install tcpdump wireshark tshark
+sudo apt-get install tcpdump wireshark tshark
+sudo usermod --append --groups wireshark $USER
 ```
 
-### Using GDB
+### Structure of the Zodiac FX source code
 
+* `ZodiacFX/ZodiacFX/` contains the Makefile and openocd.conf
 
+* `ZodiacFX/ZodiacFX/src` contains the Zodiac FX OpenFlow source code.
 
-## Development
+* `ZodiacFX/ZodiacFX/src/config` contains the header files giving
+  configuration parameters, mostly for the ASF and LWIP source. A
+  notable exception is `config_zodiac.h` which gives parameters for
+  the Zodiac FX's bespoke source code.
+
+* `ZodiacFX/ZodiacFX/ksz8795clx` contains the driver for the ethernet
+  switch chip.
+
+* `ZodiacFX/ZodiacFX/src/ASF` contains the Atmel Software Foundation
+   code. The entirety of the ASF code is not here, only that selected for
+   use in this project. You should not need to alter this code.
+
+* `ZodiacFX/ZodiacFX/src/lwip` contains the Lightweight IP source
+  code. You should not need to alter this code.
+
+* `ZodiacFX/ZodiacFX/src/openflow_spec` contains header files from the
+  OpenFlow specifications. You should not need to alter this code.
 
 ### Install Exuberant ctags
 
@@ -356,18 +423,142 @@ apt-get install exuberant-ctags
 
 Say `make tags` to create a TAGS file for Emacs.
 
-### Structure of the ZodiacFX source code
+### Compiling with debugging options
 
-ZodiacFX/
+To compile for debugging say
 
-ZodiacFX/src
+```sh
+make clean
+make -j4 debug
+```
 
-ZodiacFX/src/ASF
+ZodiacFX.bin contains an image file for writing to flash, ZodiacFX.elf
+contains debugging symbols for use by GDB.
 
-ZodiacFX/src/lwip
+Note that compiling for release sets the C processor variable `NDEBUG`
+and compiling for debugging does not set that variable.  Mark code for
+debugging with:
 
+```cpp
+#ifndef NDEBUG
+  printf("Hello world\n");
+#endif
+```
+
+It is convention that the code has the same broad behaviour whatever
+the setting of `NDEBUG`.
+
+### Using GNU Debugger with OpenOCD and JTAG
+
+Remember to write the ZodiacFX.bin matching the ZodiacFX.elf to the
+Zodiac FX's flash memory.
+
+Start OpenOCD from the directory containing openocd.cfg:
+
+```sh
+openocd
+```
+
+Start the GNU debugger from that same directory:
+
+```sh
+arm-none-eabi-gdb --symbols=ZodiacFX.elf --eval-command="target extended-remote localhost:3333"
+```
+
+Set break points or inspect memory or do whatever gdb tasks you had in
+mind and then say `continue`.
+
+The usual front-ends to the GNU Debugger work, however you may need to
+alter the front-end's configuration to use `arm-none-eabi-gdb` rather
+than to use `gdb`.
+
+The shipped openocd.cfg contains a handler to automatically halt the
+ZodiacFX when GDB attaches to OpenOCD. If you use a different
+openocd.cfg then you should halt the CPU by hand before running GDB:
+
+```sh
+telnet localhost 4444
+halt
+exit
+```
 
 ### Contributing using git and GitHub
+
+Create an account on [GitHub](http://github.com/).
+
+In your web browser log into GitHub, open the
+[Northbound Networks ZodiacFX repository](https://github.com/NorthboundNetworks/ZodiacFX),
+press the ‘Fork’ button to create a copy of the ZodiacFX repository in
+your account.
+
+Alter git's pointer to the ‘origin’ repository of the ZodiacFX files
+on your disk. Replace `$USER` below with your GitHub account name.
+
+```sh
+# Current origin should be https://github.com/NorthboundNetworks/ZodiacFX
+git remote -v
+# Alter the origin to the fork in our Github account
+git remote remove origin
+git remote add origin https://github.com/$USER/ZodiacFX.git
+```
+
+We now have three Git repositories of the source code:
+
+* the repository on disk
+
+* the repository in our GitHub account. The repository on disk knows
+  this as its ‘origin’.
+
+* the repository in Northbound Networks' GitHub account. The repository
+  on disk knows this as its ‘upstream’.
+
+Here are some typical workflows.
+
+#### Finished editing files, commit to repository on disk
+
+```
+git commit
+```
+
+Take care with the commit comments, they will stay with the code
+whereever it goes.
+
+There are two parts to a commit comment: a short pithy one line
+summary; and following a blank line, a long discursive
+description. Both are valuable and should take some thought.
+
+#### Send the repository on disk to GitHub
+
+```
+git push origin master
+```
+
+#### Synchronise repository on disk with latest from Northbound Networks
+
+You will need to have no uncommitted changes on disk.
+
+To keep our changes whilst getting the latest from Northbound
+Network's repository:
+
+```
+git fetch upstream
+git checkout master
+git merge upstream/master
+```
+
+Once the merge is successful then you can push to your own GitHub
+repository as normal with `git push origin master`.
+
+#### Ask Northbound Networks to add your code to their repository
+
+Ensure any new source code files have a copyright notice and the GPL3+
+license text.
+
+In your web browser log into your GitHub account. Then go to
+[Northbound Networks ZodiacFX repository](https://github.com/NorthboundNetworks/ZodiacFX).
+Press the tab labelled ‘Pull requests’. Press the button marked ‘New
+pull request’.
+
 
 ## Copyright
 
@@ -376,4 +567,3 @@ Copyright © Glen Turner, 2016
 Licensed to you under the Creative Commons Attribution-ShareAlike 4.0
 International license. For the text of the license see
 <http://creativecommons.org/licenses/by-sa/4.0/legalcode>
-
