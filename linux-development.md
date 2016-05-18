@@ -557,7 +557,11 @@ license text.
 In your web browser log into your GitHub account. Then go to
 [Northbound Networks ZodiacFX repository](https://github.com/NorthboundNetworks/ZodiacFX).
 Press the tab labelled ‘Pull requests’. Press the button marked ‘New
-pull request’.
+pull request’. Click on the link ‘Compare across forks’. Select the
+‘head fork’ dropdown and click on your repository. After a few seconds
+this will display the changes. Press the button marked ‘Create pull
+request’, check the summary, and press the button marked ‘Create pull
+request’ once again.
 
 
 ## Copyright
