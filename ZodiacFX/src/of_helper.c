@@ -423,7 +423,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 
 				case OXM_OF_ETH_TYPE:
 				memcpy(&oxm_value16, oxm_value, 2);
-				if (eth_prot != oxm_value)
+				if (eth_prot != oxm_value16)
 				{
 					priority_match = -1;
 				}			

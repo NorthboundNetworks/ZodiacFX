@@ -31,7 +31,7 @@
 #define CONFIG_ZODIAC_H_
 
 
-#define VERSION "0.60"		// Firmware version number
+#define VERSION "0.61"		// Firmware version number
 
 #define MAX_OFP_VERSION   0x04
 
