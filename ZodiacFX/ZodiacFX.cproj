@@ -708,6 +708,12 @@
     <Compile Include="src\openflow_spec\openflow_spec13.h">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\telnet.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\telnet.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\timers.c">
       <SubType>compile</SubType>
     </Compile>

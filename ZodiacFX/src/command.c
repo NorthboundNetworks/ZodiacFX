@@ -68,16 +68,14 @@ extern uint8_t port_status[4];
 extern int totaltime;
 extern int32_t ul_temp;
 extern int OF_Version;
-struct tcp_pcb *telnet_pcb;
+
 
 // Local Variables
 bool showintro = true;	
-bool tshowintro = true;	
 uint8_t uCLIContext = 0;
 struct arp_header arp_test;
 uint8_t esc_char = 0;
-char telnet_buffer[64];		// Buffer for incoming telnet commands
-char print_buffer[1024];
+
 
 // Internal Functions	
 void saveConfig(void);
@@ -85,12 +83,9 @@ void command_root(char *command, char *param1, char *param2, char *param3);
 void command_config(char *command, char *param1, char *param2, char *param3);
 void command_openflow(char *command, char *param1, char *param2, char *param3);
 void command_debug(char *command, char *param1, char *param2, char *param3);
-//void printintro(void);
-void printintro(char *buffer);
+void printintro(void);
 void printhelp(void);
-static err_t telnet_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
-static err_t telnet_accept(void *arg, struct tcp_pcb *pcb, err_t err);
-void tprintf(char *buffer, struct tcp_pcb *pcb);
+
 
 /*
 *	Converts a 64bit value from host to network format
@@ -123,132 +118,6 @@ void saveConfig(void)
 	return;
 }
 
-void telnet_init(void)
-{
-	telnet_pcb = tcp_new();
-	tcp_bind(telnet_pcb, IP_ADDR_ANY, 23);
-	telnet_pcb = tcp_listen(telnet_pcb);
-	tcp_accept(telnet_pcb, telnet_accept);
-}
-
-static err_t telnet_accept(void *arg, struct tcp_pcb *pcb, err_t err)
-{
-	LWIP_UNUSED_ARG(arg);
-	LWIP_UNUSED_ARG(err);
-	tcp_setprio(pcb, TCP_PRIO_MIN);
-	tcp_recv(pcb, telnet_recv);
-	tcp_err(pcb, NULL);
-	tcp_poll(pcb, NULL, 4);
-	return ERR_OK;	
-}
-
-static err_t telnet_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
-{
-	int i;
-	int len;
-	char *pc;
-	char *command;
-	char *param1;
-	char *param2;
-	char *param3;
-	char *pch;
-		
-	if (err == ERR_OK && p != NULL)
-	{
-		tcp_recved(pcb, p->tot_len);
-		pc = (char*)p->payload;
-		len = p->tot_len;
-		
-		for(i=0;i<len;i++)
-		{
-			telnet_buffer[i] = pc[i];
-		}
-		len = len -2;
-		telnet_buffer[len] = '\0';
-		pch = strtok (telnet_buffer," ");
-		command = pch;
-		pch = strtok (NULL, " ");
-		param1 = pch;
-		pch = strtok (NULL, " ");
-		param2 = pch;
-		pch = strtok (NULL, " ");
-		param3 = pch;
-		printf("%s - %s - %s - %s\r\n", command, param1, param2, param3);
-		
-		if (tshowintro == true)	// Show the intro only on the first key press
-		{
- 			printintro(&print_buffer);
-			tprintf(&print_buffer, pcb);
-			tshowintro = false;
-			return ERR_OK;
-		}
-			
-		switch(uCLIContext)
-		{
-			case CLI_ROOT:
-			command_root(command, param1, param2, param3);
-			break;
-					
-			case CLI_CONFIG:
-			command_config(command, param1, param2, param3);
-			break;
-					
-			case CLI_OPENFLOW:
-			command_openflow(command, param1, param2, param3);
-			break;
-					
-			case CLI_DEBUG:
-			command_debug(command, param1, param2, param3);
-			break;
-		};
-		printf(&print_buffer, pcb);
-		print_buffer[0] = '\0';
-						
-		switch(uCLIContext)
-		{
-			case CLI_ROOT:
-			sprintf(print_buffer, "%s# ",Zodiac_Config.device_name);
-			tprintf(&print_buffer, pcb);
-			break;
-				
-			case CLI_CONFIG:
-			sprintf(print_buffer, "%s(config)# ",Zodiac_Config.device_name);
-			tprintf(&print_buffer, pcb);
-			break;
-				
-			case CLI_OPENFLOW:
-			sprintf(print_buffer, "%s(openflow)# ",Zodiac_Config.device_name);
-			tprintf(&print_buffer, pcb);
-			break;
-				
-			case CLI_DEBUG:
-			sprintf(print_buffer, "%s(debug)# ",Zodiac_Config.device_name);
-			tprintf(&print_buffer, pcb);
-			break;
-		};
-							
-		pbuf_free(p);
-		
-	}
-	
-	pbuf_free(p);
-	
-	if (err == ERR_OK && p == NULL)
-	{
-		tcp_close(pcb);
-	}
-
-	return ERR_OK;
-}
-
-void tprintf(char *buffer, struct tcp_pcb *pcb)
-{
-	int len;
-	len = strlen(buffer);
-	tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY);
-	tcp_output(pcb);
-}
-
 /*
 *	Main command line loop
 *
@@ -271,9 +140,7 @@ void task_command(char *str, char *str_last)
 				
 		if (showintro == true)	// Show the intro only on the first key press
 		{
-			printintro(&print_buffer);
-			printf(&print_buffer);
-			print_buffer[0] = '\0';
+			printintro();
 			showintro = false;
 			ch = 13;
 		}	
@@ -331,8 +198,6 @@ void task_command(char *str, char *str_last)
 					command_debug(command, param1, param2, param3);
 					break;
 				};
-				printf(&print_buffer);
-				print_buffer[0] = '\0';
 			}
 			
 			switch(uCLIContext)
@@ -473,8 +338,8 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 
 	// Display Config
 	if (strcmp(command, "show")==0 && strcmp(param1, "status")==0){
-		int hr = totaltime/3600;
-		int t = totaltime%3600;
+		int hr = (totaltime/2)/3600;
+		int t = (totaltime/2)%3600;
 		int min = t/60;
 		int sec = t%60;
 
@@ -550,8 +415,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 	}
 		
 	// Unknown Command
-	//printf("Unknown command\r\n");
-	sprintf(print_buffer,"Unknown command\r\n");
+	printf("Unknown command\r\n");
 	return;
 }
 
@@ -1047,7 +911,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					}
 					printf("  Wildcards: 0x%.8x\t\t\tCookie: 0x%" PRIx64 "\r\n",ntohl(flow_match[i].match.wildcards), htonll(flow_match[i].cookie));
 					printf("\r Attributes:\r\n");
-					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match[i].priority), totaltime - flow_counters[i].duration);
+					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match[i].priority), (totaltime/2) - flow_counters[i].duration);
 					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match[i].hard_timeout), ntohs(flow_match[i].idle_timeout));
 					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
 					printf("\r\n Actions:\r\n");
@@ -1073,20 +937,20 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						{
 							struct ofp_action_vlan_vid *action_vlanid = act_hdr;
 							printf("  Action %d:\r\n",q+1);
-							printf("   Set VLAN ID to: %d\r\n", ntohs(action_vlanid->vlan_vid));
+							printf("   Set VLAN ID: %d\r\n", ntohs(action_vlanid->vlan_vid));
 						}
 				
 						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_DL_DST) // 
 						{
 							struct ofp_action_dl_addr *action_setdl = act_hdr;
 							printf("  Action %d:\r\n",q+1);
-							printf("   Set Destination MAC to: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", action_setdl->dl_addr[0],action_setdl->dl_addr[1],action_setdl->dl_addr[2],action_setdl->dl_addr[3],action_setdl->dl_addr[4],action_setdl->dl_addr[5]);
+							printf("   Set Destination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", action_setdl->dl_addr[0],action_setdl->dl_addr[1],action_setdl->dl_addr[2],action_setdl->dl_addr[3],action_setdl->dl_addr[4],action_setdl->dl_addr[5]);
 						}
 						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_DL_SRC) //
 						{
 							struct ofp_action_dl_addr *action_setdl = act_hdr;
 							printf("  Action %d:\r\n",q+1);
-							printf("   Set Source MAC to: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", action_setdl->dl_addr[0],action_setdl->dl_addr[1],action_setdl->dl_addr[2],action_setdl->dl_addr[3],action_setdl->dl_addr[4],action_setdl->dl_addr[5]);
+							printf("   Set Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", action_setdl->dl_addr[0],action_setdl->dl_addr[1],action_setdl->dl_addr[2],action_setdl->dl_addr[3],action_setdl->dl_addr[4],action_setdl->dl_addr[5]);
 						}				
 						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_STRIP_VLAN) //
 						{
@@ -1123,6 +987,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					while (match_size < (ntohs(flow_match13[i].match.length)-4))
 					{
 						memcpy(&oxm_header, ofp13_oxm_match[i] + match_size,4);
+						bool has_mask = oxm_header.oxm_field & 1;
 						oxm_header.oxm_field = oxm_header.oxm_field >> 1;
 						switch(oxm_header.oxm_field)
 						{
@@ -1143,26 +1008,39 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 
 							case OFPXMT_OFB_ETH_TYPE:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-							if (ntohs(oxm_value16) == 0x0806 )printf("  ETH Type: ARP\r\n");
-							if (ntohs(oxm_value16) == 0x0800 )printf("  ETH Type: IPv4\r\n");
-							if (ntohs(oxm_value16) == 0x86dd )printf("  ETH Type: IPv6\r\n");
+							if (ntohs(oxm_value16) == 0x0806)printf("  ETH Type: ARP\r\n");
+							if (ntohs(oxm_value16) == 0x0800)printf("  ETH Type: IPv4\r\n");
+							if (ntohs(oxm_value16) == 0x86dd)printf("  ETH Type: IPv6\r\n");
+							if (ntohs(oxm_value16) == 0x8100)printf("  ETH Type: VLAN\r\n");
 							break;
 
 							case OFPXMT_OFB_IP_PROTO:
 							memcpy(&oxm_value8, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 1);
-							if (oxm_value8 == 1 )printf("  IP Protocol: ICMP\r\n");
-							if (oxm_value8 == 6 )printf("  IP Protocol: TCP\r\n");
-							if (oxm_value8 == 17 )printf("  IP Protocol: UDP\r\n");
+							if (oxm_value8 == 1)printf("  IP Protocol: ICMP\r\n");
+							if (oxm_value8 == 6)printf("  IP Protocol: TCP\r\n");
+							if (oxm_value8 == 17)printf("  IP Protocol: UDP\r\n");
 							break;
 
 							case OFPXMT_OFB_IPV4_SRC:
-							memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
-							printf("  Source IP: %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+							if (has_mask)
+							{
+								memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 8);
+								printf("  Source IP:  %d.%d.%d.%d / %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3], oxm_ipv4[4], oxm_ipv4[5], oxm_ipv4[6], oxm_ipv4[7]);
+								} else {
+								memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+								printf("  Source IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+							}
 							break;
 							
-							case OFPXMT_OFB_IPV4_DST:
-							memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
-							printf("  Destination IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+							case OFPXMT_OFB_IPV4_DST:					
+							if (has_mask) 
+							{
+								memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 8);
+								printf("  Destination IP:  %d.%d.%d.%d / %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3], oxm_ipv4[4], oxm_ipv4[5], oxm_ipv4[6], oxm_ipv4[7]);
+							} else {
+								memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+								printf("  Destination IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);								
+							}
 							break;
 
 							case OFPXMT_OFB_IPV6_SRC:
@@ -1197,7 +1075,6 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 																																		
 							case OFPXMT_OFB_VLAN_VID:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-							//if (oxm_value16 == 0) printf("  VLAN ID: 0\r\n");
 							if (oxm_value16 != 0) printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
 							break;
 							
@@ -1206,10 +1083,10 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					}
 					printf("\r Attributes:\r\n");
 					printf("  Table ID: %d\t\t\t\tCookie:0x%" PRIx64 "\r\n",flow_match13[i].table_id, htonll(flow_match13[i].cookie));
-					printf("  Priority: %d\t\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i].priority), totaltime - flow_counters[i].duration);
+					printf("  Priority: %d\t\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i].priority), (totaltime/2) - flow_counters[i].duration);
 					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match13[i].hard_timeout), ntohs(flow_match13[i].idle_timeout));
 					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
-					int lm = totaltime - flow_counters[i].lastmatch;
+					int lm = (totaltime/2) - flow_counters[i].lastmatch;
 					int hr = lm/3600;
 					int t = lm%3600;
 					int min = t/60;
@@ -1223,7 +1100,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						inst_size = ntohs(inst_ptr->len);
 						if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
 						{
-							//printf("  Apply Actions: %d\r\n", inst_size);
+							printf("  Apply Actions:\r\n");
 							struct ofp13_action_header *act_hdr;
 							act_size = 0;
 							if (inst_size == sizeof(struct ofp13_instruction_actions)) printf("   DROP \r\n");	// No actions
@@ -1231,7 +1108,6 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							{
 								inst_actions  = ofp13_oxm_inst[i] + act_size;
 								act_hdr = &inst_actions->actions;
-								//printf("action %d\r\n", htons(act_hdr->type));
 								if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 								{
 									struct ofp13_action_output *act_output = act_hdr;
@@ -1259,6 +1135,97 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 										printf("   Set VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
 										break;
+										
+										case OFPXMT_OFB_ETH_SRC:
+										memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
+										printf("   Set Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);										
+										break;
+										
+										case OFPXMT_OFB_ETH_DST:
+										memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
+										printf("   Set Destination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
+										break;
+
+										case OFPXMT_OFB_ETH_TYPE:
+										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+										if (ntohs(oxm_value16) == 0x0806 )printf("   Set ETH Type: ARP\r\n");
+										if (ntohs(oxm_value16) == 0x0800 )printf("   Set ETH Type: IPv4\r\n");
+										if (ntohs(oxm_value16) == 0x86dd )printf("   Set ETH Type: IPv6\r\n");
+										if (ntohs(oxm_value16) == 0x8100 )printf("   Set ETH Type: VLAN\r\n");
+										break;
+																				
+										case OFPXMT_OFB_IPV4_SRC:
+										memcpy(&oxm_ipv4, act_set_field->field + sizeof(struct oxm_header13), 4);
+										printf("   Set Source IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+										break;
+
+										case OFPXMT_OFB_IP_PROTO:
+										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+										if (oxm_value16 == 1)printf("   Set IP Protocol: ICMP\r\n");
+										if (oxm_value16 == 6)printf("   Set IP Protocol: TCP\r\n");
+										if (oxm_value16 == 17)printf("   Set IP Protocol: UDP\r\n");
+										break;
+																														
+										case OFPXMT_OFB_IPV4_DST:
+										memcpy(&oxm_ipv4, act_set_field->field + sizeof(struct oxm_header13), 4);
+										printf("   Set Destination IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+										break;
+										
+										case OFPXMT_OFB_TCP_SRC:
+										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+										printf("   Set TCP Source Port:  %d\r\n", ntohs(oxm_value16));
+										break;
+										
+										case OFPXMT_OFB_TCP_DST:
+										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+										printf("   Set TCP Destination Port:  %d\r\n", ntohs(oxm_value16));
+										break;
+										
+										case OFPXMT_OFB_UDP_SRC:
+										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+										printf("   Set UDP Source Port:  %d\r\n", ntohs(oxm_value16));
+										break;
+										
+										case OFPXMT_OFB_UDP_DST:
+										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+										printf("   Set UDP Destination Port:  %d\r\n", ntohs(oxm_value16));
+										break;
+										
+										case OFPXMT_OFB_ICMPV4_TYPE:
+										memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
+										printf("   Set ICMP Type:  %d\r\n", oxm_value8);
+										break;
+										
+										case OFPXMT_OFB_ICMPV4_CODE:
+										memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
+										printf("   Set ICMP Code:  %d\r\n", oxm_value8);
+										break;
+
+										case OFPXMT_OFB_ARP_OP:
+										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+										printf("   Set ARP OP Code:  %d\r\n", ntohs(oxm_value16));
+										break;
+									
+										case OFPXMT_OFB_ARP_SPA:
+										memcpy(&oxm_ipv4, act_set_field->field + sizeof(struct oxm_header13), 4);
+										printf("   Set ARP Source IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+										break;
+										
+										case OFPXMT_OFB_ARP_TPA:
+										memcpy(&oxm_ipv4, act_set_field->field + sizeof(struct oxm_header13), 4);
+										printf("   Set ARP Target IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+										break;										
+
+										case OFPXMT_OFB_ARP_SHA:
+										memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
+										printf("   Set ARP Source HA: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
+										break;
+										
+										case OFPXMT_OFB_ARP_THA:
+										memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
+										printf("   Set ARP Target HA: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
+										break;										
+																				
 									};													
 								}
 								
@@ -1484,12 +1451,6 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
-	if (strcmp(command, "restart")==0)
-	{
-		rstc_start_software_reset(RSTC);	// Need to fix this, board resets but can't connect to CLI again
-		while (1);
-	}
-
 	if (strcmp(command, "mem")==0)
 	{
 		printf("mem total: %d\r\n", membag_get_total());
@@ -1508,80 +1469,78 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 	printf("Unknown command\r\n");
 	return;	
 }
-
 /*
 *	Print the intro screen
 *	ASCII art generated from http://patorjk.com/software/taag/
 *
 */
-void printintro(char *buffer)
+void printintro(void)
 {
-	sprintf(buffer,"\r\n");
-	strcat(buffer," _____             ___               _______  __\r\n");
-	strcat(buffer,"/__  /  ____  ____/ (_)___ ______   / ____/ |/ /\r\n");
-	strcat(buffer,"  / /  / __ \\/ __  / / __ `/ ___/  / /_   |   /\r\n");
-	strcat(buffer," / /__/ /_/ / /_/ / / /_/ / /__   / __/  /   |  \r\n");
-	strcat(buffer,"/____/\\____/\\__,_/_/\\__,_/\\___/  /_/    /_/|_| \r\n");
-	strcat(buffer,"\t    by Northbound Networks\r\n");
-	strcat(buffer,"\r\n\n");
-	strcat(buffer,"Type 'help' for a list of available commands\r\n");
+	printf("\r\n");
+	printf(" _____             ___               _______  __\r\n");
+	printf("/__  /  ____  ____/ (_)___ ______   / ____/ |/ /\r\n");
+	printf("  / /  / __ \\/ __  / / __ `/ ___/  / /_   |   /\r\n");
+	printf(" / /__/ /_/ / /_/ / / /_/ / /__   / __/  /   |  \r\n");
+	printf("/____/\\____/\\__,_/_/\\__,_/\\___/  /_/    /_/|_| \r\n");
+	printf("\t    by Northbound Networks\r\n");
+	printf("\r\n\n");
+	printf("Type 'help' for a list of available commands\r\n");
 	return;
 }
 
 /*
 *	Print a list of available commands
-*	
+*
 *
 */
 void printhelp(void)
 {
-	sprintf(print_buffer,"\r\n");
-	strcat(print_buffer,"The following commands are currently available:\r\n");
-	strcat(print_buffer,"\r\n");
-	strcat(print_buffer,"Base:\r\n");
-	strcat(print_buffer," config\r\n");
-	strcat(print_buffer," openflow\r\n");
-	strcat(print_buffer," debug\r\n");
-	strcat(print_buffer," show ports\r\n");
-	strcat(print_buffer," show status\r\n");
-	strcat(print_buffer," show version\r\n");
-	strcat(print_buffer,"\r\n");
-	strcat(print_buffer,"Config:\r\n");
-	strcat(print_buffer," save\r\n");
-	strcat(print_buffer," show config\r\n");
-	strcat(print_buffer," show vlans\r\n");
-	strcat(print_buffer," set name <name>\r\n");
-	strcat(print_buffer," set mac-address <mac address>\r\n");
-	strcat(print_buffer," set ip-address <ip address>\r\n");
-	strcat(print_buffer," set netmask <netmasks>\r\n");
-	strcat(print_buffer," set gateway <gateway ip address>\r\n");
-	strcat(print_buffer," set of-controller <openflow controller ip address>\r\n");
-	strcat(print_buffer," set of-port <openflow controller tcp port>\r\n");
-	strcat(print_buffer," set failstate <secure|safe>\r\n");
-	strcat(print_buffer," add vlan <vlan id> <vlan name>\r\n");
-	strcat(print_buffer," delete vlan <vlan id>\r\n");
-	strcat(print_buffer," set vlan-type <openflow|native>\r\n");
-	strcat(print_buffer," add vlan-port <vlan id> <port>\r\n");
-	strcat(print_buffer," delete vlan-port <port>\r\n");
-	strcat(print_buffer," factory reset\r\n");
-	strcat(print_buffer," set of-version <version(0|1|4)>\r\n");
-	strcat(print_buffer," exit\r\n");
-	strcat(print_buffer,"\r\n");
-	strcat(print_buffer,"OpenFlow:\r\n");
-	strcat(print_buffer," show status\r\n");
-	strcat(print_buffer," show flows\r\n");
-	strcat(print_buffer," show tables\r\n");
-	strcat(print_buffer," enable\r\n");
-	strcat(print_buffer," disable\r\n");
-	strcat(print_buffer," clear flows\r\n");
-	strcat(print_buffer," exit\r\n");
-	strcat(print_buffer,"\r\n");
-	strcat(print_buffer,"Debug:\r\n");
-	strcat(print_buffer," read <register>\r\n");
-	strcat(print_buffer," write <register> <value>\r\n");
-	strcat(print_buffer," mem\r\n");
-	strcat(print_buffer," trace\r\n");
-	strcat(print_buffer," exit\r\n");
-	strcat(print_buffer,"\r\n");
+	printf("\r\n");
+	printf("The following commands are currently available:\r\n");
+	printf("\r\n");
+	printf("Base:\r\n");
+	printf(" config\r\n");
+	printf(" openflow\r\n");
+	printf(" debug\r\n");
+	printf(" show ports\r\n");
+	printf(" show status\r\n");
+	printf(" show version\r\n");
+	printf("\r\n");
+	printf("Config:\r\n");
+	printf(" save\r\n");
+	printf(" show config\r\n");
+	printf(" show vlans\r\n");
+	printf(" set name <name>\r\n");
+	printf(" set mac-address <mac address>\r\n");
+	printf(" set ip-address <ip address>\r\n");
+	printf(" set netmask <netmasks>\r\n");
+	printf(" set gateway <gateway ip address>\r\n");
+	printf(" set of-controller <openflow controller ip address>\r\n");
+	printf(" set of-port <openflow controller tcp port>\r\n");
+	printf(" set failstate <secure|safe>\r\n");
+	printf(" add vlan <vlan id> <vlan name>\r\n");
+	printf(" delete vlan <vlan id>\r\n");
+	printf(" set vlan-type <openflow|native>\r\n");
+	printf(" add vlan-port <vlan id> <port>\r\n");
+	printf(" delete vlan-port <port>\r\n");
+	printf(" factory reset\r\n");
+	printf(" set of-version <version(0|1|4)>\r\n");
+	printf(" exit\r\n");
+	printf("\r\n");
+	printf("OpenFlow:\r\n");
+	printf(" show status\r\n");
+	printf(" show flows\r\n");
+	printf(" enable\r\n");
+	printf(" disable\r\n");
+	printf(" clear flows\r\n");
+	printf(" exit\r\n");
+	printf("\r\n");
+	printf("Debug:\r\n");
+	printf(" read <register>\r\n");
+	printf(" write <register> <value>\r\n");
+	printf(" mem\r\n");
+	printf(" trace\r\n");
+	printf(" exit\r\n");
+	printf("\r\n");
 	return;
 }

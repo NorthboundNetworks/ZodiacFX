@@ -76,7 +76,7 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request * req
 int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *req);
 int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
 int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
-void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason);
+void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason, int flow);
 void packet_out13(struct ofp_header *msg);
 
 /*
@@ -93,12 +93,31 @@ static inline uint64_t (htonll)(uint64_t n)
 void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 {
 	uint8_t table_id = 0;
-	uint16_t eth_prot;
-	memcpy(&eth_prot, p_uc_data + 12, 2);
+	uint16_t eth_prot = 0;
+	uint8_t ip_prot = 0;
 	uint16_t packet_size;
-	memcpy(&packet_size, ul_size, 2);
 	uint16_t vlantag = htons(0x8100);
 	uint16_t empty_vid = 0;
+	bool isVlanTag = false;
+	
+	memcpy(&packet_size, ul_size, 2);	
+
+	if (eth_prot == vlantag)
+	{
+		isVlanTag = true;
+		memcpy(&eth_prot, p_uc_data + 16, 2);		
+		if (ntohs(eth_prot) == 0x0800) 
+		{
+			memcpy(&ip_prot, p_uc_data + 27, 1);
+		}
+	} else {
+		memcpy(&eth_prot, p_uc_data + 12, 2);
+		if (ntohs(eth_prot) == 0x0800) 
+		{
+			memcpy(&ip_prot, p_uc_data + 23, 1);
+		}
+	}
+		
 				
 	if (Zodiac_Config.OFEnabled == OF_ENABLED) // Main lookup
 	{
@@ -115,7 +134,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				if (trace == true) printf("Matched flow %d, table %d\r\n", i+1, table_id);
 				flow_counters[i].hitCount++; // Increment flow hit count
 				flow_counters[i].bytes += packet_size;
-				flow_counters[i].lastmatch = totaltime; // Increment flow hit count
+				flow_counters[i].lastmatch = (totaltime/2); // Increment flow hit count
 				table_counters[table_id].matched_count++;
 				table_counters[table_id].byte_count += packet_size;
 				
@@ -149,24 +168,25 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							if (htonl(act_output->port) < OFPP13_MAX)
 							{
 								int outport = (1<< (ntohl(act_output->port)-1));
-								if (trace == true)printf("Output to port %d (%d bytes)\r\n", outport, packet_size);
+								if (trace == true)printf("Output to port %d (%d bytes)\r\n", ntohl(act_output->port), packet_size);
 								gmac_write(p_uc_data, packet_size, outport);
 							} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
 							{
 								int pisize = ntohs(act_output->max_len);
 								if (pisize > packet_size) pisize = packet_size;
 								if (trace == true)printf("Output to controller (%d bytes)\r\n", packet_size);
-								packet_in13(p_uc_data, pisize, port, OFPR_ACTION);
+								packet_in13(p_uc_data, pisize, port, OFPR_ACTION, i);
 							} else if (htonl(act_output->port) == OFPP13_FLOOD || htonl(act_output->port) == OFPP13_ALL)
 							{
 								int outport = (15 - NativePortMatrix) - (1<<(port-1));
-								if (trace == true) printf("Flood to ports %d (%d bytes)\r\n", outport, packet_size);
+								if (trace == true && htonl(act_output->port) == OFPP13_FLOOD) printf("Output to FLOOD (%d bytes)\r\n", packet_size);
+								if (trace == true && htonl(act_output->port) == OFPP13_ALL ) printf("Output to ALL (%d bytes)\r\n", packet_size);
 								gmac_write(p_uc_data, packet_size, outport);
 							}
 						}
 						
 						// Push a VLAN tag
-						if (htons(act_hdr->type) == OFPAT13_PUSH_VLAN && eth_prot != vlantag)
+						if (htons(act_hdr->type) == OFPAT13_PUSH_VLAN && isVlanTag != true)
 						{	
 							if (trace == true)printf("Push VLAN\r\n");					
 							memmove(p_uc_data + 16, p_uc_data + 12, packet_size - 12);
@@ -174,17 +194,18 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							memcpy(p_uc_data + 14, &empty_vid, 2);
 							packet_size += 4;
 							memcpy(ul_size, &packet_size, 2);
-							eth_prot = vlantag;
+							isVlanTag = true;
 						}
 
 						// Pop a VLAN tag
-						if (htons(act_hdr->type) == OFPAT13_POP_VLAN && eth_prot == vlantag)
+						if (htons(act_hdr->type) == OFPAT13_POP_VLAN && isVlanTag == true)
 						{
 							if (trace == true)printf("Pop VLAN\r\n");
 							memmove(p_uc_data + 12, p_uc_data + 16, packet_size - 16);
 							packet_size -= 4;
 							memcpy(ul_size, &packet_size, 2);
-							memcpy(eth_prot, p_uc_data + 12, 2); 
+							memcpy(eth_prot, p_uc_data + 12, 2);
+							isVlanTag = false; 
 						}
 												
 						// Set Field Action
@@ -192,6 +213,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						{
 							struct ofp13_action_set_field *act_set_field = act_hdr;
 							struct oxm_header13 oxm_header;
+							uint8_t oxm_value8;
 							uint16_t oxm_value16;
 							uint32_t oxm_value32;
 							memcpy(&oxm_header, act_set_field->field,4);
@@ -207,7 +229,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 								uint16_t vlanid;
 								uint16_t vlanid_mask = htons(0x0fff);
 						
-								if (eth_prot == vlantag)
+								if (isVlanTag == true)
 								{
 									memcpy(pcp, p_uc_data + 14, 2);
 								} else {
@@ -220,7 +242,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 										vlanid = (vlan_vid & vlanid_mask) | (pcp & ~vlanid_mask);
 								}						
 								// Does the packet have a VLAN header?
-								if (eth_prot == vlantag)
+								if (isVlanTag == true)
 								{
 									if (vlan_vid == 0)	// If the packet has a tag but the action is to set it to 0 then remove it
 									{
@@ -239,6 +261,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 										packet_size += 4;
 										memcpy(ul_size, &packet_size, 2);
 										if (trace == true) printf("Set VLAN ID to %d\r\n", vlanid);
+										isVlanTag = true;
 									}
 								}				
 								break;
@@ -250,14 +273,232 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 								case OFPXMT_OFB_ETH_DST:
 								memcpy(p_uc_data,act_set_field->field + sizeof(struct oxm_header13), 6);
 								break;
+
+								// Set Ether Type
+								case OFPXMT_OFB_ETH_TYPE:
+								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+								if (isVlanTag == true)	// Add 4 bytes to the offset
+								{
+									memcpy(p_uc_data + 16, &oxm_value16, 2);
+								} else {
+									memcpy(p_uc_data + 12, &oxm_value16, 2);
+								}								
+								break;
+																
+								// Set IP protocol
+								case OFPXMT_OFB_IP_PROTO:
+								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+								if (isVlanTag == true)	// Add 4 bytes to the offset
+								{
+									memcpy(p_uc_data + 27, &oxm_value16, 2);
+									set_ip_checksum(p_uc_data, packet_size, 18);
+								} else {
+									memcpy(p_uc_data + 23, &oxm_value16, 2);
+									set_ip_checksum(p_uc_data, packet_size, 14);
+								}								
+								break;
+								
 								// Set Source IP Address
 								case OFPXMT_OFB_IPV4_SRC:
-								
+								if (eth_prot == 0x08)	// Only set the field if it is an IPv4 packet
+								{
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 30, act_set_field->field + sizeof(struct oxm_header13), 4);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+									} else {
+										memcpy(p_uc_data + 26, act_set_field->field + sizeof(struct oxm_header13), 4);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}
 								break;
+								
 								// Set Destination IP Address
 								case OFPXMT_OFB_IPV4_DST:
+								if (eth_prot == 0x08)	// Only set the field if it is an IPv4 packet
+								{
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 34, act_set_field->field + sizeof(struct oxm_header13), 4);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+									} else {
+										memcpy(p_uc_data + 30, act_set_field->field + sizeof(struct oxm_header13), 4);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}
+								break;
 								
-								break;									
+								// Set Source TCP port
+								case OFPXMT_OFB_TCP_SRC:
+								if (eth_prot == 0x08)	// Only set the field if it is an IPv4 packet
+								{
+									memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 38, &oxm_value16, 2);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+									} else {
+										memcpy(p_uc_data + 34, &oxm_value16, 2);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}								
+								break;
+								
+								// Set Destination TCP port
+								case OFPXMT_OFB_TCP_DST:
+								if (eth_prot == 0x08)	// Only set the field if it is an IPv4 packet
+								{
+									memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 40, &oxm_value16, 2);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+										} else {
+										memcpy(p_uc_data + 36, &oxm_value16, 2);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}								
+								break;
+								
+								// Set Source UDP port
+								case OFPXMT_OFB_UDP_SRC:
+								if (eth_prot == 0x08)	// Only set the field if it is an IPv4 packet
+								{
+									memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 38, &oxm_value16, 2);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+										} else {
+										memcpy(p_uc_data + 34, &oxm_value16, 2);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}								
+								break;
+								
+								// Set Destination UDP port
+								case OFPXMT_OFB_UDP_DST:
+								if (eth_prot == 0x08)	// Only set the field if it is an IPv4 packet
+								{
+									memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 40, &oxm_value16, 2);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+										} else {
+										memcpy(p_uc_data + 36, &oxm_value16, 2);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}								
+								break;
+								
+								// Set ICMP type
+								case OFPXMT_OFB_ICMPV4_TYPE:
+								if (eth_prot == 0x08 && ip_prot == 1)	// Only set the field if it is a ICMP packet
+								{
+									memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 38, &oxm_value8, 1);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+										} else {
+										memcpy(p_uc_data + 34, &oxm_value8, 1);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}								
+								break;
+								
+								// Set ICMP code
+								case OFPXMT_OFB_ICMPV4_CODE:
+								if (eth_prot == 0x08 && ip_prot == 1)	// Only set the field if it is a ICMP packet
+								{
+									memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 39, &oxm_value8, 1);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+										} else {
+										memcpy(p_uc_data + 35, &oxm_value8, 1);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}									
+								break;
+								
+								// Set ARP opcode
+								case OFPXMT_OFB_ARP_OP:
+								if (eth_prot == 0x0608)	// Only set the field if it is a ARP packet
+								{
+									memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 24, &oxm_value16, 2);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+										} else {
+										memcpy(p_uc_data + 20, &oxm_value16, 2);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}								
+								break;
+								
+								// Set ARP source IP address
+								case OFPXMT_OFB_ARP_SPA:
+								if (eth_prot == 0x0608)	// Only set the field if it is an IPv4 packet
+								{
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 32, act_set_field->field + sizeof(struct oxm_header13), 4);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+										} else {
+										memcpy(p_uc_data + 28, act_set_field->field + sizeof(struct oxm_header13), 4);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}								
+								break;
+								
+								// Set ARP target IP address
+								case OFPXMT_OFB_ARP_TPA:
+								if (eth_prot == 0x0608)	// Only set the field if it is an IPv4 packet
+								{
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 42, act_set_field->field + sizeof(struct oxm_header13), 4);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+										} else {
+										memcpy(p_uc_data + 38, act_set_field->field + sizeof(struct oxm_header13), 4);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}								
+								break;
+								
+								// Set ARP source hardware address
+								case OFPXMT_OFB_ARP_SHA:
+								if (eth_prot == 0x0608)	// Only set the field if it is an IPv4 packet
+								{
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 26, act_set_field->field + sizeof(struct oxm_header13), 6);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+										} else {
+										memcpy(p_uc_data + 22, act_set_field->field + sizeof(struct oxm_header13), 6);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}								
+								break;
+								
+								// Set ARP target hardware address
+								case OFPXMT_OFB_ARP_THA:
+								if (eth_prot == 0x0608)	// Only set the field if it is an IPv4 packet
+								{
+									if (isVlanTag == true)	// Add 4 bytes to the offset
+									{
+										memcpy(p_uc_data + 36, act_set_field->field + sizeof(struct oxm_header13), 6);
+										set_ip_checksum(p_uc_data, packet_size, 18);
+										} else {
+										memcpy(p_uc_data + 32, act_set_field->field + sizeof(struct oxm_header13), 6);
+										set_ip_checksum(p_uc_data, packet_size, 14);
+									}
+								}								
+								break;																																	
 							};													
 						}								
 						act_size += htons(act_hdr->len);
@@ -902,7 +1143,7 @@ void flow_add13(struct ofp_header *msg)
 		ofp13_oxm_match[iLastFlow] = membag_alloc(ntohs(flow_match13[iLastFlow].match.length)-4);	// Allocate a space to store match fields
 		if (ofp13_oxm_match[iLastFlow] == NULL) 
 		{
-			if (trace == true) printf("Unable to allocate memory for match fields\r\n");
+			if (trace == true) printf("Unable to allocate %d bytes of memory for match fields\r\n", ntohs(flow_match13[iLastFlow].match.length)-4);
 			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 			return;
 		}
@@ -918,7 +1159,7 @@ void flow_add13(struct ofp_header *msg)
 		ofp13_oxm_inst[iLastFlow] = membag_alloc(instruction_size);	// Allocate a space to store instructions and actions
 		if (ofp13_oxm_inst[iLastFlow] == NULL)
 		{
-			if (trace == true) printf("Unable to allocate memory for instructions\r\n");
+			if (trace == true) printf("Unable to allocate %d bytes of memory for instructions\r\n", instruction_size);
 			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 			return;
 		}
@@ -928,8 +1169,8 @@ void flow_add13(struct ofp_header *msg)
 		ofp13_oxm_inst[iLastFlow] = NULL;
 	}
 	ofp13_oxm_inst_size[iLastFlow] = instruction_size;	
-	flow_counters[iLastFlow].duration = totaltime;
-	flow_counters[iLastFlow].lastmatch = totaltime;
+	flow_counters[iLastFlow].duration = (totaltime/2);
+	flow_counters[iLastFlow].lastmatch = (totaltime/2);
 	flow_counters[iLastFlow].active = true;
 	iLastFlow++;
 	return;
@@ -1068,7 +1309,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 *	@param reason - reason for the packet in.
 *
 */
-void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason)
+void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason, int flow)
 {
 	if (trace == true) printf("Packet in from packet received on port %d reason = %d (%d bytes)\r\n", port, reason, ul_size);
 	uint16_t size = 0;
@@ -1085,8 +1326,8 @@ void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason
 	pi->header.xid = 0;
 	pi->buffer_id = -1;
 	pi->reason = reason;
-	pi->table_id = 0;
-	pi->cookie = -1;
+	pi->table_id = flow_match13[flow].table_id;
+	pi->cookie = flow_match13[flow].cookie;
 
 	pi->match.type = htons(OFPMT_OXM);
 	pi->match.length = htons(12);

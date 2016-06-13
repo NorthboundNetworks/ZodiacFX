@@ -40,6 +40,7 @@
 #include "lwip/err.h"
 
 #include "command.h"
+#include "telnet.h"
 #include "eeprom.h"
 #include "switch.h"
 #include "openflow.h"
@@ -168,8 +169,8 @@ int main (void)
 
 	netif_set_up(&gs_net_if);
 	
-	// Telnet to be included in v0.60
-	// telnet_init(); 
+	// Telnet to be included in v0.63
+	//telnet_init(); 
 
 	/* Initialize timer. */
 	sys_init_timing();

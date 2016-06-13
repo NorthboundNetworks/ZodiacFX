@@ -2,7 +2,7 @@
  * @file
  * command.h
  *
- * This file contains the timer functions
+ * This file contains the command line functions
  *
  */
 
@@ -92,6 +92,5 @@ typedef struct arp_header {
 
 void task_command(char *str, char * str_last);
 void loadConfig(void);
-void telnet_init(void);
 
 #endif /* COMMANDS_H_ */
