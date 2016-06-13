@@ -118,7 +118,7 @@ void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
 */
 void nnOF_timer(void)
 {
-	totaltime++;
+	totaltime ++; // Because this is called every 500ms totaltime is actually 2 x the real time
 	// Round robin the timer events so they don't have such a big impact on switching	
 	if (timer_alt == 0){
 		update_port_stats();
@@ -378,7 +378,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 			uint32_t field = ntohl(*(uint32_t*)(hdr));
 			uint8_t *oxm_value = hdr + 4;
 			hdr += 4 + OXM_LENGTH(field);
-
+			
 			switch(field)
 			{
 				case OXM_OF_IN_PORT:
@@ -1006,7 +1006,7 @@ void flow_timeouts()
 		{
 			if (OF_Version == 1)
 			{
-				if (flow_match[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && (totaltime - flow_counters[i].lastmatch) >= ntohs(flow_match[i].idle_timeout))
+				if (flow_match[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match[i].idle_timeout))
 				{
 					if (flow_match[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_IDLE_TIMEOUT);
 					// Clear flow counters and actions
@@ -1024,7 +1024,7 @@ void flow_timeouts()
 					return;
 				}
 					
-				if (flow_match[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && (totaltime - flow_counters[i].duration) >= ntohs(flow_match[i].hard_timeout))
+				if (flow_match[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match[i].hard_timeout))
 				{
 					if (flow_match[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
 					// Clear flow counters and actions
@@ -1042,7 +1042,7 @@ void flow_timeouts()
 				}
 			} else if (OF_Version == 4)
 			{
-				if (flow_match13[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && (totaltime - flow_counters[i].lastmatch) >= ntohs(flow_match13[i].idle_timeout))
+				if (flow_match13[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match13[i].idle_timeout))
 				{
 					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_IDLE_TIMEOUT);
 // 					// Clear flow counters
@@ -1060,7 +1060,7 @@ void flow_timeouts()
 					return;
 				}
 					
-				if (flow_match13[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && (totaltime - flow_counters[i].duration) >= ntohs(flow_match13[i].hard_timeout))
+				if (flow_match13[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match13[i].hard_timeout))
 				{
 					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
 // 					// Clear flow counters
@@ -1138,7 +1138,7 @@ int flow_stats_msg10(char *buffer, int first, int last)
 		memcpy(&flow_stats.priority, &flow_match[k].priority, sizeof(uint16_t));
 		memcpy(&flow_stats.idle_timeout, &flow_match[k].idle_timeout, sizeof(uint16_t));
 		memcpy(&flow_stats.hard_timeout, &flow_match[k].hard_timeout, sizeof(uint16_t));
-		flow_stats.duration_sec = HTONL(totaltime - flow_counters[k].duration);
+		flow_stats.duration_sec = HTONL((totaltime/2) - flow_counters[k].duration);
 		flow_stats.duration_nsec = 0;
 		flow_stats.packet_count = htonll(flow_counters[k].hitCount);
 		flow_stats.byte_count = htonll(flow_counters[k].bytes);
@@ -1202,7 +1202,7 @@ int flow_stats_msg13(char *buffer, int first, int last)
 		// ofp_flow_stats fixed fields are the same length with ofp_flow_mod
 		flow_stats.length = flow_match13[k].header.length;
 		flow_stats.table_id = flow_match13[k].table_id;
-		flow_stats.duration_sec = htonl(totaltime - flow_counters[k].duration);
+		flow_stats.duration_sec = htonl((totaltime/2) - flow_counters[k].duration);
 		flow_stats.duration_nsec = htonl(0);
 		flow_stats.priority = flow_match13[k].priority;
 		flow_stats.idle_timeout = flow_match13[k].idle_timeout;

@@ -388,7 +388,7 @@ void flowrem_notif(int flowid, uint8_t reason)
 	ofr.cookie = flow_match[flowid].cookie;
 	ofr.reason = reason;
 	ofr.priority = flow_match[flowid].priority;
-	diff = totaltime - flow_counters[flowid].duration;
+	diff = (totaltime/2) - flow_counters[flowid].duration;
 	ofr.duration_sec = htonl(diff);
 	ofr.packet_count = flow_counters[flowid].hitCount;
 	ofr.byte_count = flow_counters[flowid].bytes;
