@@ -114,13 +114,13 @@
  * MEMP_NUM_TCP_PCB: the number of simulatenously active TCP connections.
  * (requires the LWIP_TCP option)
  */
-#define MEMP_NUM_TCP_PCB                2
+#define MEMP_NUM_TCP_PCB                3
 
 /**
  * MEMP_NUM_TCP_PCB_LISTEN: the number of listening TCP connections.
  * (requires the LWIP_TCP option)
  */
-#define MEMP_NUM_TCP_PCB_LISTEN         1
+#define MEMP_NUM_TCP_PCB_LISTEN         2
 
 /**
  * MEMP_NUM_TCP_SEG: the number of simultaneously queued TCP segments.

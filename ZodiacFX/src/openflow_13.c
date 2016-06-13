@@ -76,7 +76,7 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request * req
 int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *req);
 int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
 int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
-void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason);
+void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason, int flow);
 void packet_out13(struct ofp_header *msg);
 
 /*
@@ -134,7 +134,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				if (trace == true) printf("Matched flow %d, table %d\r\n", i+1, table_id);
 				flow_counters[i].hitCount++; // Increment flow hit count
 				flow_counters[i].bytes += packet_size;
-				flow_counters[i].lastmatch = totaltime; // Increment flow hit count
+				flow_counters[i].lastmatch = (totaltime/2); // Increment flow hit count
 				table_counters[table_id].matched_count++;
 				table_counters[table_id].byte_count += packet_size;
 				
@@ -175,7 +175,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 								int pisize = ntohs(act_output->max_len);
 								if (pisize > packet_size) pisize = packet_size;
 								if (trace == true)printf("Output to controller (%d bytes)\r\n", packet_size);
-								packet_in13(p_uc_data, pisize, port, OFPR_ACTION);
+								packet_in13(p_uc_data, pisize, port, OFPR_ACTION, i);
 							} else if (htonl(act_output->port) == OFPP13_FLOOD || htonl(act_output->port) == OFPP13_ALL)
 							{
 								int outport = (15 - NativePortMatrix) - (1<<(port-1));
@@ -1143,7 +1143,7 @@ void flow_add13(struct ofp_header *msg)
 		ofp13_oxm_match[iLastFlow] = membag_alloc(ntohs(flow_match13[iLastFlow].match.length)-4);	// Allocate a space to store match fields
 		if (ofp13_oxm_match[iLastFlow] == NULL) 
 		{
-			if (trace == true) printf("Unable to allocate memory for match fields\r\n");
+			if (trace == true) printf("Unable to allocate %d bytes of memory for match fields\r\n", ntohs(flow_match13[iLastFlow].match.length)-4);
 			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 			return;
 		}
@@ -1159,7 +1159,7 @@ void flow_add13(struct ofp_header *msg)
 		ofp13_oxm_inst[iLastFlow] = membag_alloc(instruction_size);	// Allocate a space to store instructions and actions
 		if (ofp13_oxm_inst[iLastFlow] == NULL)
 		{
-			if (trace == true) printf("Unable to allocate memory for instructions\r\n");
+			if (trace == true) printf("Unable to allocate %d bytes of memory for instructions\r\n", instruction_size);
 			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 			return;
 		}
@@ -1169,8 +1169,8 @@ void flow_add13(struct ofp_header *msg)
 		ofp13_oxm_inst[iLastFlow] = NULL;
 	}
 	ofp13_oxm_inst_size[iLastFlow] = instruction_size;	
-	flow_counters[iLastFlow].duration = totaltime;
-	flow_counters[iLastFlow].lastmatch = totaltime;
+	flow_counters[iLastFlow].duration = (totaltime/2);
+	flow_counters[iLastFlow].lastmatch = (totaltime/2);
 	flow_counters[iLastFlow].active = true;
 	iLastFlow++;
 	return;
@@ -1309,7 +1309,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 *	@param reason - reason for the packet in.
 *
 */
-void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason)
+void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason, int flow)
 {
 	if (trace == true) printf("Packet in from packet received on port %d reason = %d (%d bytes)\r\n", port, reason, ul_size);
 	uint16_t size = 0;
@@ -1326,8 +1326,8 @@ void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason
 	pi->header.xid = 0;
 	pi->buffer_id = -1;
 	pi->reason = reason;
-	pi->table_id = 0;
-	pi->cookie = -1;
+	pi->table_id = flow_match13[flow].table_id;
+	pi->cookie = flow_match13[flow].cookie;
 
 	pi->match.type = htons(OFPMT_OXM);
 	pi->match.length = htons(12);
