@@ -297,6 +297,7 @@ $(PROJECT).elf: \
  src/openflow_13.o \
  src/openflow.o \
  src/switch.o \
+ src/telnet.o \
  src/timers.o \
  src/ksz8795clx/ethernet_phy.o \
  src/ASF/common/boards/user_board/init.o \
@@ -412,6 +413,7 @@ src/main.c: \
  src/eeprom.h \
  src/switch.h \
  src/openflow.h \
+ src/telnet.h \
  src/ksz8795clx/ethernet_phy.h
 
 src/of_helper.o: src/of_helper.c
@@ -458,6 +460,20 @@ src/switch.c: \
  src/config/conf_eth.h \
  src/command.h \
  src/ksz8795clx/ethernet_phy.h
+
+src/telnet.c: \
+ src/command.h \
+ src/eeprom.h \
+ src/switch.h \
+ src/openflow.h \
+ src/of_helper.h \
+ src/timers.h \
+ src/config/conf_eth.h \
+ src/config/config_zodiac.h \
+ src/lwip/include/lwip/def.h \
+ src/lwip/include/lwip/tcp.h \
+ src/lwip/include/ipv4/lwip/ip_addr.h
+
 
 src/timers.o: src/timers.c
 
