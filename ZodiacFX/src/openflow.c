@@ -30,6 +30,7 @@
 #include <asf.h>
 #include <string.h>
 #include <stdlib.h>
+#include "trace.h"
 #include "config_zodiac.h"
 #include "command.h"
 #include "openflow.h"
@@ -44,7 +45,6 @@ extern struct zodiac_config Zodiac_Config;
 extern uint8_t port_status[4];
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
-extern bool trace;
 
 // Local Variables
 struct ofp_switch_config Switch_config;
@@ -130,7 +130,7 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
         int len = p->tot_len;	//size of the payload
         for (int i=0; i<len; i++)packetbuffer[i] = pc[i];	//copy to our own buffer
         pbuf_free(p);	//Free the packet buffer
-		if (trace == true) printf("OpenFlow data received (%d bytes)\r\n", len);
+		TRACE("OpenFlow data received (%d bytes)", len);
 		struct ofp_header *ofph;
 		int size = 0;
 		int plen = 0;
@@ -144,7 +144,7 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 			}
 			plen = htons(ofph->length);
 			size = size + plen;
-			if (trace == true) printf("Processing %d byte OpenFlow message %u (%d)\r\n",plen, htonl(ofph->xid), size);
+			TRACE("Processing %d byte OpenFlow message %u (%d)", plen, htonl(ofph->xid), size);
 
 			switch(ofph->type)
 			{
@@ -204,7 +204,7 @@ void OF_hello(void)
 	ofph.length = HTONS(sizeof(ofph));
 	ofph.xid = HTONL(1);
 	sendtcp(&ofph, sizeof(ofph));
-	if (trace == true) printf("Sent HELLO, version 0x%d\r\n", ofph.version);
+	TRACE("Sent HELLO, version 0x%d", ofph.version);
 	return;
 }
 
@@ -222,7 +222,7 @@ void echo_reply(uint32_t xid)
 	echo.type   = OFPT10_ECHO_REPLY;
 	echo.xid = xid;
 	sendtcp(&echo, sizeof(echo));
-	if (trace == true) printf("Sent ECHO reply\r\n");
+	TRACE("Sent ECHO reply");
 	return;
 }
 
@@ -238,7 +238,7 @@ void echo_request(void)
 	echo.type   = OFPT10_ECHO_REQUEST;
 	echo.xid = 1234;
 	sendtcp(&echo, sizeof(echo));
-	if (trace == true) printf("Sent ECHO request\r\n");
+	TRACE("Sent ECHO request");
 	return;
 }
 
@@ -348,7 +348,7 @@ err_t TCPready(void *arg, struct tcp_pcb *tpcb, err_t err)
 	tcp_poll(tpcb, NULL, 4);
 	tcp_err(tpcb, NULL);
 	if(Zodiac_Config.failstate == 0) clear_flows();		// Clear the flow if in secure mode
-	if (trace == true) printf("Connected to controller\r\n");
+	TRACE("Connected to controller");
 	OF_hello();
 	return ERR_OK;
 }

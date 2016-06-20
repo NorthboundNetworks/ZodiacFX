@@ -30,6 +30,7 @@
 #include <asf.h>
 #include <stdlib.h>
 #include <string.h>
+#include "trace.h"
 #include "openflow.h"
 #include "switch.h"
 #include "conf_eth.h"
@@ -48,7 +49,6 @@ struct ofp10_port_stats phys10_port_stats[4];
 struct ofp13_port_stats phys13_port_stats[4];
 uint8_t port_status[4];
 extern uint8_t NativePortMatrix;
-extern bool trace;
 /** Buffer for ethernet packets */
 static volatile uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 
@@ -600,7 +600,7 @@ void task_switch(struct netif *netif)
 				nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
 				return;
 			} else {
-				if (trace == true) printf("%d byte received from controller\r\n", ul_rcv_size);
+				TRACE("%d byte received from controller\r\n", ul_rcv_size);
 				struct pbuf *p;
 				p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);
 				memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));

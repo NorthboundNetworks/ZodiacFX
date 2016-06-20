@@ -30,6 +30,7 @@
 #include <asf.h>
 #include <string.h>
 #include <stdlib.h>
+#include "trace.h"
 #include "config_zodiac.h"
 #include "openflow.h"
 #include "of_helper.h"
@@ -55,7 +56,6 @@ extern struct flows_counter flow_counters[MAX_FLOWS];
 extern int totaltime;
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
 extern struct table_counter table_counters[MAX_TABLES];
-extern bool trace;
 
 // Local Variables
 uint8_t timer_alt;
@@ -352,7 +352,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 			}
 		}
 	}
-	if (trace == true) printf("Looking for match in table %d from port %d : %.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", table_id, port, eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5], eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5]);
+	TRACE("Looking for match in table %d from port %d : %.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X", table_id, port, eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5], eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5]);
 	for (int i=0;i<iLastFlow;i++)
 	{
 		// Make sure its an active flow
