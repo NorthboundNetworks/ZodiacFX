@@ -9,7 +9,7 @@
 /*
  * This file is part of the Zodiac FX firmware.
  * Copyright (c) 2016 Northbound Networks.
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -22,7 +22,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  * Author: Paul Zanna <paul@northboundnetworks.com>
  *
  */
@@ -93,13 +93,13 @@ static err_t telnet_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t e
 	char *param2;
 	char *param3;
 	char *pch;
-	
+
 	if (err == ERR_OK && p != NULL)
 	{
 		tcp_recved(pcb, p->tot_len);
 		pc = (char*)p->payload;
 		len = p->tot_len;
-		
+
 		for(i=0;i<len;i++)
 		{
 			telnet_buffer[i] = pc[i];
@@ -115,32 +115,32 @@ static err_t telnet_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t e
 		param2 = pch;
 		pch = strtok (NULL, " ");
 		param3 = pch;
-		
+
 		if (tshowintro == true)	// Show the intro only on the first key press
 		{
 			//tprintintro(pcb);
 			tshowintro = false;
 		}
-		
+
 		switch(TelnetContext)
 		{
 			case CLI_ROOT:
 			tcommand_root(command, param1, param2, param3);
 			break;
-			
+
 			case CLI_CONFIG:
 			tcommand_config(command, param1, param2, param3);
 			break;
-			
+
 			case CLI_OPENFLOW:
 			tcommand_openflow(command, param1, param2, param3);
 			break;
-			
+
 			case CLI_DEBUG:
 			tcommand_debug(command, param1, param2, param3);
 			break;
 		};
-		
+
 		switch(TelnetContext)
 		{
 			case CLI_ROOT:
@@ -148,30 +148,30 @@ static err_t telnet_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t e
 			tprintf(&print_buffer, pcb);
 			print_buffer[0] = '\0';
 			break;
-			
+
 			case CLI_CONFIG:
 			sprintf(print_buffer, "%s(config)# ",Zodiac_Config.device_name);
 			tprintf(&print_buffer, pcb);
 			print_buffer[0] = '\0';
 			break;
-			
+
 			case CLI_OPENFLOW:
 			sprintf(print_buffer, "%s(openflow)# ",Zodiac_Config.device_name);
 			tprintf(&print_buffer, pcb);
 			print_buffer[0] = '\0';
 			break;
-			
+
 			case CLI_DEBUG:
 			sprintf(print_buffer, "%s(debug)# ",Zodiac_Config.device_name);
 			tprintf(&print_buffer, pcb);
 			print_buffer[0] = '\0';
 			break;
 		};
-		
+
 		} else {
 		pbuf_free(p);
 	}
-	
+
 	if (err == ERR_OK && p == NULL)
 	{
 		tcp_close(pcb);
@@ -191,7 +191,7 @@ void tprintf(char *buffer, struct tcp_pcb *pcb)
 
 /*
 *	Commands within the root context
-*	
+*
 *	@param command - pointer to the command string
 *	@param param1 - pointer to parameter 1
 *	@param param2- pointer to parameter 2
@@ -204,12 +204,12 @@ void tcommand_root(char *command, char *param1, char *param2, char *param3)
 		TelnetContext = CLI_CONFIG;
 		return;
 	}
-	
+
 	if (strcmp(command, "openflow")==0){
 		TelnetContext = CLI_OPENFLOW;
 		return;
 	}
-	
+
 	if (strcmp(command, "debug")==0){
 		TelnetContext = CLI_DEBUG;
 		return;
@@ -221,14 +221,14 @@ void tcommand_root(char *command, char *param1, char *param2, char *param3)
 		//tprinthelp();
 		return;
 
-	}	
+	}
 
 }
 
 
 /*
 *	Commands within the config context
-*	
+*
 *	@param command - pointer to the command string
 *	@param param1 - pointer to parameter 1
 *	@param param2- pointer to parameter 2
@@ -236,7 +236,7 @@ void tcommand_root(char *command, char *param1, char *param2, char *param3)
 */
 void tcommand_config(char *command, char *param1, char *param2, char *param3)
 {
-	// Return to root context 
+	// Return to root context
 	if (strcmp(command, "exit")==0){
 		TelnetContext = CLI_ROOT;
 		return;
@@ -254,7 +254,7 @@ void tcommand_config(char *command, char *param1, char *param2, char *param3)
 
 /*
 *	Commands within the OpenFlow context
-*	
+*
 *	@param command - pointer to the command string
 *	@param param1 - pointer to parameter 1
 *	@param param2- pointer to parameter 2
@@ -279,7 +279,7 @@ void tcommand_openflow(char *command, char *param1, char *param2, char *param3)
 
 /*
 *	Commands within the debug context
-*	
+*
 *	@param command - pointer to the command string
 *	@param param1 - pointer to parameter 1
 *	@param param2- pointer to parameter 2
@@ -298,7 +298,7 @@ void tcommand_debug(char *command, char *param1, char *param2, char *param3)
 		//tprinthelp();
 		return;
 	}
-	
+
 	if (strcmp(command, "restart")==0)
 	{
 		rstc_start_software_reset(RSTC);
@@ -323,8 +323,8 @@ void tprintintro(struct tcp_pcb *pcb)
 // 	strcat(buffer,"\t    by Northbound Networks\r\n");
 // 	strcat(buffer,"\r\n\n");
 // 	strcat(print_buffer,"Type 'help' for a list of available commands\r\n");
-	
-	sprintf(print_buffer, "*********");	
+
+	sprintf(print_buffer, "*********");
 	tprintf(&print_buffer, pcb);
 	print_buffer[0] = '\0';
 	return;
