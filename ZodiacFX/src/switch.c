@@ -600,7 +600,7 @@ void task_switch(struct netif *netif)
 				nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
 				return;
 			} else {
-				TRACE("%d byte received from controller\r\n", ul_rcv_size);
+				TRACE("%d byte received from controller", ul_rcv_size);
 				struct pbuf *p;
 				p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);
 				memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));
