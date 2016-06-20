@@ -9,7 +9,7 @@
 /*
  * This file is part of the Zodiac FX firmware.
  * Copyright (c) 2016 Northbound Networks.
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -22,7 +22,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  * Author: Paul Zanna <paul@northboundnetworks.com>
  *
  */
@@ -111,7 +111,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	struct ofp_action_vlan_pcp *action_vlanpcp;
 	struct ofp_action_tp_port *action_port;
 	struct ofp_action_header *act_hdr;
-	
+
 	uint16_t vlanid;
 	uint16_t pcp;
 	uint16_t vlanid_mask = htons(0x0fff);
@@ -119,15 +119,15 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	uint32_t ipadr;
 	uint16_t vlantag = htons(0x8100);
 	int outport = 0;
-	
+
 	table_counters[0].lookup_count++;
-	
+
 	if (Zodiac_Config.OFEnabled == OF_ENABLED && iLastFlow == 0) // Check to if the flow table is empty
 	{
 		packet_in (p_uc_data, packet_size, port, OFPR_NO_MATCH); // Packet In if there are no flows in the table
 		return;
 	}
-	
+
 	if (Zodiac_Config.OFEnabled == OF_ENABLED && iLastFlow > 0) // Main lookup
 	{
 		int i = -1;
@@ -139,7 +139,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			packet_in (p_uc_data, packet_size, port, OFPR_NO_MATCH);
 			return;
 		}
-		
+
 		if ( i > -1)
 		{
 			flow_counters[i].hitCount++; // Increment flow hit count
@@ -147,7 +147,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			flow_counters[i].lastmatch = (totaltime/2); // Increment flow hit count
 			table_counters[0].matched_count++;
 			table_counters[0].byte_count += packet_size;
-			
+
 			// If there are no actions DROP the packet
 			act_hdr = flow_actions[i].action1;
 			if(act_hdr->len == 0 )
@@ -162,7 +162,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				if(q == 1) act_hdr = flow_actions[i].action2;
 				if(q == 2) act_hdr = flow_actions[i].action3;
 				if(q == 3) act_hdr = flow_actions[i].action4;
-				
+
 				if (act_hdr->len != 0)
 				{
 					switch(ntohs(act_hdr->type))
@@ -174,13 +174,13 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							outport = (1<< (ntohs(action_out->port)-1));
 							gmac_write(p_uc_data, packet_size, outport);
 						}
-						
+
 						if (ntohs(action_out->port) == OFPP_ALL || ntohs(action_out->port) == OFPP_FLOOD)
 						{
 							outport = (15 - NativePortMatrix) - (1<<(port-1));
 							gmac_write(p_uc_data, packet_size, outport);
 						}
-						
+
 						if (ntohs(action_out->port) == OFPP_CONTROLLER)
 						{
 							int pisize = ntohs(action_out->max_len);
@@ -188,12 +188,12 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							packet_in(p_uc_data, pisize, port, OFPR_ACTION);
 						}
 						break;
-						
+
 						case OFPAT10_SET_DL_SRC:
 						action_setdl  = act_hdr;
 						memcpy(p_uc_data + 6, action_setdl->dl_addr, 6);
 						break;
-						
+
 						case OFPAT10_SET_DL_DST:
 						action_setdl  = act_hdr;
 						memcpy(p_uc_data, action_setdl->dl_addr, 6);
@@ -211,7 +211,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							set_ip_checksum(p_uc_data, packet_size, 14);
 						}
 						break;
-						
+
 						case OFPAT10_SET_NW_DST:
 						action_setnw  = act_hdr;
 						ipadr = action_setnw->nw_addr;
@@ -224,7 +224,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							set_ip_checksum(p_uc_data, packet_size, 14);
 						}
 						break;
-						
+
 						case OFPAT10_SET_NW_TOS:
 						action_settos = act_hdr;
 						if (eth_prot == vlantag)
@@ -235,8 +235,8 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							p_uc_data[15] = action_settos->nw_tos;
 							set_ip_checksum(p_uc_data, packet_size, 14);
 						}
-						break;	
-											
+						break;
+
 						case OFPAT10_SET_VLAN_VID:
 						action_vlanid  = act_hdr;
 						if (eth_prot == vlantag)
@@ -250,7 +250,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							vlanid = pcp & ~vlanid_mask;
 						} else {
 							vlanid = (action_vlanid->vlan_vid & vlanid_mask) | (pcp & ~vlanid_mask);
-						}						
+						}
 						// Does the packet have a VLAN header?
 						if (eth_prot == vlantag)
 						{
@@ -286,7 +286,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							memcpy(ul_size, &packet_size, 2);
 						}
 						break;
-						
+
 						case OFPAT10_STRIP_VLAN:
 						if (eth_prot == vlantag)
 						{
@@ -295,11 +295,11 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							memcpy(ul_size, &packet_size, 2);
 						}
 						break;
-						
+
 						case OFPAT10_SET_TP_DST:
 						action_port = act_hdr;
 						tcpport = action_port->tp_port;
-						
+
 						if (eth_prot == vlantag)	// Add 4 bytes to the offset
 						{
 							memcpy(p_uc_data + 40, &tcpport, 2);
@@ -307,7 +307,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							memcpy(p_uc_data + 36, &tcpport, 2);
 						}
 						break;
-						
+
 						case OFPAT10_SET_TP_SRC:
 						action_port = act_hdr;
 						tcpport = action_port->tp_port;
@@ -324,7 +324,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				}
 			}
 		}
-		
+
 		return;
 	}
 	return;	// Should only get to here if the action is unknown
@@ -332,67 +332,67 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 
 void of10_message(struct ofp_header *ofph, int size, int len)
 {
-	struct ofp_stats_request *stats_req;		
+	struct ofp_stats_request *stats_req;
 	switch(ofph->type)
-	{					
+	{
 		case OFPT10_FEATURES_REQUEST:
 		features_reply10(ofph->xid);
 		break;
-		
+
 		case OFPT10_SET_CONFIG:
 		set_config10(ofph);
 		break;
-		
+
 		case OFPT10_STATS_REQUEST:
 		stats_req  = (struct ofp_stats_request *) ofph;
 		if ( HTONS(stats_req->type) == OFPST_DESC )
 		{
 			stats10_desc_reply(stats_req);
 		}
-		
+
 		if ( HTONS(stats_req->type) == OFPST_FLOW )
 		{
 			stats_flow_reply(stats_req);
 		}
-		
+
 		if ( HTONS(stats_req->type) == OFPST_AGGREGATE )
 		{
 			//stats_reply_aggregate(stats_req);
 		}
-		
+
 		if ( HTONS(stats_req->type) == OFPST_TABLE )
 		{
 			stats_table_reply(stats_req);
 		}
-		
+
 		if ( HTONS(stats_req->type) == OFPST_PORT )
 		{
-			
+
 			stats_port_reply(stats_req);
 		}
-		
+
 		if ( HTONS(stats_req->type) == OFPST_VENDOR )
 		{
 			//stats_vendor(fs, stats_req);
 		}
 		break;
-		
+
 		case OFPT10_PACKET_OUT:
 		packet_out(ofph);
 		break;
-		
+
 		case OFPT10_FLOW_MOD:
 		flow_mod(ofph);
 		break;
-		
+
 		case OFPT10_GET_CONFIG_REQUEST:
 		config_reply(ofph->xid);
 		break;
-		
+
 		case OFPT10_VENDOR:
 		vendor_reply(ofph->xid);
 		break;
-		
+
 		case OFPT10_BARRIER_REQUEST:
 		if (size == len) {
 			barrier10_reply(ofph->xid);
@@ -402,9 +402,9 @@ void of10_message(struct ofp_header *ofph, int size, int len)
 			delay_barrier = 1;
 		}
 		break;
-		
+
 	};
-	
+
 	return;
 }
 
@@ -428,7 +428,7 @@ void features_reply10(uint32_t xid)
 	int l, k;
 	int j = 0;
 	char portname[8];
-	
+
 	int bufsize = sizeof(struct ofp10_switch_features) + sizeof(phys_port);
 	features.header.version = OF_Version;
 	features.header.type = OFPT10_FEATURES_REPLY;
@@ -440,7 +440,7 @@ void features_reply10(uint32_t xid)
 	features.n_tables = 1;		// Number of flow tables
 	features.capabilities = htonl(OFPC10_FLOW_STATS + OFPC10_TABLE_STATS + OFPC10_PORT_STATS);	// Switch Capabilities
 	features.actions = htonl((1 << OFPAT10_OUTPUT) + (1 << OFPAT10_SET_VLAN_VID) + (1 << OFPAT10_SET_DL_SRC) + (1 << OFPAT10_SET_DL_DST) + (1 << OFPAT10_SET_NW_SRC) + (1 << OFPAT10_SET_NW_DST) + (1 << OFPAT10_SET_TP_SRC) + (1 << OFPAT10_SET_TP_DST));		// Action Capabilities
-	
+
 	uint8_t mac[] = {0x00,0x00,0x00,0x00,0x00,0x00};
 
 	memcpy(&buf, &features, sizeof(struct ofp10_switch_features));
@@ -471,7 +471,7 @@ void features_reply10(uint32_t xid)
 			j ++;
 		}
 	}
-	
+
 	memcpy(&buf[sizeof(struct ofp10_switch_features)], phys_port, sizeof(phys_port));
 	sendtcp(&buf, bufsize);
 	return;
@@ -607,14 +607,14 @@ void stats_table_reply(struct ofp_stats_request *msg)
 	struct ofp_table_stats tbl_stats;
 	int len = sizeof(struct ofp10_stats_reply) + sizeof(struct ofp_table_stats);
 	char buf[len];
-	
+
 	reply.header.version = OF_Version;
 	reply.header.type = OFPT10_STATS_REPLY;
 	reply.header.length = HTONS(len);
 	reply.header.xid = msg->header.xid;
 	reply.type = HTONS(OFPST_TABLE);
 	reply.flags = 0;
-	
+
 	tbl_stats.table_id = 0;
 	tbl_stats.max_entries = htonl(MAX_FLOWS);
 	tbl_stats.active_count = htonl(iLastFlow);
@@ -646,14 +646,14 @@ void stats_port_reply(struct ofp_stats_request *msg)
 	{
 		stats_size = (sizeof(struct ofp10_port_stats) * 3);
 		len = sizeof(struct ofp10_stats_reply) + stats_size;
-		
+
 		reply.header.version = OF_Version;
 		reply.header.type = OFPT10_STATS_REPLY;
 		reply.header.length = htons(len);
 		reply.header.xid = msg->header.xid;
 		reply.type = htons(OFPST_PORT);
 		reply.flags = 0;
-		
+
 		for(k=0; k<3;k++)
 		{
 			zodiac_port_stats[k].port_no = htons(k+1);
@@ -669,16 +669,16 @@ void stats_port_reply(struct ofp_stats_request *msg)
 			zodiac_port_stats[k].tx_errors = 0;
 			zodiac_port_stats[k].rx_errors = 0;
 			zodiac_port_stats[k].collisions = 0;
-			
+
 		}
 		memcpy(buf, &reply, sizeof(struct ofp10_stats_reply));
 		memcpy(buf + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[0], stats_size);
-		
+
 	} else
 	{
 		stats_size = sizeof(struct ofp10_port_stats);
 		len = sizeof(struct ofp10_stats_reply) + stats_size;
-		
+
 		reply.header.version = OF_Version;
 		reply.header.type = OFPT10_STATS_REPLY;
 		reply.header.length = htons(len);
@@ -732,11 +732,11 @@ void packet_out(struct ofp_header *msg)
 		nnOF_tablelookup(ptr, &size, inPort);
 		return;
 	}
-	
+
 	if (outPort == OFPP_FLOOD || outPort == OFPP13_ALL)
 	{
 		outPort = (15 - NativePortMatrix) - (1<<(inPort-1));
-	} else 
+	} else
 	{
 		outPort = 1 << (outPort-1);
 	}
@@ -755,7 +755,7 @@ void packet_out(struct ofp_header *msg)
 */
 void packet_in(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason)
 {
-	uint16_t send_size = ul_size;	
+	uint16_t send_size = ul_size;
 	if(tcp_sndbuf(tcp_pcb) < (send_size + 18)) return;
 	uint16_t size = 0;
 	struct ofp_packet_in * pi;
@@ -790,27 +790,27 @@ void flow_mod(struct ofp_header *msg)
 	uint8_t command = HTONS(ptr_fm->command);
 	switch(command)
 	{
-		
+
 		case OFPFC_ADD:
 		flow_add(msg);
 		break;
-		
+
 		case OFPFC_MODIFY:
 		flow_modify(msg);
 		break;
-		
+
 		case OFPFC_MODIFY_STRICT:
 		flow_modify_strict(msg);
 		break;
-		
+
 		case OFPFC_DELETE:
 		flow_delete(msg);
 		break;
-		
+
 		case OFPFC_DELETE_STRICT:
 		flow_delete_strict(msg);
 		break;
-		
+
 	}
 	return;
 }
@@ -829,7 +829,7 @@ void flow_add(struct ofp_header *msg)
 		of10_error(msg, OFPET10_FLOW_MOD_FAILED, OFPFMFC10_ALL_TABLES_FULL);
 		return;
 	}
-	
+
 	struct ofp_flow_mod * ptr_fm;
 	ptr_fm = (struct ofp_flow_mod *) msg;
 	struct ofp_action_header * action_hdr = NULL;
@@ -842,7 +842,7 @@ void flow_add(struct ofp_header *msg)
 	memset(&flow_actions[iLastFlow].action2, 0, 16);
 	memset(&flow_actions[iLastFlow].action3, 0, 16);
 	memset(&flow_actions[iLastFlow].action4, 0, 16);
-	
+
 	action_hdr = &ptr_fm->actions;
 	memcpy(&flow_match[iLastFlow], ptr_fm, action_hdr->len);
 
@@ -853,13 +853,13 @@ void flow_add(struct ofp_header *msg)
 			if (action_cnt_size < action_size)
 			{
 				action_hdr1 = action_hdr + action_count;
-				
+
 				// Check for unsupported ports
 				if (HTONS(action_hdr1->type) == OFPAT10_OUTPUT)
 				{
 					struct ofp_action_output * action_out;
 					action_out = action_hdr1;
-					
+
 					if (htons(action_out->port) == OFPP_NORMAL) // We do not support port NORMAL
 					{
 						of10_error(msg, OFPET10_BAD_ACTION, OFPBAC10_BAD_OUT_PORT);
@@ -873,7 +873,7 @@ void flow_add(struct ofp_header *msg)
 					action_vlan = action_hdr1;
 					if(action_vlan->vlan_vid == 0) action_hdr1->type = htons(OFPAT10_STRIP_VLAN);
 				}
-				
+
 				// Copy action
 				if(q == 0) memcpy(&flow_actions[iLastFlow].action1, action_hdr1, ntohs(action_hdr1->len));
 				if(q == 1) memcpy(&flow_actions[iLastFlow].action2, action_hdr1, ntohs(action_hdr1->len));
@@ -885,13 +885,13 @@ void flow_add(struct ofp_header *msg)
 			action_cnt_size += ntohs(action_hdr1->len);
 		}
 	}
-	
+
 	flow_counters[iLastFlow].duration = (totaltime/2);
 	flow_counters[iLastFlow].lastmatch = (totaltime/2);
 	flow_counters[iLastFlow].active = true;
 	iLastFlow++;
 	return;
-	
+
 }
 
 /*
@@ -909,7 +909,7 @@ void flow_modify(struct ofp_header *msg)
 	int action_size = ntohs(msg->length) - sizeof(struct ofp_flow_mod);
 	int action_cnt_size = 0;
 	int action_count = 0;
-	
+
 	for(int q=0;q<iLastFlow;q++)
 	{
 		if(flow_counters[q].active == true)
@@ -925,13 +925,13 @@ void flow_modify(struct ofp_header *msg)
 						if (action_cnt_size < action_size)
 						{
 							action_hdr1 = action_hdr + action_count;
-							
+
 							// Check for unsupported ports
 							if (HTONS(action_hdr1->type) == OFPAT10_OUTPUT)
 							{
 								struct ofp_action_output * action_out;
 								action_out = action_hdr1;
-								
+
 								if (htons(action_out->port) == OFPP_NORMAL) // We do not support port NORMAL
 								{
 									of10_error(msg, OFPET10_BAD_ACTION, OFPBAC10_BAD_OUT_PORT);
@@ -945,7 +945,7 @@ void flow_modify(struct ofp_header *msg)
 								action_vlan = action_hdr1;
 								if(action_vlan->vlan_vid == 0) action_hdr1->type = htons(OFPAT10_STRIP_VLAN);
 							}
-							
+
 							// Copy actions
 							if(j == 0) memcpy(&flow_actions[q].action1, action_hdr1, ntohs(action_hdr1->len));
 							if(j == 1) memcpy(&flow_actions[q].action2, action_hdr1, ntohs(action_hdr1->len));
@@ -980,7 +980,7 @@ void flow_modify_strict(struct ofp_header *msg)
 	int action_size = ntohs(msg->length) - sizeof(struct ofp_flow_mod);
 	int action_cnt_size = 0;
 	int action_count = 0;
-	
+
 	for(int q=0;q<iLastFlow;q++)
 	{
 		if(flow_counters[q].active == true)
@@ -996,13 +996,13 @@ void flow_modify_strict(struct ofp_header *msg)
 						if (action_cnt_size < action_size)
 						{
 							action_hdr1 = action_hdr + action_count;
-							
+
 							// Check for unsupported ports
 							if (HTONS(action_hdr1->type) == OFPAT10_OUTPUT)
 							{
 								struct ofp_action_output * action_out;
 								action_out = action_hdr1;
-								
+
 								if (htons(action_out->port) == OFPP_NORMAL) // We do not support port NORMAL
 								{
 									of10_error(msg, OFPET10_BAD_ACTION, OFPBAC10_BAD_OUT_PORT);
@@ -1016,7 +1016,7 @@ void flow_modify_strict(struct ofp_header *msg)
 								action_vlan = action_hdr1;
 								if(action_vlan->vlan_vid == 0) action_hdr1->type = htons(OFPAT10_STRIP_VLAN);
 							}
-							
+
 							// Copy actions
 							if(j == 0) memcpy(&flow_actions[q].action1, action_hdr1, ntohs(action_hdr1->len));
 							if(j == 1) memcpy(&flow_actions[q].action2, action_hdr1, ntohs(action_hdr1->len));
@@ -1047,7 +1047,7 @@ void flow_delete(struct ofp_header *msg)
 	struct ofp_flow_mod * ptr_fm;
 	ptr_fm = (struct ofp_flow_mod *) msg;
 	int q = 0;
-	
+
 	while(q<iLastFlow)
 	{
 		if(flow_counters[q].active == true)
@@ -1085,7 +1085,7 @@ void flow_delete_strict(struct ofp_header *msg)
 	struct ofp_flow_mod * ptr_fm;
 	ptr_fm = (struct ofp_flow_mod *) msg;
 	int q;
-	
+
 	for(q=0;q<iLastFlow;q++)
 	{
 		if(flow_counters[q].active == true)
