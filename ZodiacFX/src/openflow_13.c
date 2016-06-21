@@ -869,7 +869,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 	struct ofp13_multipart_reply reply;
 	struct ofp13_port_stats_request *port_req = msg->body;
 	int stats_size = 0;
-	int k, len;
+	int len = 0;
 	uint32_t port = ntohl(port_req->port_no);
 
 	if (port == OFPP13_ANY)
@@ -884,7 +884,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 		reply.type = htons(OFPMP13_PORT_STATS);
 		reply.flags = 0;
 
-		for(k=0; k<3;k++)
+		for(int k=0; k<3;k++)
 		{
 			zodiac_port_stats[k].port_no = htonl(k+1);
 			zodiac_port_stats[k].rx_packets = htonll(phys13_port_stats[k].rx_packets);
@@ -1267,7 +1267,6 @@ void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason
 */
 void packet_out13(struct ofp_header *msg)
 {
-	uint32_t outPort;
 	struct ofp13_packet_out * po;
 	po = (struct ofp13_packet_out *) msg;
 	uint32_t inPort = htonl(po->in_port);
@@ -1276,13 +1275,10 @@ void packet_out13(struct ofp_header *msg)
 	ptr += sizeof(struct ofp13_packet_out) + ntohs(po->actions_len);
 	if (size < 0) return; // Corrupt packet!
 	struct ofp13_action_header *act_hdr = po->actions;
-	if (ntohs(act_hdr->type) == OFPAT13_OUTPUT)
-	{
-		struct ofp13_action_output *act_out = act_hdr;
-		outPort = htonl(act_out->port);
-		TRACE("Packet out port %d (%d bytes)", outPort, size);
-	}
-
+	if (ntohs(act_hdr->type) != OFPAT13_OUTPUT) return;
+	struct ofp13_action_output *act_out = act_hdr;
+	uint32_t outPort = htonl(act_out->port);
+	TRACE("Packet out port %d (%d bytes)", outPort, size);
 	if (outPort == OFPP13_FLOOD)
 	{
 		outPort = 7 - (1 << (inPort-1));	// Need to fix this, may also send out the Non-OpenFlow port
