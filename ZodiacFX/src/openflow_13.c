@@ -160,10 +160,15 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 						{
 							struct ofp13_action_output *act_output = act_hdr;
-							if (htonl(act_output->port) < OFPP13_MAX)
+							if (htonl(act_output->port) < OFPP13_MAX && htonl(act_output->port) != port)
 							{
 								int outport = (1<< (ntohl(act_output->port)-1));
 								TRACE("Output to port %d (%d bytes)", ntohl(act_output->port), packet_size);
+								gmac_write(p_uc_data, packet_size, outport);
+							} else if (htonl(act_output->port) == OFPP13_IN_PORT)
+							{
+								int outport = (1<< (port-1));
+								if (trace == true)printf("Output to in_port %d (%d bytes)\r\n", port, packet_size);
 								gmac_write(p_uc_data, packet_size, outport);
 							} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
 							{

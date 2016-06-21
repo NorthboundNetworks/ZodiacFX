@@ -929,9 +929,10 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							struct ofp_action_output * action_out = act_hdr;
 							printf("  Action %d:\r\n",q+1);
 							if (ntohs(action_out->port) <= 255) printf("   Output: %d\r\n", ntohs(action_out->port));
-							if (ntohs(action_out->port) == OFPP_CONTROLLER) printf("   Output: CONTROLLER\r\n");
-							if (ntohs(action_out->port) == OFPP_ALL) printf("   Output: ALL\r\n");
+							if (ntohs(action_out->port) == OFPP_IN_PORT) printf("   Output: IN_PORT\r\n");
 							if (ntohs(action_out->port) == OFPP_FLOOD) printf("   Output: FLOOD\r\n");
+							if (ntohs(action_out->port) == OFPP_ALL) printf("   Output: ALL\r\n");
+							if (ntohs(action_out->port) == OFPP_CONTROLLER) printf("   Output: CONTROLLER\r\n");
 						}
 						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_VLAN_VID) //
 						{
@@ -1114,12 +1115,18 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 									if (htonl(act_output->port) < OFPP13_MAX)
 									{
 										printf("   Output Port: %d\r\n", htonl(act_output->port));
-									} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
+									} else if (htonl(act_output->port) == OFPP13_IN_PORT)
 									{
-										printf("   Output: CONTROLLER \r\n");
+										printf("   Output: IN_PORT \r\n");
 									} else if (htonl(act_output->port) == OFPP13_FLOOD)
 									{
 										printf("   Output: FLOOD \r\n");
+									} else if (htonl(act_output->port) == OFPP13_ALL)
+									{
+										printf("   Output: ALL \r\n");
+									} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
+									{
+										printf("   Output: CONTROLLER \r\n");
 									}
 									act_output = NULL;
 								}

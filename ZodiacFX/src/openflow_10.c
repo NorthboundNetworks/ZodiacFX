@@ -169,9 +169,15 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					{
 						case OFPAT10_OUTPUT:
 						action_out = act_hdr;
-						if (ntohs(action_out->port) <= 255) // physical port
+						if (ntohs(action_out->port) <= 255 && ntohs(action_out->port) != port) // physical port
 						{
 							outport = (1<< (ntohs(action_out->port)-1));
+							gmac_write(p_uc_data, packet_size, outport);
+						}
+
+						if (ntohs(action_out->port) == OFPP_IN_PORT)
+						{
+							outport = (1<< (port-1));
 							gmac_write(p_uc_data, packet_size, outport);
 						}
 
