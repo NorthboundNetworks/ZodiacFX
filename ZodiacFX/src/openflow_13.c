@@ -124,12 +124,9 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 		while(1)	// Loop through until we get a miss
 		{
 			table_counters[table_id].lookup_count++;
-			int i = -1;
 			// Check if packet matches an existing flow
-			i = flowmatch13(p_uc_data, port, table_id);
-			if (i == -2) return;	// Error packet
-			if (i == -1) return;	// No match
-			if ( i > -1)
+			int i = flowmatch13(p_uc_data, port, table_id);
+			if (i > -1)
 			{
 				TRACE("Matched flow %d, table %d", i+1, table_id);
 				flow_counters[i].hitCount++; // Increment flow hit count
@@ -521,6 +518,9 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					table_id = inst_goto_ptr->table_id;
 					TRACE("Goto table %d", table_id);
 				}
+			} else {
+			        if (i == -2) return;	// Error packet
+			        if (i == -1) return;	// No match
 			}
 		}
 	}
