@@ -168,7 +168,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							} else if (htonl(act_output->port) == OFPP13_IN_PORT)
 							{
 								int outport = (1<< (port-1));
-								if (trace == true)printf("Output to in_port %d (%d bytes)\r\n", port, packet_size);
+								TRACE("Output to in_port %d (%d bytes)", port, packet_size);
 								gmac_write(p_uc_data, packet_size, outport);
 							} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
 							{
