@@ -135,15 +135,12 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				flow_counters[i].lastmatch = (totaltime/2); // Increment flow hit count
 				table_counters[table_id].matched_count++;
 				table_counters[table_id].byte_count += packet_size;
+				struct ofp13_instruction *inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
 
 				// If there are no instructions then it's a DROP so just return
-				if(ofp13_oxm_inst[i] == NULL) return;
+				if(inst_ptr == NULL) return;
 
 				// Process Instructions
-				struct ofp13_instruction_actions *inst_actions;
-				struct ofp13_action_header *act_hdr;
-				struct ofp13_instruction *inst_ptr;
-				inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
 				int inst_size = ntohs(inst_ptr->len);
 
 				if(inst_size == 0 || inst_size > 64)
@@ -157,8 +154,8 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					int act_size = 0;
 					while (act_size < (inst_size - sizeof(struct ofp13_instruction_actions)))
 					{
-						inst_actions  = ofp13_oxm_inst[i] + act_size;
-						act_hdr = &inst_actions->actions;
+						struct ofp13_instruction_actions *inst_actions = inst_ptr + act_size;
+						struct ofp13_action_header *act_hdr = &inst_actions->actions;
 						// Output Action
 						if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 						{
