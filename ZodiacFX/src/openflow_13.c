@@ -99,7 +99,6 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	uint8_t ip_prot = 0;
 	uint16_t packet_size;
 	uint16_t vlantag = htons(0x8100);
-	uint16_t empty_vid = 0;
 	bool isVlanTag = false;
 
 	memcpy(&packet_size, ul_size, 2);
@@ -192,7 +191,8 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					{
 						TRACE("Push VLAN");
 						memmove(p_uc_data + 16, p_uc_data + 12, packet_size - 12);
-						memcpy(p_uc_data + 12, &vlantag,2);
+						memcpy(p_uc_data + 12, &vlantag, 2);
+						const uint16_t empty_vid = 0;
 						memcpy(p_uc_data + 14, &empty_vid, 2);
 						packet_size += 4;
 						memcpy(ul_size, &packet_size, 2);
