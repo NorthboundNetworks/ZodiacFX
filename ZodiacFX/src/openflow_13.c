@@ -39,6 +39,7 @@
 
 #define ALIGN8(x) (x+7)/8*8
 #define VLAN_OFFSET(x, isVlanTag)	(isVlanTag ? (x + 4) : x)
+#define	RECALCULATE_IP_CHECKSUM	set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag))
 
 // Global variables
 extern struct zodiac_config Zodiac_Config;
@@ -268,11 +269,11 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							break;
 							// Set Source Ethernet Address
 							case OFPXMT_OFB_ETH_SRC:
-							memcpy(p_uc_data + 6,act_set_field->field + sizeof(struct oxm_header13), 6);
+							memcpy(p_uc_data + 6, act_set_field->field + sizeof(struct oxm_header13), 6);
 							break;
 							// Set Destination Ethernet Address
 							case OFPXMT_OFB_ETH_DST:
-							memcpy(p_uc_data,act_set_field->field + sizeof(struct oxm_header13), 6);
+							memcpy(p_uc_data, act_set_field->field + sizeof(struct oxm_header13), 6);
 							break;
 
 							// Set Ether Type
@@ -285,7 +286,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							case OFPXMT_OFB_IP_PROTO:
 							memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 							memcpy(p_uc_data + VLAN_OFFSET(23, isVlanTag), &oxm_value16, 2);
-							set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+							RECALCULATE_IP_CHECKSUM;
 							break;
 
 							// Set Source IP Address
@@ -293,7 +294,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							if (eth_prot == 0x08)	// Only set the field if it is an IPv4 packet
 							{
 								memcpy(p_uc_data + VLAN_OFFSET(26, isVlanTag), act_set_field->field + sizeof(struct oxm_header13), 4);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 
@@ -302,7 +303,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							if (eth_prot == 0x08)	// Only set the field if it is an IPv4 packet
 							{
 								memcpy(p_uc_data + VLAN_OFFSET(30, isVlanTag), act_set_field->field + sizeof(struct oxm_header13), 4);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 
@@ -312,7 +313,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							{
 								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 								memcpy(p_uc_data + VLAN_OFFSET(34, isVlanTag), &oxm_value16, 2);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 
@@ -322,7 +323,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							{
 								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 								memcpy(p_uc_data + VLAN_OFFSET(36, isVlanTag), &oxm_value16, 2);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 
@@ -332,7 +333,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							{
 								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 								memcpy(p_uc_data + VLAN_OFFSET(34, isVlanTag), &oxm_value16, 2);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 
@@ -342,7 +343,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							{
 								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 								memcpy(p_uc_data + VLAN_OFFSET(36, isVlanTag), &oxm_value16, 2);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 
@@ -352,7 +353,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							{
 								memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
 								memcpy(p_uc_data + VLAN_OFFSET(34, isVlanTag), &oxm_value8, 1);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 
@@ -362,7 +363,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							{
 								memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
 								memcpy(p_uc_data + VLAN_OFFSET(35, isVlanTag), &oxm_value8, 1);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 
@@ -372,7 +373,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							{
 								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 								memcpy(p_uc_data + VLAN_OFFSET(20, isVlanTag), &oxm_value16, 2);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 
@@ -381,7 +382,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							if (eth_prot == 0x0608)	// Only set the field if it is an IPv4 packet
 							{
 								memcpy(p_uc_data + VLAN_OFFSET(28, isVlanTag), act_set_field->field + sizeof(struct oxm_header13), 4);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 
@@ -390,7 +391,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							if (eth_prot == 0x0608)	// Only set the field if it is an IPv4 packet
 							{
 								memcpy(p_uc_data + VLAN_OFFSET(38, isVlanTag), act_set_field->field + sizeof(struct oxm_header13), 4);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 
@@ -399,7 +400,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							if (eth_prot == 0x0608)	// Only set the field if it is an IPv4 packet
 							{
 								memcpy(p_uc_data + VLAN_OFFSET(22, isVlanTag), act_set_field->field + sizeof(struct oxm_header13), 6);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 
@@ -408,7 +409,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							if (eth_prot == 0x0608)	// Only set the field if it is an IPv4 packet
 							{
 								memcpy(p_uc_data + VLAN_OFFSET(32, isVlanTag), act_set_field->field + sizeof(struct oxm_header13), 6);
-								set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, isVlanTag));
+								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
 						};
