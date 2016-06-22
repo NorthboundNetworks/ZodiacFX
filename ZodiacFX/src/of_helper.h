@@ -33,16 +33,21 @@
 
 #include "openflow.h"
 
-#define VLAN_OFFSET(x, isVlanTag)       (isVlanTag ? (x + 4) : x)
-
 struct packet_fields
 {
-        bool valid;
+	bool parsed;
         bool isVlanTag;
+	uint8_t *payload;
         uint16_t eth_prot;
         uint8_t ip_prot;
+        uint16_t *vlanid;
+        uint32_t *ip_src;
+        uint32_t *ip_dst;
+        uint16_t *tcp_src;
+        uint16_t *tcp_dst;
 };
 
+void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields);
 int flowmatch10(uint8_t *pBuffer, int port);
 int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fields *fields);
 int field_match10(struct ofp_match *match_a, struct ofp_match *match_b);

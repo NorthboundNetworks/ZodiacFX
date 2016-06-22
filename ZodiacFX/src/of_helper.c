@@ -281,6 +281,37 @@ int flowmatch10(uint8_t *pBuffer, int port)
 	return matched_flow;
 }
 
+
+void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
+        fields->payload = pBuffer;
+        fields->eth_prot = *(uint16_t*)(fields->payload + 12);
+
+        // VLAN tagged
+        if (ntohs(fields->eth_prot) == 0x8100)
+        {
+                fields->payload += 4;
+                fields->vlanid = (uint16_t*)(fields->payload + 10);
+                fields->eth_prot = *(uint16_t*)(fields->payload + 12);
+                fields->isVlanTag = true;
+        }
+
+        // IP packets
+        if (ntohs(fields->eth_prot) == 0x0800)
+        {
+                fields->ip_src = (uint32_t*)(fields->payload + 26);
+                fields->ip_dst = (uint32_t*)(fields->payload + 30);
+                fields->ip_prot = *(uint8_t*)(fields->payload + 23);
+                // TCP / UDP
+                if (fields->ip_prot == 6 || fields->ip_prot == 17)
+                {
+                        fields->tcp_src = (uint16_t*)fields->payload + 34;
+                        fields->tcp_dst = (uint16_t*)fields->payload + 36;
+                }
+        }
+
+	fields->parsed = true;
+}
+
 /*
 *	Matches packet headers against the installed flows for OpenFlow v1.3 (0x04).
 *	Returns the flow number if it matches.
@@ -295,64 +326,26 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	int priority_match = -1;
 	uint8_t *eth_dst = pBuffer;
 	uint8_t *eth_src = pBuffer + 6;
-	uint16_t vlanid = 0;
-	uint32_t ip_src;
-	uint32_t ip_dst;
-	uint16_t tcp_src;
-	uint16_t tcp_dst;
-	uint8_t oxm_value8;
 	uint16_t oxm_value16;
 	uint8_t oxm_ipv4[4];
-	uint16_t oxm_ipv6[8];
 
-	fields->eth_prot = *(uint16_t*)(pBuffer + 12);
-
-	if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
-	{
-		// Not sure exactly why this happens but it causes a lot of issues
-		return -2;
-	}
-
-	// VLAN tagged
-	if (ntohs(fields->eth_prot) == 0x8100)
-	{
-		memcpy(&vlanid, pBuffer + 14, 2);
-		fields->eth_prot = *(uint16_t*)(pBuffer + 16);
-		fields->isVlanTag = true;
-	}
-
-	// IP packets
-	if (ntohs(fields->eth_prot) == 0x0800)
-	{
-		if (fields->isVlanTag == true)	// Add 4 bytes to the offset
+	if (!fields->parsed) {
+		if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
 		{
-			memcpy(&ip_src, pBuffer + 30, 4);
-			memcpy(&ip_dst, pBuffer + 34, 4);
-			fields->ip_prot = *(uint8_t*)(pBuffer + 27);
-			} else {
-			memcpy(&ip_src, pBuffer + 26, 4);
-			memcpy(&ip_dst, pBuffer + 30, 4);
-			fields->ip_prot = *(uint8_t*)(pBuffer + 23);
+			// Not sure exactly why this happens but it causes a lot of issues
+			return -2;
 		}
-		// TCP / UDP
-		if (fields->ip_prot == 6 || fields->ip_prot == 17)
-		{
-			if (fields->isVlanTag == true)	// Add 4 bytes to the offset
-			{
-				memcpy(&tcp_src, pBuffer + 38, 2);
-				memcpy(&tcp_dst, pBuffer + 40, 2);
-				} else {
-				memcpy(&tcp_src, pBuffer + 34, 2);
-				memcpy(&tcp_dst, pBuffer + 36, 2);
-			}
-		}
+
+		packet_fields_parser(pBuffer, fields);
 	}
+
 	TRACE("Looking for match in table %d from port %d : "
 		"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X eth type %4.4X",
 		table_id, port,
 		eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5],
 		eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5],
 		ntohs(fields->eth_prot))
+
 	for (int i=0;i<iLastFlow;i++)
 	{
 		// Make sure its an active flow
@@ -436,14 +429,14 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_IPV4_SRC:
-				if (memcmp(&ip_src, oxm_value, 4) != 0)
+				if (memcmp(fields->ip_src, oxm_value, 4) != 0)
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_IPV4_SRC_W:
-				memcpy(oxm_ipv4, &ip_src, 4);
+				memcpy(oxm_ipv4, fields->ip_src, 4);
 				for (int j=0; j<4; j++)
 				{
 					oxm_ipv4[j] &= oxm_value[4+j];
@@ -455,14 +448,14 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_IPV4_DST:
-				if (memcmp(&ip_dst, oxm_value, 4) != 0)
+				if (memcmp(fields->ip_dst, oxm_value, 4) != 0)
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_IPV4_DST_W:
-				memcpy(oxm_ipv4, &ip_dst, 4);
+				memcpy(oxm_ipv4, fields->ip_dst, 4);
 				for (int j=0; j<4; j++ )
 				{
 					oxm_ipv4[j] &= oxm_value[4+j];
@@ -474,28 +467,28 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_TCP_SRC:
-				if (!(fields->ip_prot == 6 && tcp_src == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 6 && *fields->tcp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_TCP_DST:
-				if (!(fields->ip_prot == 6 && tcp_dst == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 6 && *fields->tcp_dst == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_SRC:
-				if (!(fields->ip_prot == 17 && tcp_src == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 17 && *fields->tcp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_DST:
-				if (!(fields->ip_prot == 17 && tcp_dst != *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 17 && *fields->tcp_dst != *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
@@ -504,7 +497,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_VLAN_VID:
 				if (fields->isVlanTag)
 				{
-					oxm_value16 = htons(OFPVID_PRESENT | ntohs(vlanid));
+					oxm_value16 = htons(OFPVID_PRESENT | ntohs(*fields->vlanid));
 				}else{
 					oxm_value16 = htons(OFPVID_NONE);
 				}
@@ -517,7 +510,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_VLAN_VID_W:
 				if (fields->isVlanTag)
 				{
-					oxm_value16 = htons(OFPVID_PRESENT | ntohs(vlanid));
+					oxm_value16 = htons(OFPVID_PRESENT | ntohs(*fields->vlanid));
 				}else{
 					oxm_value16 = htons(OFPVID_NONE);
 				}
