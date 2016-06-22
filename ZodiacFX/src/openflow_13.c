@@ -197,7 +197,6 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						struct oxm_header13 oxm_header;
 						uint8_t oxm_value8;
 						uint16_t oxm_value16;
-						uint32_t oxm_value32;
 						memcpy(&oxm_header, act_set_field->field,4);
 						oxm_header.oxm_field = oxm_header.oxm_field >> 1;
 						switch(oxm_header.oxm_field)
@@ -206,7 +205,6 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							case OFPXMT_OFB_VLAN_VID:
 							memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 							uint16_t vlan_vid = (oxm_value16 - 0x10);
-							uint16_t action_vlanid  = act_hdr;
 							uint16_t pcp;
 							uint16_t vlanid;
 							uint16_t vlanid_mask = htons(0x0fff);
