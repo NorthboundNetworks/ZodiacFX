@@ -99,8 +99,7 @@ void push_vlan_helper(uint16_t vid, uint8_t *p_uc_data, uint32_t *ul_size, uint1
 		*(uint16_t*)(p_uc_data + 14) = vid;
 		*packet_size += 4;
 		*ul_size = *packet_size;
-		fields->payload = p_uc_data + 4;
-		fields->isVlanTag = true;
+		packet_fields_parser(p_uc_data, fields);
 	}
 }
 
@@ -112,8 +111,7 @@ void pop_vlan_helper(uint8_t *p_uc_data, uint32_t *ul_size, uint16_t *packet_siz
 		fields->eth_prot = *(uint16_t*)(p_uc_data + 12);
 		*packet_size -= 4;
 		*ul_size = *packet_size;
-		fields->payload = p_uc_data;
-		fields->isVlanTag = false;
+		packet_fields_parser(p_uc_data, fields);
         }
 }
 

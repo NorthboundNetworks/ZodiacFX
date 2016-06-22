@@ -281,6 +281,37 @@ int flowmatch10(uint8_t *pBuffer, int port)
 	return matched_flow;
 }
 
+
+void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
+        fields->payload = pBuffer;
+        fields->eth_prot = *(uint16_t*)(fields->payload + 12);
+
+        // VLAN tagged
+        if (ntohs(fields->eth_prot) == 0x8100)
+        {
+                fields->payload += 4;
+                fields->vlanid = (uint16_t*)(fields->payload + 10);
+                fields->eth_prot = *(uint16_t*)(fields->payload + 12);
+                fields->isVlanTag = true;
+        }
+
+        // IP packets
+        if (ntohs(fields->eth_prot) == 0x0800)
+        {
+                fields->ip_src = (uint32_t*)(fields->payload + 26);
+                fields->ip_dst = (uint32_t*)(fields->payload + 30);
+                fields->ip_prot = *(uint8_t*)(fields->payload + 23);
+                // TCP / UDP
+                if (fields->ip_prot == 6 || fields->ip_prot == 17)
+                {
+                        fields->tcp_src = (uint16_t*)fields->payload + 34;
+                        fields->tcp_dst = (uint16_t*)fields->payload + 36;
+                }
+        }
+
+	fields->parsed = true;
+}
+
 /*
 *	Matches packet headers against the installed flows for OpenFlow v1.3 (0x04).
 *	Returns the flow number if it matches.
@@ -298,8 +329,9 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	uint16_t oxm_value16;
 	uint8_t oxm_ipv4[4];
 
-	fields->payload = pBuffer;
-	fields->eth_prot = *(uint16_t*)(fields->payload + 12);
+	if (!fields->parsed) {
+		packet_fields_parser(pBuffer, fields);
+	}
 
 	if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
 	{
@@ -307,34 +339,13 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 		return -2;
 	}
 
-	// VLAN tagged
-	if (ntohs(fields->eth_prot) == 0x8100)
-	{
-		fields->payload += 4;
-		fields->vlanid = (uint16_t*)(fields->payload + 10);
-		fields->eth_prot = *(uint16_t*)(fields->payload + 12);
-		fields->isVlanTag = true;
-	}
-
-	// IP packets
-	if (ntohs(fields->eth_prot) == 0x0800)
-	{
-		fields->ip_src = (uint32_t*)(fields->payload + 26);
-		fields->ip_dst = (uint32_t*)(fields->payload + 30);
-		fields->ip_prot = *(uint8_t*)(fields->payload + 23);
-		// TCP / UDP
-		if (fields->ip_prot == 6 || fields->ip_prot == 17)
-		{
-			fields->tcp_src = (uint16_t*)fields->payload + 34;
-			fields->tcp_dst = (uint16_t*)fields->payload + 36;
-		}
-	}
 	TRACE("Looking for match in table %d from port %d : "
 		"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X eth type %4.4X",
 		table_id, port,
 		eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5],
 		eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5],
 		ntohs(fields->eth_prot))
+
 	for (int i=0;i<iLastFlow;i++)
 	{
 		// Make sure its an active flow
