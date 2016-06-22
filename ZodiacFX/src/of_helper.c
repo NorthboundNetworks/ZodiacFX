@@ -295,11 +295,6 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	int priority_match = -1;
 	uint8_t *eth_dst = pBuffer;
 	uint8_t *eth_src = pBuffer + 6;
-	uint16_t vlanid = 0;
-	uint32_t ip_src;
-	uint32_t ip_dst;
-	uint16_t tcp_src;
-	uint16_t tcp_dst;
 	uint16_t oxm_value16;
 	uint8_t oxm_ipv4[4];
 
@@ -316,7 +311,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	if (ntohs(fields->eth_prot) == 0x8100)
 	{
 		fields->payload += 4;
-		memcpy(&vlanid, fields->payload + 10, 2);
+		fields->vlanid = (uint16_t*)(fields->payload + 10);
 		fields->eth_prot = *(uint16_t*)(fields->payload + 12);
 		fields->isVlanTag = true;
 	}
@@ -324,14 +319,14 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	// IP packets
 	if (ntohs(fields->eth_prot) == 0x0800)
 	{
-		memcpy(&ip_src, fields->payload + 26, 4);
-		memcpy(&ip_dst, fields->payload + 30, 4);
+		fields->ip_src = (uint32_t*)(fields->payload + 26);
+		fields->ip_dst = (uint32_t*)(fields->payload + 30);
 		fields->ip_prot = *(uint8_t*)(fields->payload + 23);
 		// TCP / UDP
 		if (fields->ip_prot == 6 || fields->ip_prot == 17)
 		{
-			memcpy(&tcp_src, fields->payload + 34, 2);
-			memcpy(&tcp_dst, fields->payload + 36, 2);
+			fields->tcp_src = (uint16_t*)fields->payload + 34;
+			fields->tcp_dst = (uint16_t*)fields->payload + 36;
 		}
 	}
 	TRACE("Looking for match in table %d from port %d : "
@@ -423,14 +418,14 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_IPV4_SRC:
-				if (memcmp(&ip_src, oxm_value, 4) != 0)
+				if (memcmp(fields->ip_src, oxm_value, 4) != 0)
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_IPV4_SRC_W:
-				memcpy(oxm_ipv4, &ip_src, 4);
+				memcpy(oxm_ipv4, fields->ip_src, 4);
 				for (int j=0; j<4; j++)
 				{
 					oxm_ipv4[j] &= oxm_value[4+j];
@@ -442,14 +437,14 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_IPV4_DST:
-				if (memcmp(&ip_dst, oxm_value, 4) != 0)
+				if (memcmp(fields->ip_dst, oxm_value, 4) != 0)
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_IPV4_DST_W:
-				memcpy(oxm_ipv4, &ip_dst, 4);
+				memcpy(oxm_ipv4, fields->ip_dst, 4);
 				for (int j=0; j<4; j++ )
 				{
 					oxm_ipv4[j] &= oxm_value[4+j];
@@ -461,28 +456,28 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_TCP_SRC:
-				if (!(fields->ip_prot == 6 && tcp_src == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 6 && *fields->tcp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_TCP_DST:
-				if (!(fields->ip_prot == 6 && tcp_dst == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 6 && *fields->tcp_dst == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_SRC:
-				if (!(fields->ip_prot == 17 && tcp_src == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 17 && *fields->tcp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_DST:
-				if (!(fields->ip_prot == 17 && tcp_dst != *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 17 && *fields->tcp_dst != *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
@@ -491,7 +486,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_VLAN_VID:
 				if (fields->isVlanTag)
 				{
-					oxm_value16 = htons(OFPVID_PRESENT | ntohs(vlanid));
+					oxm_value16 = htons(OFPVID_PRESENT | ntohs(*fields->vlanid));
 				}else{
 					oxm_value16 = htons(OFPVID_NONE);
 				}
@@ -504,7 +499,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_VLAN_VID_W:
 				if (fields->isVlanTag)
 				{
-					oxm_value16 = htons(OFPVID_PRESENT | ntohs(vlanid));
+					oxm_value16 = htons(OFPVID_PRESENT | ntohs(*fields->vlanid));
 				}else{
 					oxm_value16 = htons(OFPVID_NONE);
 				}

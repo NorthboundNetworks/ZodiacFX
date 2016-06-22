@@ -42,6 +42,11 @@ struct packet_fields
 	uint8_t *payload;
         uint16_t eth_prot;
         uint8_t ip_prot;
+        uint16_t *vlanid;
+        uint32_t *ip_src;
+        uint32_t *ip_dst;
+        uint16_t *tcp_src;
+        uint16_t *tcp_dst;
 };
 
 int flowmatch10(uint8_t *pBuffer, int port);
