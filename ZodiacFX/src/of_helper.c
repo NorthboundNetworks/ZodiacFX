@@ -303,7 +303,6 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	uint16_t tcp_src;
 	uint16_t tcp_dst;
 	bool vtag = false;
-	int match_size;
 	uint8_t oxm_value8;
 	uint16_t oxm_value16;
 	uint32_t oxm_value32;
