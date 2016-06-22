@@ -305,7 +305,8 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	uint8_t oxm_ipv4[4];
 	uint16_t oxm_ipv6[8];
 
-	fields->eth_prot = *(uint16_t*)(pBuffer + 12);
+	fields->payload = pBuffer;
+	fields->eth_prot = *(uint16_t*)(fields->payload + 12);
 
 	if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
 	{
@@ -316,35 +317,23 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	// VLAN tagged
 	if (ntohs(fields->eth_prot) == 0x8100)
 	{
-		memcpy(&vlanid, pBuffer + 14, 2);
-		fields->eth_prot = *(uint16_t*)(pBuffer + 16);
+		fields->payload += 4;
+		memcpy(&vlanid, fields->payload + 10, 2);
+		fields->eth_prot = *(uint16_t*)(fields->payload + 12);
 		fields->isVlanTag = true;
 	}
 
 	// IP packets
 	if (ntohs(fields->eth_prot) == 0x0800)
 	{
-		if (fields->isVlanTag == true)	// Add 4 bytes to the offset
-		{
-			memcpy(&ip_src, pBuffer + 30, 4);
-			memcpy(&ip_dst, pBuffer + 34, 4);
-			fields->ip_prot = *(uint8_t*)(pBuffer + 27);
-			} else {
-			memcpy(&ip_src, pBuffer + 26, 4);
-			memcpy(&ip_dst, pBuffer + 30, 4);
-			fields->ip_prot = *(uint8_t*)(pBuffer + 23);
-		}
+		memcpy(&ip_src, fields->payload + 26, 4);
+		memcpy(&ip_dst, fields->payload + 30, 4);
+		fields->ip_prot = *(uint8_t*)(fields->payload + 23);
 		// TCP / UDP
 		if (fields->ip_prot == 6 || fields->ip_prot == 17)
 		{
-			if (fields->isVlanTag == true)	// Add 4 bytes to the offset
-			{
-				memcpy(&tcp_src, pBuffer + 38, 2);
-				memcpy(&tcp_dst, pBuffer + 40, 2);
-				} else {
-				memcpy(&tcp_src, pBuffer + 34, 2);
-				memcpy(&tcp_dst, pBuffer + 36, 2);
-			}
+			memcpy(&tcp_src, fields->payload + 34, 2);
+			memcpy(&tcp_dst, fields->payload + 36, 2);
 		}
 	}
 	TRACE("Looking for match in table %d from port %d : "

@@ -39,6 +39,7 @@ struct packet_fields
 {
         bool valid;
         bool isVlanTag;
+	uint8_t *payload;
         uint16_t eth_prot;
         uint8_t ip_prot;
 };
