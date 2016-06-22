@@ -140,8 +140,6 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			if(ofp13_oxm_inst[i] == NULL) return;
 
 			// Process Instructions
-			struct ofp13_instruction_actions *inst_actions;
-			struct ofp13_action_header *act_hdr;
 			struct ofp13_instruction *inst_ptr;
 			inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
 			int inst_size = ntohs(inst_ptr->len);
@@ -158,8 +156,8 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				int act_size = 0;
 				while (act_size < (inst_size - sizeof(struct ofp13_instruction_actions)))
 				{
-					inst_actions  = ofp13_oxm_inst[i] + act_size;
-					act_hdr = &inst_actions->actions;
+					struct ofp13_instruction_actions *inst_actions = ofp13_oxm_inst[i] + act_size;
+					struct ofp13_action_header *act_hdr = &inst_actions->actions;
 					switch (htons(act_hdr->type))
 					{
 					// Output Action
