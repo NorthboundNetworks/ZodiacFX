@@ -90,6 +90,19 @@ static inline uint64_t (htonll)(uint64_t n)
 	return HTONL(1) == 1 ? n : ((uint64_t) HTONL(n) << 32) | HTONL(n >> 32);
 }
 
+void pop_vlan_helper(uint8_t *p_uc_data, uint32_t *ul_size, uint16_t *packet_size, struct packet_fields *fields) {
+	if (fields->isVlanTag)
+	{
+		TRACE("Pop VLAN");
+		memmove(p_uc_data + 12, p_uc_data + 16, *packet_size - 16);
+		fields->eth_prot = *(uint16_t*)(p_uc_data + 12);
+		*packet_size -= 4;
+		*ul_size = *packet_size;
+		fields->payload = p_uc_data;
+		fields->isVlanTag = false;
+        }
+}
+
 void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 {
 	struct packet_fields fields;
@@ -188,15 +201,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					// Pop a VLAN tag
 					case OFPAT13_POP_VLAN:
 					{
-						if (fields.isVlanTag)
-						{
-							TRACE("Pop VLAN");
-							memmove(p_uc_data + 12, p_uc_data + 16, packet_size - 16);
-							packet_size -= 4;
-							memcpy(ul_size, &packet_size, 2);
-							memcpy(fields.eth_prot, p_uc_data + 12, 2);
-							fields.isVlanTag = false;
-						}
+						pop_vlan_helper(p_uc_data, ul_size, &packet_size, &fields);
 					}
 					break;
 
@@ -236,9 +241,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							{
 								if (vlan_vid == 0)	// If the packet has a tag but the action is to set it to 0 then remove it
 								{
-									memmove(p_uc_data + 12, p_uc_data + 16, packet_size - 16);
-									packet_size -= 4;
-									memcpy(ul_size, &packet_size, 2);
+									pop_vlan_helper(p_uc_data, ul_size, &packet_size, &fields);
 								} else {
 									memcpy(p_uc_data + 14, &vlanid, 2);
 								}
