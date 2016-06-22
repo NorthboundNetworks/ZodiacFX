@@ -293,8 +293,8 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 {
 	int matched_flow = -1;
 	int priority_match = -1;
-	uint8_t eth_src[6];
-	uint8_t eth_dst[6];
+	uint8_t *eth_dst = pBuffer;
+	uint8_t *eth_src = pBuffer + 6;
 	uint16_t eth_prot;
 	uint16_t vlanid = 0;
 	uint32_t ip_src;
@@ -310,8 +310,6 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	uint8_t oxm_ipv4[4];
 	uint16_t oxm_ipv6[8];
 
-	memcpy(&eth_dst, pBuffer, 6);
-	memcpy(&eth_src, pBuffer + 6, 6);
 	memcpy(&eth_prot, pBuffer + 12, 2);
 
 	if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
@@ -361,7 +359,9 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 		}
 		fields->ip_prot = ip_prot;
 	}
-	TRACE("Looking for match in table %d from port %d : %.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X", table_id, port, eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5], eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5]);
+	TRACE("Looking for match in table %d from port %d : %.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X", table_id, port,
+		eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5],
+		eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5]);
 	for (int i=0;i<iLastFlow;i++)
 	{
 		// Make sure its an active flow
@@ -391,8 +391,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 			switch(field)
 			{
 				case OXM_OF_IN_PORT:
-				memcpy(&oxm_value32, oxm_value, 4);
-				if ( port != ntohl(oxm_value32))
+				if (port != ntohl(*(uint32_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
@@ -406,7 +405,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_ETH_DST_W:
-				for( int j=0; j<6; j++ )
+				for (int j=0; j<6; j++ )
 				{
 					if (oxm_value[j] != eth_dst[j] & oxm_value[6+j]){
 						priority_match = -1;
@@ -422,7 +421,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_ETH_SRC_W:
-				for( int j=0; j<6; j++ )
+				for (int j=0; j<6; j++ )
 				{
 					if (oxm_value[j] != eth_src[j] & oxm_value[6+j]){
 						priority_match = -1;
@@ -431,8 +430,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_ETH_TYPE:
-				memcpy(&oxm_value16, oxm_value, 2);
-				if (eth_prot != oxm_value16)
+				if (eth_prot != ntohl(*(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
