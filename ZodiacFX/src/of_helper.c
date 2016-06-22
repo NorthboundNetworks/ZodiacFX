@@ -182,6 +182,7 @@ int flowmatch10(uint8_t *pBuffer, int port)
 		memcpy(&eth_prot, pBuffer + 16, 2);	// Add 4 bytes to the offset
 		vtag = true;
 	}
+
 	// IP packets
 	if (ntohs(eth_prot) == 0x0800)
 	{
@@ -288,7 +289,7 @@ int flowmatch10(uint8_t *pBuffer, int port)
 *	@param port - The port that the packet was received on.
 *
 */
-int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
+int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fields *fields)
 {
 	int matched_flow = -1;
 	int priority_match = -1;
@@ -326,6 +327,13 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 		memcpy(&eth_prot, pBuffer + 16, 2);	// Add 4 bytes to the offset
 		vtag = true;
 	}
+
+        if (!fields->valid) {
+                fields->valid = true;
+                fields->eth_prot = eth_prot;
+                fields->isVlanTag = vtag;
+        }
+
 	// IP packets
 	if (ntohs(eth_prot) == 0x0800)
 	{
@@ -351,6 +359,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 				memcpy(&tcp_dst, pBuffer + 36, 2);
 			}
 		}
+		fields->ip_prot = ip_prot;
 	}
 	TRACE("Looking for match in table %d from port %d : %.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X", table_id, port, eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5], eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5]);
 	for (int i=0;i<iLastFlow;i++)
