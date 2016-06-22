@@ -90,8 +90,22 @@ static inline uint64_t (htonll)(uint64_t n)
 	return HTONL(1) == 1 ? n : ((uint64_t) HTONL(n) << 32) | HTONL(n >> 32);
 }
 
+void push_vlan_helper(uint16_t vid, uint8_t *p_uc_data, uint32_t *ul_size, uint16_t *packet_size, struct packet_fields *fields) {
+	if (fields->isVlanTag != true) {
+		TRACE("Push VLAN %u", vid);
+		memmove(p_uc_data + 16, p_uc_data + 12, *packet_size - 12);
+		uint16_t vlantag = htons(0x8100);
+		*(uint16_t*)(p_uc_data + 12) = vlantag;
+		*(uint16_t*)(p_uc_data + 14) = vid;
+		*packet_size += 4;
+		*ul_size = *packet_size;
+		fields->payload = p_uc_data + 4;
+		fields->isVlanTag = true;
+	}
+}
+
 void pop_vlan_helper(uint8_t *p_uc_data, uint32_t *ul_size, uint16_t *packet_size, struct packet_fields *fields) {
-	if (fields->isVlanTag)
+	if (fields->isVlanTag == true)
 	{
 		TRACE("Pop VLAN");
 		memmove(p_uc_data + 12, p_uc_data + 16, *packet_size - 16);
@@ -108,7 +122,6 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	struct packet_fields fields;
 	uint8_t table_id = 0;
 	uint16_t packet_size = (uint16_t)*ul_size;
-	uint16_t vlantag = htons(0x8100);
 	bzero(&fields, sizeof(fields));
 
 	while(1)	// Loop through until we get a miss
@@ -184,17 +197,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					// Push a VLAN tag
 					case OFPAT13_PUSH_VLAN:
 					{
-						if (fields.isVlanTag != true)
-						{
-							TRACE("Push VLAN");
-							memmove(p_uc_data + 16, p_uc_data + 12, packet_size - 12);
-							memcpy(p_uc_data + 12, &vlantag, 2);
-							const uint16_t empty_vid = 0;
-							memcpy(p_uc_data + 14, &empty_vid, 2);
-							packet_size += 4;
-							memcpy(ul_size, &packet_size, 2);
-							fields.isVlanTag = true;
-						}
+						push_vlan_helper(0, p_uc_data, ul_size, &packet_size, &fields);
 					}
 					break;
 
@@ -243,18 +246,13 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 								{
 									pop_vlan_helper(p_uc_data, ul_size, &packet_size, &fields);
 								} else {
+									TRACE("Set VID %u", vlan_vid);
 									memcpy(p_uc_data + 14, &vlanid, 2);
 								}
 							} else {
 								if (vlan_vid > 0)		// Only add the tag if the VLAN ID is greater then 0
 								{
-									memmove(p_uc_data + 16, p_uc_data + 12, packet_size - 12);
-									memcpy(p_uc_data + 12, &vlantag,2);
-									memcpy(p_uc_data + 14, &vlanid, 2);
-									packet_size += 4;
-									memcpy(ul_size, &packet_size, 2);
-									TRACE("Set VLAN ID to %d", vlanid);
-									fields.isVlanTag = true;
+									push_vlan_helper(vlan_vid, p_uc_data, ul_size, &packet_size, &fields);
 								}
 							}
 							break;
