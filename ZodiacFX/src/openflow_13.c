@@ -419,7 +419,10 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			{
 				struct ofp13_instruction_goto_table *inst_goto_ptr;
 				inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
-				if(table_id == inst_goto_ptr->table_id) return;		// Stop a goto instruction that goes to the same table as it would create a loop
+				if (table_id >= inst_goto_ptr->table_id) {
+					TRACE("goto loop detected, aborting (cannot goto to earlier/same table");
+					return;
+				}
 				table_id = inst_goto_ptr->table_id;
 				TRACE("Goto table %d", table_id);
 			}
