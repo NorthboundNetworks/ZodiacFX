@@ -296,7 +296,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 
 							// Set Source TCP port
 							case OFPXMT_OFB_TCP_SRC:
-							if (fields.eth_prot == 0x08)	// Only set the field if it is an IPv4 packet
+							if (fields.eth_prot == 0x08 && fields.ip_prot == 6)	// Only set the field if it is an IPv4 TCP packet
 							{
 								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 								memcpy(fields.payload + 34, &oxm_value16, 2);
@@ -306,7 +306,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 
 							// Set Destination TCP port
 							case OFPXMT_OFB_TCP_DST:
-							if (fields.eth_prot == 0x08)	// Only set the field if it is an IPv4 packet
+							if (fields.eth_prot == 0x08 && fields.ip_prot == 6)	// Only set the field if it is an IPv4 TCP packet
 							{
 								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 								memcpy(fields.payload + 36, &oxm_value16, 2);
@@ -316,7 +316,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 
 							// Set Source UDP port
 							case OFPXMT_OFB_UDP_SRC:
-							if (fields.eth_prot == 0x08)	// Only set the field if it is an IPv4 packet
+							if (fields.eth_prot == 0x08 && fields.ip_prot == 17)	// Only set the field if it is an IPv4 UDP packet
 							{
 								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 								memcpy(fields.payload + 34, &oxm_value16, 2);
@@ -326,7 +326,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 
 							// Set Destination UDP port
 							case OFPXMT_OFB_UDP_DST:
-							if (fields.eth_prot == 0x08)	// Only set the field if it is an IPv4 packet
+							if (fields.eth_prot == 0x08 && fields.ip_prot == 17)	// Only set the field if it is an IPv4 UDP packet
 							{
 								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 								memcpy(fields.payload + 36, &oxm_value16, 2);
@@ -366,7 +366,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 
 							// Set ARP source IP address
 							case OFPXMT_OFB_ARP_SPA:
-							if (fields.eth_prot == 0x0608)	// Only set the field if it is an IPv4 packet
+							if (fields.eth_prot == 0x0608)	// Only set the field if it is an ARP packet
 							{
 								memcpy(fields.payload + 28, act_set_field->field + sizeof(struct oxm_header13), 4);
 								recalculate_ip_checksum = true;
@@ -375,7 +375,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 
 							// Set ARP target IP address
 							case OFPXMT_OFB_ARP_TPA:
-							if (fields.eth_prot == 0x0608)	// Only set the field if it is an IPv4 packet
+							if (fields.eth_prot == 0x0608)	// Only set the field if it is an ARP packet
 							{
 								memcpy(fields.payload + 38, act_set_field->field + sizeof(struct oxm_header13), 4);
 								recalculate_ip_checksum = true;
@@ -384,7 +384,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 
 							// Set ARP source hardware address
 							case OFPXMT_OFB_ARP_SHA:
-							if (fields.eth_prot == 0x0608)	// Only set the field if it is an IPv4 packet
+							if (fields.eth_prot == 0x0608)	// Only set the field if it is an ARP packet
 							{
 								memcpy(fields.payload + 22, act_set_field->field + sizeof(struct oxm_header13), 6);
 								recalculate_ip_checksum = true;
@@ -393,7 +393,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 
 							// Set ARP target hardware address
 							case OFPXMT_OFB_ARP_THA:
-							if (fields.eth_prot == 0x0608)	// Only set the field if it is an IPv4 packet
+							if (fields.eth_prot == 0x0608)	// Only set the field if it is an ARP packet
 							{
 								memcpy(fields.payload + 32, act_set_field->field + sizeof(struct oxm_header13), 6);
 								recalculate_ip_checksum = true;
