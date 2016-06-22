@@ -330,13 +330,13 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	uint8_t oxm_ipv4[4];
 
 	if (!fields->parsed) {
-		packet_fields_parser(pBuffer, fields);
-	}
+		if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
+		{
+			// Not sure exactly why this happens but it causes a lot of issues
+			return -2;
+		}
 
-	if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
-	{
-		// Not sure exactly why this happens but it causes a lot of issues
-		return -2;
+		packet_fields_parser(pBuffer, fields);
 	}
 
 	TRACE("Looking for match in table %d from port %d : "
