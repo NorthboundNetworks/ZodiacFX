@@ -474,28 +474,28 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_TCP_SRC:
-				if (tcp_src != *(uint16_t*)oxm_value)
+				if (!(fields->ip_prot == 6 && tcp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_TCP_DST:
-				if (tcp_dst != *(uint16_t*)oxm_value)
+				if (!(fields->ip_prot == 6 && tcp_dst == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_SRC:
-				if (tcp_src != *(uint16_t*)oxm_value)
+				if (!(fields->ip_prot == 17 && tcp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_DST:
-				if (tcp_dst != *(uint16_t*)oxm_value)
+				if (!(fields->ip_prot == 17 && tcp_dst != *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
