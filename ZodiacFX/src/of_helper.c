@@ -300,10 +300,8 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	uint32_t ip_dst;
 	uint16_t tcp_src;
 	uint16_t tcp_dst;
-	uint8_t oxm_value8;
 	uint16_t oxm_value16;
 	uint8_t oxm_ipv4[4];
-	uint16_t oxm_ipv6[8];
 
 	fields->payload = pBuffer;
 	fields->eth_prot = *(uint16_t*)(fields->payload + 12);
