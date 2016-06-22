@@ -302,13 +302,13 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	uint8_t ip_prot;
 	uint16_t tcp_src;
 	uint16_t tcp_dst;
-	bool vtag = false;
 	uint8_t oxm_value8;
 	uint16_t oxm_value16;
 	uint8_t oxm_ipv4[4];
 	uint16_t oxm_ipv6[8];
 
 	memcpy(&eth_prot, pBuffer + 12, 2);
+	fields->eth_prot = eth_prot;
 
 	if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
 	{
@@ -321,19 +321,13 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	{
 		memcpy(&vlanid, pBuffer + 14, 2);
 		memcpy(&eth_prot, pBuffer + 16, 2);	// Add 4 bytes to the offset
-		vtag = true;
+		fields->isVlanTag = true;
 	}
-
-        if (!fields->valid) {
-                fields->valid = true;
-                fields->eth_prot = eth_prot;
-                fields->isVlanTag = vtag;
-        }
 
 	// IP packets
 	if (ntohs(eth_prot) == 0x0800)
 	{
-		if (vtag == true)	// Add 4 bytes to the offset
+		if (fields->isVlanTag == true)	// Add 4 bytes to the offset
 		{
 			memcpy(&ip_src, pBuffer + 30, 4);
 			memcpy(&ip_dst, pBuffer + 34, 4);
@@ -346,7 +340,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 		// TCP / UDP
 		if (ip_prot == 6 || ip_prot == 17)
 		{
-			if (vtag == true)	// Add 4 bytes to the offset
+			if (fields->isVlanTag == true)	// Add 4 bytes to the offset
 			{
 				memcpy(&tcp_src, pBuffer + 38, 2);
 				memcpy(&tcp_dst, pBuffer + 40, 2);
@@ -511,7 +505,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_VLAN_VID:
-				if (vtag)
+				if (fields->isVlanTag)
 				{
 					oxm_value16 = htons(OFPVID_PRESENT | ntohs(vlanid));
 				}else{
@@ -524,7 +518,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_VLAN_VID_W:
-				if (vtag)
+				if (fields->isVlanTag)
 				{
 					oxm_value16 = htons(OFPVID_PRESENT | ntohs(vlanid));
 				}else{
