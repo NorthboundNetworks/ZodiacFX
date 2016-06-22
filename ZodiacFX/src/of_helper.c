@@ -298,7 +298,6 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	uint16_t vlanid = 0;
 	uint32_t ip_src;
 	uint32_t ip_dst;
-	uint8_t ip_prot;
 	uint16_t tcp_src;
 	uint16_t tcp_dst;
 	uint8_t oxm_value8;
@@ -329,14 +328,14 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 		{
 			memcpy(&ip_src, pBuffer + 30, 4);
 			memcpy(&ip_dst, pBuffer + 34, 4);
-			memcpy(&ip_prot, pBuffer + 27, 1);
+			fields->ip_prot = *(uint8_t*)(pBuffer + 27);
 			} else {
 			memcpy(&ip_src, pBuffer + 26, 4);
 			memcpy(&ip_dst, pBuffer + 30, 4);
-			memcpy(&ip_prot, pBuffer + 23, 1);
+			fields->ip_prot = *(uint8_t*)(pBuffer + 23);
 		}
 		// TCP / UDP
-		if (ip_prot == 6 || ip_prot == 17)
+		if (fields->ip_prot == 6 || fields->ip_prot == 17)
 		{
 			if (fields->isVlanTag == true)	// Add 4 bytes to the offset
 			{
@@ -347,7 +346,6 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				memcpy(&tcp_dst, pBuffer + 36, 2);
 			}
 		}
-		fields->ip_prot = ip_prot;
 	}
 	TRACE("Looking for match in table %d from port %d : %.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X", table_id, port,
 		eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5],
@@ -428,7 +426,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_IP_PROTO:
-				if (ip_prot != *oxm_value)
+				if (fields->ip_prot != *oxm_value)
 				{
 					priority_match = -1;
 				}

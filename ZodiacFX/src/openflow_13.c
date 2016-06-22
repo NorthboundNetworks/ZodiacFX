@@ -38,7 +38,6 @@
 #include "lwip/tcp.h"
 
 #define ALIGN8(x) (x+7)/8*8
-#define VLAN_OFFSET(x, isVlanTag)	(isVlanTag ? (x + 4) : x)
 #define	RECALCULATE_IP_CHECKSUM	set_ip_checksum(p_uc_data, packet_size, VLAN_OFFSET(14, fields.isVlanTag))
 
 // Global variables

@@ -33,6 +33,8 @@
 
 #include "openflow.h"
 
+#define VLAN_OFFSET(x, isVlanTag)       (isVlanTag ? (x + 4) : x)
+
 struct packet_fields
 {
         bool valid;
