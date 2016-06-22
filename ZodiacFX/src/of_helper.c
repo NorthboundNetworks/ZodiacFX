@@ -182,6 +182,7 @@ int flowmatch10(uint8_t *pBuffer, int port)
 		memcpy(&eth_prot, pBuffer + 16, 2);	// Add 4 bytes to the offset
 		vtag = true;
 	}
+
 	// IP packets
 	if (ntohs(eth_prot) == 0x0800)
 	{
@@ -288,30 +289,23 @@ int flowmatch10(uint8_t *pBuffer, int port)
 *	@param port - The port that the packet was received on.
 *
 */
-int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
+int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fields *fields)
 {
 	int matched_flow = -1;
 	int priority_match = -1;
-	uint8_t eth_src[6];
-	uint8_t eth_dst[6];
-	uint16_t eth_prot;
+	uint8_t *eth_dst = pBuffer;
+	uint8_t *eth_src = pBuffer + 6;
 	uint16_t vlanid = 0;
 	uint32_t ip_src;
 	uint32_t ip_dst;
-	uint8_t ip_prot;
 	uint16_t tcp_src;
 	uint16_t tcp_dst;
-	bool vtag = false;
-	int match_size;
 	uint8_t oxm_value8;
 	uint16_t oxm_value16;
-	uint32_t oxm_value32;
 	uint8_t oxm_ipv4[4];
 	uint16_t oxm_ipv6[8];
 
-	memcpy(&eth_dst, pBuffer, 6);
-	memcpy(&eth_src, pBuffer + 6, 6);
-	memcpy(&eth_prot, pBuffer + 12, 2);
+	fields->eth_prot = *(uint16_t*)(pBuffer + 12);
 
 	if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
 	{
@@ -320,29 +314,30 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 	}
 
 	// VLAN tagged
-	if (ntohs(eth_prot) == 0x8100)
+	if (ntohs(fields->eth_prot) == 0x8100)
 	{
 		memcpy(&vlanid, pBuffer + 14, 2);
-		memcpy(&eth_prot, pBuffer + 16, 2);	// Add 4 bytes to the offset
-		vtag = true;
+		fields->eth_prot = *(uint16_t*)(pBuffer + 16);
+		fields->isVlanTag = true;
 	}
+
 	// IP packets
-	if (ntohs(eth_prot) == 0x0800)
+	if (ntohs(fields->eth_prot) == 0x0800)
 	{
-		if (vtag == true)	// Add 4 bytes to the offset
+		if (fields->isVlanTag == true)	// Add 4 bytes to the offset
 		{
 			memcpy(&ip_src, pBuffer + 30, 4);
 			memcpy(&ip_dst, pBuffer + 34, 4);
-			memcpy(&ip_prot, pBuffer + 27, 1);
+			fields->ip_prot = *(uint8_t*)(pBuffer + 27);
 			} else {
 			memcpy(&ip_src, pBuffer + 26, 4);
 			memcpy(&ip_dst, pBuffer + 30, 4);
-			memcpy(&ip_prot, pBuffer + 23, 1);
+			fields->ip_prot = *(uint8_t*)(pBuffer + 23);
 		}
 		// TCP / UDP
-		if (ip_prot == 6 || ip_prot == 17)
+		if (fields->ip_prot == 6 || fields->ip_prot == 17)
 		{
-			if (vtag == true)	// Add 4 bytes to the offset
+			if (fields->isVlanTag == true)	// Add 4 bytes to the offset
 			{
 				memcpy(&tcp_src, pBuffer + 38, 2);
 				memcpy(&tcp_dst, pBuffer + 40, 2);
@@ -352,7 +347,12 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 			}
 		}
 	}
-	TRACE("Looking for match in table %d from port %d : %.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X", table_id, port, eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5], eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5]);
+	TRACE("Looking for match in table %d from port %d : "
+		"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X eth type %4.4X",
+		table_id, port,
+		eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5],
+		eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5],
+		ntohs(fields->eth_prot))
 	for (int i=0;i<iLastFlow;i++)
 	{
 		// Make sure its an active flow
@@ -364,7 +364,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 		// If the flow has no match fields (full wild) it is an automatic match
 		if (ofp13_oxm_match[i] ==  NULL)
 		{
-			if ( matched_flow == -1 || (ntohs(flow_match13[i].priority) > ntohs(flow_match13[matched_flow].priority)) ) matched_flow = i;
+			if (matched_flow == -1 || (ntohs(flow_match13[i].priority) > ntohs(flow_match13[matched_flow].priority))) matched_flow = i;
 			continue;
 		}
 		// If this flow is of a lower priority then one that is already match then there is no point going through a check.
@@ -373,7 +373,8 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 		// Main flow match loop
 		priority_match = 0;
 		uint8_t *hdr = ofp13_oxm_match[i];
-		while (hdr < ofp13_oxm_match[i] + ntohs(flow_match13[i].match.length) - 4 )
+		uint8_t *tail = hdr + ntohs(flow_match13[i].match.length) - 4;
+		while (hdr < tail)
 		{
 			uint32_t field = ntohl(*(uint32_t*)(hdr));
 			uint8_t *oxm_value = hdr + 4;
@@ -382,8 +383,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 			switch(field)
 			{
 				case OXM_OF_IN_PORT:
-				memcpy(&oxm_value32, oxm_value, 4);
-				if ( port != ntohl(oxm_value32))
+				if (port != ntohl(*(uint32_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
@@ -397,7 +397,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 				break;
 
 				case OXM_OF_ETH_DST_W:
-				for( int j=0; j<6; j++ )
+				for (int j=0; j<6; j++ )
 				{
 					if (oxm_value[j] != eth_dst[j] & oxm_value[6+j]){
 						priority_match = -1;
@@ -413,7 +413,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 				break;
 
 				case OXM_OF_ETH_SRC_W:
-				for( int j=0; j<6; j++ )
+				for (int j=0; j<6; j++ )
 				{
 					if (oxm_value[j] != eth_src[j] & oxm_value[6+j]){
 						priority_match = -1;
@@ -422,23 +422,21 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 				break;
 
 				case OXM_OF_ETH_TYPE:
-				memcpy(&oxm_value16, oxm_value, 2);
-				if (eth_prot != oxm_value16)
+				if (fields->eth_prot != *(uint16_t*)oxm_value)
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_IP_PROTO:
-				if (ip_prot != *oxm_value)
+				if (fields->ip_prot != *oxm_value)
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_IPV4_SRC:
-				memcpy(oxm_ipv4, &ip_src, 4);
-				if (memcmp(oxm_ipv4, oxm_value, 4) != 0)
+				if (memcmp(&ip_src, oxm_value, 4) != 0)
 				{
 					priority_match = -1;
 				}
@@ -457,8 +455,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 				break;
 
 				case OXM_OF_IPV4_DST:
-				memcpy(oxm_ipv4, &ip_dst, 4);
-				if (memcmp(oxm_ipv4, oxm_value, 4) != 0)
+				if (memcmp(&ip_dst, oxm_value, 4) != 0)
 				{
 					priority_match = -1;
 				}
@@ -477,39 +474,35 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 				break;
 
 				case OXM_OF_TCP_SRC:
-				memcpy(&oxm_value16, oxm_value, 2);
-				if (tcp_src != oxm_value16)
+				if (!(fields->ip_prot == 6 && tcp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_TCP_DST:
-				memcpy(&oxm_value16, oxm_value, 2);
-				if (tcp_dst != oxm_value16)
+				if (!(fields->ip_prot == 6 && tcp_dst == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_SRC:
-				memcpy(&oxm_value16, oxm_value, 2);
-				if (tcp_src != oxm_value16)
+				if (!(fields->ip_prot == 17 && tcp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_DST:
-				memcpy(&oxm_value16, oxm_value, 2);
-				if (tcp_dst != oxm_value16)
+				if (!(fields->ip_prot == 17 && tcp_dst != *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_VLAN_VID:
-				if (vtag)
+				if (fields->isVlanTag)
 				{
 					oxm_value16 = htons(OFPVID_PRESENT | ntohs(vlanid));
 				}else{
@@ -522,7 +515,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 				break;
 
 				case OXM_OF_VLAN_VID_W:
-				if (vtag)
+				if (fields->isVlanTag)
 				{
 					oxm_value16 = htons(OFPVID_PRESENT | ntohs(vlanid));
 				}else{
@@ -534,15 +527,14 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 					priority_match = -1;
 				}
 				break;
-
 			}
 
-			if ( priority_match == -1 )
+			if (priority_match == -1)
 			{
 				break;
 			}
 		}
-		if ( priority_match != -1 )
+		if (priority_match != -1)
 		{
 			matched_flow = i;
 		}
