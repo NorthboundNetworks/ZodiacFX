@@ -123,7 +123,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
 			int inst_size = ntohs(inst_ptr->len);
 
-			if(inst_size == 0 || inst_size > 64)
+			if (inst_size == 0 || inst_size > 64)
 			{
 				remove_flow13(i);
 				return;
@@ -136,8 +136,10 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				{
 					inst_actions  = ofp13_oxm_inst[i] + act_size;
 					act_hdr = &inst_actions->actions;
+					switch (htons(act_hdr->type))
+					{
 					// Output Action
-					if (htons(act_hdr->type) == OFPAT13_OUTPUT)
+					case OFPAT13_OUTPUT:
 					{
 						struct ofp13_action_output *act_output = act_hdr;
 						if (htonl(act_output->port) < OFPP13_MAX && htonl(act_output->port) != port)
@@ -164,33 +166,42 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							gmac_write(p_uc_data, packet_size, outport);
 						}
 					}
+					break;
 
 					// Push a VLAN tag
-					if (htons(act_hdr->type) == OFPAT13_PUSH_VLAN && fields.isVlanTag != true)
+					case OFPAT13_PUSH_VLAN:
 					{
-						TRACE("Push VLAN");
-						memmove(p_uc_data + 16, p_uc_data + 12, packet_size - 12);
-						memcpy(p_uc_data + 12, &vlantag, 2);
-						const uint16_t empty_vid = 0;
-						memcpy(p_uc_data + 14, &empty_vid, 2);
-						packet_size += 4;
-						memcpy(ul_size, &packet_size, 2);
-						fields.isVlanTag = true;
+						if (fields.isVlanTag != true)
+						{
+							TRACE("Push VLAN");
+							memmove(p_uc_data + 16, p_uc_data + 12, packet_size - 12);
+							memcpy(p_uc_data + 12, &vlantag, 2);
+							const uint16_t empty_vid = 0;
+							memcpy(p_uc_data + 14, &empty_vid, 2);
+							packet_size += 4;
+							memcpy(ul_size, &packet_size, 2);
+							fields.isVlanTag = true;
+						}
 					}
+					break;
 
 					// Pop a VLAN tag
-					if (htons(act_hdr->type) == OFPAT13_POP_VLAN && fields.isVlanTag == true)
+					case OFPAT13_POP_VLAN:
 					{
-						TRACE("Pop VLAN");
-						memmove(p_uc_data + 12, p_uc_data + 16, packet_size - 16);
-						packet_size -= 4;
-						memcpy(ul_size, &packet_size, 2);
-						memcpy(fields.eth_prot, p_uc_data + 12, 2);
-						fields.isVlanTag = false;
+						if (fields.isVlanTag)
+						{
+							TRACE("Pop VLAN");
+							memmove(p_uc_data + 12, p_uc_data + 16, packet_size - 16);
+							packet_size -= 4;
+							memcpy(ul_size, &packet_size, 2);
+							memcpy(fields.eth_prot, p_uc_data + 12, 2);
+							fields.isVlanTag = false;
+						}
 					}
+					break;
 
 					// Set Field Action
-					if (htons(act_hdr->type) == OFPAT13_SET_FIELD)
+					case OFPAT13_SET_FIELD:
 					{
 						struct ofp13_action_set_field *act_set_field = act_hdr;
 						struct oxm_header13 oxm_header;
@@ -389,7 +400,8 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 								RECALCULATE_IP_CHECKSUM;
 							}
 							break;
-						};
+						}
+					}
 					}
 					act_size += htons(act_hdr->len);
 				}
