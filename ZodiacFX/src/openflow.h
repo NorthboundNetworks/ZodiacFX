@@ -66,14 +66,6 @@ struct oxm_header13
 	uint8_t oxm_len;
 };
 
-struct packet_fields
-{
-        bool valid;
-        bool isVlanTag;
-        uint16_t eth_prot;
-        uint8_t ip_prot;
-};
-
 void task_openflow(void);
 void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
 void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);

@@ -33,6 +33,14 @@
 
 #include "openflow.h"
 
+struct packet_fields
+{
+        bool valid;
+        bool isVlanTag;
+        uint16_t eth_prot;
+        uint8_t ip_prot;
+};
+
 int flowmatch10(uint8_t *pBuffer, int port);
 int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fields *fields);
 int field_match10(struct ofp_match *match_a, struct ofp_match *match_b);
