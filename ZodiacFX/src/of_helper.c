@@ -295,7 +295,6 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	int priority_match = -1;
 	uint8_t *eth_dst = pBuffer;
 	uint8_t *eth_src = pBuffer + 6;
-	uint16_t eth_prot;
 	uint16_t vlanid = 0;
 	uint32_t ip_src;
 	uint32_t ip_dst;
@@ -307,8 +306,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	uint8_t oxm_ipv4[4];
 	uint16_t oxm_ipv6[8];
 
-	memcpy(&eth_prot, pBuffer + 12, 2);
-	fields->eth_prot = eth_prot;
+	fields->eth_prot = *(uint16_t*)(pBuffer + 12);
 
 	if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
 	{
@@ -317,15 +315,15 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	}
 
 	// VLAN tagged
-	if (ntohs(eth_prot) == 0x8100)
+	if (ntohs(fields->eth_prot) == 0x8100)
 	{
 		memcpy(&vlanid, pBuffer + 14, 2);
-		memcpy(&eth_prot, pBuffer + 16, 2);	// Add 4 bytes to the offset
+		fields->eth_prot = *(uint16_t*)(pBuffer + 16);
 		fields->isVlanTag = true;
 	}
 
 	// IP packets
-	if (ntohs(eth_prot) == 0x0800)
+	if (ntohs(fields->eth_prot) == 0x0800)
 	{
 		if (fields->isVlanTag == true)	// Add 4 bytes to the offset
 		{
@@ -423,7 +421,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_ETH_TYPE:
-				if (eth_prot != ntohl(*(uint16_t*)oxm_value))
+				if (fields->eth_prot != ntohl(*(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
