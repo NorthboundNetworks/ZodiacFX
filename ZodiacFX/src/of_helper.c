@@ -372,7 +372,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 		// If the flow has no match fields (full wild) it is an automatic match
 		if (ofp13_oxm_match[i] ==  NULL)
 		{
-			if ( matched_flow == -1 || (ntohs(flow_match13[i].priority) > ntohs(flow_match13[matched_flow].priority)) ) matched_flow = i;
+			if (matched_flow == -1 || (ntohs(flow_match13[i].priority) > ntohs(flow_match13[matched_flow].priority))) matched_flow = i;
 			continue;
 		}
 		// If this flow is of a lower priority then one that is already match then there is no point going through a check.
@@ -381,7 +381,8 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 		// Main flow match loop
 		priority_match = 0;
 		uint8_t *hdr = ofp13_oxm_match[i];
-		while (hdr < ofp13_oxm_match[i] + ntohs(flow_match13[i].match.length) - 4 )
+		uint8_t *tail = hdr + ntohs(flow_match13[i].match.length) - 4;
+		while (hdr < tail)
 		{
 			uint32_t field = ntohl(*(uint32_t*)(hdr));
 			uint8_t *oxm_value = hdr + 4;
@@ -543,12 +544,12 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 
 			}
 
-			if ( priority_match == -1 )
+			if (priority_match == -1)
 			{
 				break;
 			}
 		}
-		if ( priority_match != -1 )
+		if (priority_match != -1)
 		{
 			matched_flow = i;
 		}
