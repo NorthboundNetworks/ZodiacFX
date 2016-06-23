@@ -1133,47 +1133,46 @@ void flow_delete13(struct ofp_header *msg)
 			{
 				continue;
 			}
-
-			if (ptr_fm->out_group != OFPG13_ANY)
+		}
+		if (ptr_fm->out_group != OFPG13_ANY)
+		{
+			bool out_group_match = false;
+			int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
+			int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+			struct ofp13_instruction *inst;
+			for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
 			{
-				bool out_group_match = false;
-				int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
-				int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
-				struct ofp13_instruction *inst;
-				for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
+				if(inst->type == OFPIT13_APPLY_ACTIONS || inst->type == OFPIT13_WRITE_ACTIONS)
 				{
-					if(inst->type == OFPIT13_APPLY_ACTIONS || inst->type == OFPIT13_WRITE_ACTIONS)
+					struct ofp13_instruction_actions *ia = inst;
+					struct ofp13_action_header *action;
+					for(action=ia->actions; action<inst+inst->len; action+=action->len)
 					{
-						struct ofp13_instruction_actions *ia = inst;
-						struct ofp13_action_header *action;
-						for(action=ia->actions; action<inst+inst->len; action+=action->len)
+						if(action->type==OFPAT13_GROUP)
 						{
-							if(action->type==OFPAT13_GROUP)
+							struct ofp13_action_group *group = action;
+							if (group->group_id == ptr_fm->out_group)
 							{
-								struct ofp13_action_group *group = action;
-								if (group->group_id == ptr_fm->out_group)
-								{
-									out_group_match = true;
-								}
+								out_group_match = true;
 							}
 						}
 					}
-					if(out_group_match==false)
-					{
-						continue;
-					}
-
-					if(field_match13(ofp13_oxm_match[q], ntohs(flow_match13[q].match.length)-4, ptr_fm->match.oxm_fields, ntohs(ptr_fm->match.length)-4) == 0)
-					{
-						continue;
-					}
-
-					if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
-					TRACE("Flow %d removed", q+1);
-					// Remove the flow entry
-					remove_flow13(q);
-					q--;
 				}
+				if(out_group_match==false)
+				{
+					continue;
+				}
+
+				if(field_match13(ofp13_oxm_match[q], ntohs(flow_match13[q].match.length)-4, ptr_fm->match.oxm_fields, ntohs(ptr_fm->match.length)-4) == 0)
+				{
+					continue;
+				}
+
+				if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
+				TRACE("Flow %d removed", q+1);
+				// Remove the flow entry
+				remove_flow13(q);
+				q--;
 			}
 		}
 	}
