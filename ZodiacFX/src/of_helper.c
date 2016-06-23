@@ -797,126 +797,131 @@ static uint32_t match_prereq(uint8_t *oxm, int length)
 */
 int field_match13(uint8_t *oxm_a, int len_a, uint8_t *oxm_b, int len_b)
 {
+	if (len_a == 0) {
+		return 1;
+	}
 	uint32_t prereq_a = match_prereq(oxm_a, len_a);
 	if (prereq_a & PREREQ_INVALID != 0){
 		return 0;
 	}
-	uint8_t *bhdr = oxm_b;
-	while(bhdr < oxm_b + len_b){
+	uint8_t *ahdr = oxm_a;
+	while (ahdr < oxm_a + len_a){
+		uint32_t afield = *(uint32_t*)(ahdr);
+		uint8_t *bhdr = oxm_b;
 		uint32_t bfield = *(uint32_t*)(bhdr);
-		uint8_t *ahdr = oxm_a;
-		while(ahdr < oxm_a + len_a){
-			uint32_t afield = *(uint32_t*)(ahdr);
-			if(bfield == afield) {
-				if(OXM_HASMASK(bfield)){
-					int length = OXM_LENGTH(bfield)/2;
-					if(OXM_HASMASK(afield)){
-						for(int i=0; i<length; i++){
-							if (~ahdr[4+length+i] & bhdr[4+length+i] != 0){
-								return 0;
-							}
-						}
-					}
-					for(int i=0; i<length; i++){
-						if (ahdr[4+i] & bhdr[4+length+i] != bhdr[4+i]){
+		while (afield != bfield && bhdr < oxm_b + len_b)
+		{
+			bhdr += 4 + OXM_LENGTH(bfield);
+			bfield = *(uint32_t*)(bhdr);
+		}
+		if (afield != bfield)
+		{
+			return 0;
+		}
+		switch(bfield){
+			uint16_t eth_type;
+			case OXM_OF_ETH_TYPE:
+				eth_type = ntohs(*(uint16_t*)(bhdr+4));
+				switch (eth_type){
+					case 0x0800:
+						if (prereq_a & (PREREQ_ARP | PREREQ_MPLS | PREREQ_PBB) != 0){
 							return 0;
 						}
-					}
-					break;
-				}else if (memcmp(ahdr+4, bhdr+4, OXM_LENGTH(bfield))==0){
-					break;
-				}else{
-					return 0;
+						if (prereq_a & PREREQ_ETH_TYPE_MASK == PREREQ_IPV6){
+							return 0;
+						}
+						break;
+					case 0x86dd:
+						if (prereq_a & (PREREQ_ARP | PREREQ_MPLS | PREREQ_PBB) != 0){
+							return 0;
+						}
+						if (prereq_a & PREREQ_ETH_TYPE_MASK == PREREQ_IPV4){
+							return 0;
+						}
+						break;
+					case 0x0806:
+						if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_ARP != 0) {
+							return 0;
+						}
+						break;
+					case 0x8847:
+					case 0x8848:
+						if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_MPLS != 0) {
+							return 0;
+						}
+						break;
+					case 0x88e7:
+						if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_PBB != 0) {
+							return 0;
+						}
+						break;
 				}
-			}
-			switch(bfield){
-				uint16_t eth_type;
-				case OXM_OF_ETH_TYPE:
-					eth_type = ntohs(*(uint16_t*)(bhdr+4));
-					switch (eth_type){
-						case 0x0800:
-							if (prereq_a & (PREREQ_ARP | PREREQ_MPLS | PREREQ_PBB) != 0){
-								return 0;
-							}
-							if (prereq_a & PREREQ_ETH_TYPE_MASK == PREREQ_IPV6){
-								return 0;
-							}
-							break;
-						case 0x86dd:
-							if (prereq_a & (PREREQ_ARP | PREREQ_MPLS | PREREQ_PBB) != 0){
-								return 0;
-							}
-							if (prereq_a & PREREQ_ETH_TYPE_MASK == PREREQ_IPV4){
-								return 0;
-							}
-							break;
-						case 0x0806:
-							if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_ARP != 0) {
-								return 0;
-							}
-							break;
-						case 0x8847:
-						case 0x8848:
-							if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_MPLS != 0) {
-								return 0;
-							}
-							break;
-						case 0x88e7:
-							if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_PBB != 0) {
-								return 0;
-							}
-							break;
-					}
-					break;
-				case OXM_OF_IP_PROTO:
-					switch(bhdr[4]){
-						case 1:
-							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_ICMPV4 != 0) {
-								return 0;
-							}
-							break;
-						case 6:
-							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_TCP != 0) {
-								return 0;
-							}
-							break;
-						case 17:
-							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_UDP != 0){
-								return 0;
-							}
-							break;
-						case 58:
-							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_ICMPV6 != 0){
-								return 0;
-							}
-							break;
-						case 132:
-							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_SCTP != 0){
-								return 0;
-							}
-							break;
-					}
-					break;
-				case OXM_OF_ICMPV6_TYPE:
-					switch(bhdr[4]){
-						case 135:
-							if (prereq_a & PREREQ_ND_MASK & ~PREREQ_ND_SLL != 0){
-								return 0;
-							}
-							break;
-						case 136:
-							if (prereq_a & PREREQ_ND_MASK & ~PREREQ_ND_TLL != 0){
-								return 0;
-							}
-							break;
-					}
-					break;
-			}
-			ahdr += 4 + OXM_LENGTH(afield);
+				break;
+			case OXM_OF_IP_PROTO:
+				switch(bhdr[4]){
+					case 1:
+						if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_ICMPV4 != 0) {
+							return 0;
+						}
+						break;
+					case 6:
+						if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_TCP != 0) {
+							return 0;
+						}
+						break;
+					case 17:
+						if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_UDP != 0){
+							return 0;
+						}
+						break;
+					case 58:
+						if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_ICMPV6 != 0){
+							return 0;
+						}
+						break;
+					case 132:
+						if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_SCTP != 0){
+							return 0;
+						}
+						break;
+				}
+				break;
+			case OXM_OF_ICMPV6_TYPE:
+				switch(bhdr[4]){
+					case 135:
+						if (prereq_a & PREREQ_ND_MASK & ~PREREQ_ND_SLL != 0){
+							return 0;
+						}
+						break;
+					case 136:
+						if (prereq_a & PREREQ_ND_MASK & ~PREREQ_ND_TLL != 0){
+							return 0;
+						}
+						break;
+				}
+				break;
 		}
-		bhdr += 4 + OXM_LENGTH(bfield);
+		if(OXM_HASMASK(bfield)){
+                        int length = OXM_LENGTH(bfield)/2;
+                        if(OXM_HASMASK(afield)){
+                                for(int i=0; i<length; i++){
+                                        if (~ahdr[4+length+i] & bhdr[4+length+i] != 0){
+                                                return 0;
+                                        }
+                                }
+                                for(int i=0; i<length; i++){
+                                        if (ahdr[4+i] & bhdr[4+length+i] != bhdr[4+i]){
+                                                return 0;
+                                        }
+                                }
+			} else if (memcmp(ahdr+4, bhdr+4, OXM_LENGTH(bfield)) != 0){
+                                return 0;
+                        }
+		} else if (memcmp(ahdr+4, bhdr+4, OXM_LENGTH(bfield)) != 0){
+			return 0;
+		}
+		ahdr += 4 + OXM_LENGTH(afield);
 	}
-
 	uint32_t prereq_b = match_prereq(oxm_b, len_b);
 	if (prereq_b & PREREQ_INVALID != 0){
 		return 0;
