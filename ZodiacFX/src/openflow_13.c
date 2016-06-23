@@ -1163,18 +1163,18 @@ void flow_delete13(struct ofp_header *msg)
 			{
 				continue;
 			}
-
-			if(field_match13(ofp13_oxm_match[q], ntohs(flow_match13[q].match.length)-4, ptr_fm->match.oxm_fields, ntohs(ptr_fm->match.length)-4) == 0)
-			{
-				continue;
-			}
-
-			if (ptr_fm->flags & OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
-			TRACE("Flow %d removed", q+1);
-			// Remove the flow entry
-			remove_flow13(q);
-			q--;
 		}
+
+		if(field_match13(ptr_fm->match.oxm_fields, ntohs(ptr_fm->match.length)-4, ofp13_oxm_match[q], ntohs(flow_match13[q].match.length)-4) == 0)
+		{
+			continue;
+		}
+
+		if (ptr_fm->flags & OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
+		TRACE("Flow %d removed", q+1);
+		// Remove the flow entry
+		remove_flow13(q);
+		q--;
 	}
 	return;
 }
