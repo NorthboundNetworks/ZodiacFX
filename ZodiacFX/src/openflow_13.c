@@ -242,7 +242,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 								{
 									pop_vlan_helper(p_uc_data, ul_size, &packet_size, &fields);
 								} else {
-									TRACE("Set VID %u", vlan_vid);
+									TRACE("Set VID %u", ntohs(vlan_vid));
 									memcpy(p_uc_data + 14, &vlanid, 2);
 								}
 							} else {
