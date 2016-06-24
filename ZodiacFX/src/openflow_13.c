@@ -175,7 +175,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				{
 					struct ofp13_action_push *push = (struct ofp13_action_push*)act_hdr;
 					memmove(p_uc_data+16, p_uc_data+12, packet_size-12);
-					memcpy(p_uc_data+12, push->ethertype, 2);
+					memcpy(p_uc_data+12, &push->ethertype, 2);
 					if(fields.isVlanTag){
 						memcpy(p_uc_data+14, p_uc_data+18, 2);
 					}else{
