@@ -563,6 +563,153 @@ this will display the changes. Press the button marked ‘Create pull
 request’, check the summary, and press the button marked ‘Create pull
 request’ once again.
 
+### Memory map
+
+Without some notion of the memory map it can seem as if embedded
+applications are overflowing with magic addresses.
+
+The memory maps of peripheral device registers are complex, the result
+of having a wide range of models but wanting the same peripheral to
+appear at the same addresses throughout the range. For any one model —
+with a only a selected subset of the peripherals — the memory map of
+the I/O registers is essentially random.
+
+These tables summarise the memory map of the ATSAM4E8C used in the
+Zodiac FX. For a complete reference see Chapter 7 of *SAM4E
+series. SMART ARM-based Flash MCU. Datasheet*
+([PDF](http://www.atmel.com/Images/Atmel-11157-32-bit-Cortex-M4-Microcontroller-SAM4E16-SAM4E8_Datasheet.pdf)).
+
+The system-on-chip at the heart of the Zodiac FX is Atmel part
+ATSAM4E8C-AU. This SAM4E8C belongs to the SAM4E range, in the SAM4
+family. The SAM4E CPU uses ARM Ltd's ‘Cortex-M4’ design. The ATSAM4E8C
+system-on-chip contains 512KB flash and 128KB of static RAM. It has a
+fast ethernet controller which uses Synopsys DesignWare's ‘GMAC’
+design.
+
+This is the memory map, shorn of reserved areas:
+
+| Lowest address | Highest address | Occupied by                 |
+|----------------|-----------------|-----------------------------|
+|      0000 0000 |       003f ffff | Boot memory                 |
+|      0040 0000 |       41ff ffff | Internal flash (512KB)      |
+|      0080 0000 |       00bf ffff | Internal ROM                |
+|      2000 0000 |       2007 ffff | Internal static RAM (128KB) |
+|      4000 0000 |       400c 7fff | Perpherals                  |
+|      400e 0000 |       400e 1900 | System controller           |
+|      e000 0000 |       ffff ffff | System                      |
+
+The internal ROM contains the SAM-BA SAM Boot Assistant (and flash
+updater) starting at address 0000 0000. It also contains
+In-Application Programming (IAP) routines, and Fast Flash Programming
+Interface (FFPI) for programs to implement their on flash updating.
+
+For easy reference, the base addresses of sets of registers used by
+the subsystems are shown:
+
+| Lowest address | Occupied by                                                      |
+|----------------|------------------------------------------------------------------|
+|      4000 0000 | `PWM` pulse width modulation controller for stepper motors       |
+|      4000 4000 | `AES` encryptor                                                  |
+|      4001 0000 | `CAN0` car area network                                          |
+|      4001 4000 | `CAN1` car area network                                          |
+|      4003 4000 | `GMAC` ethernet controller                                       |
+|      4006 0000 | `SMC` static memory controller (system)                          |
+|      4006 0600 | `UART1` universal asychronous receiver/transmitter (system)      |
+|      4008 0000 | `HSMCI` multimedia card                                          |
+|      4008 4000 | `UDP` UDP device port                                            |
+|      4008 8000 | `SPI` serial peripheral interface                                |
+|      4009 0000 | `TC0` timer/counter                                              |
+|      4009 0040 | `TC1` timer/counter                                              |
+|      4009 0080 | `TC2` timer/counter                                              |
+|      4009 4000 | `TC3` timer/counter                                              |
+|      4009 4040 | `TC4` timer/counter                                              |
+|      4009 4080 | `TC5` timer/counter                                              |
+|      4009 8000 | `TC6` timer/counter                                              |
+|      4009 8040 | `TC7` timer/counter                                              |
+|      4009 8080 | `TC8` timer/counter                                              |
+|      400a 0000 | `USART0` universal synchronous/asynchronous receiver/transmitter |
+|      400a 4000 | `USART1` universal synchronous/asynchronous receiver/transmitter |
+|      400a 8000 | `TW0` two-wire interface                                         |
+|      400a c000 | `TW1` two-wire interface                                         |
+|      400b 0000 | `AFEC0` analog front-end controller                              |
+|      400b 4000 | `AFEC1` analog front-end controller                              |
+|      400b 8000 | `DACC` digital-to-analog converter controller                    |
+|      400b c000 | `ACC` analog comparator controller                               |
+|      400c 0000 | `DMAC` DMA controller (system)                                   |
+|      400c 4000 | `CMCC` Cortex-M cache controller (system)                        |
+|      400e 0200 | `MATRIX` bus matrix (system)                                     |
+|      400e 0400 | `PMC` power management controller (system)                       |
+|      400e 0600 | `UART0` universal asychronous receiver/transmitter  (system)     |
+|      400e 0740 | `CHIPID` chip identifier (system)                                |
+|      400e 0a00 | `EEFC` enhanced embedded flash controller (system)               |
+|      400e 0e00 | `PIOA` parallel I/O controller                                   |
+|      400e 1000 | `PIOB` parallel I/O controller                                   |
+|      400e 1200 | `PIOC` parallel I/O controller                                   |
+|      400e 1400 | `PIOD` parallel I/O controller                                   |
+|      400e 1600 | `PIOE` parallel I/O controller                                   |
+|      400e 1800 | `RSTC` reset controller (system)                                 |
+|      400e 1810 | `SUPC` [power] supply controller (system)                        |
+|      400e 1830 | `RTT` real-time timer (system)                                   |
+|      400e 1850 | `WDT` watchdog timer (system)                                    |
+|      400e 1860 | `RTC` real-time clock (system)                                   |
+|      400e 1890 | `GPBR` general purpose backup registers (system)                 |
+|      400e 1900 | `RSWDT` reinforced safety watchdog timer (system)                |
+
+### Boot sequence and ROM monitor
+
+When a Cortex-M CPU boots it examines a vector table at address
+0000 0000. This contains the initial Stack Pointer (which
+conventionally points to the highest address in RAM) and a Reset
+Vector, which should point to a program in ROM to run. That program
+can create a new Vector Table and then write the new table's address
+to the Vector Table Offset Register.
+
+The SAM4 contains a bit register `GPNVM1`. If thus is set then the
+flash memory is mapped at 0000 0000, as well as remaining mapped at
+0040 0000. If `GPNVM1` is not set then ROM is mapped at 0000 0000 as
+well as remaining mapped at 0080 0000.
+
+The idea is that GPNVM1 is set after flash is successfully
+programmed. GPNVM1 is automatically unset whenever a flash erase
+occurs.
+
+The double-mapping is neat: the vector table starts at 0000 0000 but
+the vector contents point into ROM or flash addresses without any need
+to alter the typical linkage.
+
+A SAM4 with the typical factory ROM contains a small monitor called
+SAM-BA. This can be accessed from UART0 (which is not connected on the
+Zodiac FX) or from the USB port. The monitor can read and write bytes
+to RAM, change the Program Counter, and transfer data using the Xmodem
+serial protocol. This is sufficient capablity to write a file to
+flash. The SAM-BA utility for Windows and Linux is a client to the
+SAM-BA ROM monitor which automates this capability.
+
+The Zodiac FX's ‘Erase’ jumper is connected to the `ERASE` pin of the
+SAM4. When this is asserted the SAM4 will erase all flash (setting it
+to zero) and clear all the `GPNVM` bits to zero. After removing the
+jumper and reseting, the Zodiac FX will start from ROM, run the SAM-BA
+monitor and be in a condition for a new flash image to be downloaded.
+
+When the Zodiac FX does boot from flash `startup_sam4e.c` contains the
+establishment of the vector table: the C structure `exception_table`
+is placed in linker section `.vectors` and the `flash.ld` linkage
+script ensures that `.vectors` is the first section. The Reset Vector
+in `exception_table` points to the function `Reset_Handler()`, so this
+the first code run when the Zodiac FX starts. After initialising the
+system, relocating relocatable sections, zeroising zeroed sections,
+and setting a new Vector Table, it initialises the C library by
+calling `__libc_init_array()` and then calls the `main()` routine of
+the Zodiac FX code.
+
+Zodiac FX's `main()` function calls the `…_init()` functions of the
+used Atmel Software Framework components. Some of these initialise
+board components, others prepare software data structures. The saved
+configuration is loaded, and the addresses from that used to
+initialise the Lightweight IP library, start networking and configure
+interfaces. The main loop then starts: one thread processing the
+command line interface and another thread processing OpenFlow
+commands.
 
 ## Copyright
 

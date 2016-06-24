@@ -9,7 +9,7 @@
 /*
  * This file is part of the Zodiac FX firmware.
  * Copyright (c) 2016 Northbound Networks.
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -22,7 +22,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  * Author: Paul Zanna <paul@northboundnetworks.com>
  *
  */
@@ -30,6 +30,7 @@
 #include <asf.h>
 #include <string.h>
 #include <stdlib.h>
+#include "trace.h"
 #include "config_zodiac.h"
 #include "openflow.h"
 #include "of_helper.h"
@@ -55,7 +56,6 @@ extern struct flows_counter flow_counters[MAX_FLOWS];
 extern int totaltime;
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
 extern struct table_counter table_counters[MAX_TABLES];
-extern bool trace;
 
 // Local Variables
 uint8_t timer_alt;
@@ -73,7 +73,7 @@ static inline uint64_t (htonll)(uint64_t n)
 *	@param *p_uc_data - Pointer to the buffer that contains the packet to be updated.
 *	@param packet_size - The size of the packet.
 *	@param iphdr_offset - IP Header offset.
-*	
+*
 */
 void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
 {
@@ -81,7 +81,7 @@ void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
 	struct tcp_hdr *tcphdr;
 	struct udp_hdr *udphdr;
 	int payload_offset;
-	
+
 	iphdr = p_uc_data + iphdr_offset;
 	payload_offset = iphdr_offset + IPH_HL(iphdr)*4;
 	struct pbuf *p = pbuf_alloc(PBUF_RAW, packet_size - payload_offset, PBUF_ROM);
@@ -105,7 +105,7 @@ void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
 		packet_size - payload_offset);
 	}
 	pbuf_free(p);
-	
+
 	IPH_CHKSUM_SET(iphdr, 0);
 	IPH_CHKSUM_SET(iphdr, inet_chksum(iphdr, IPH_HL(iphdr)*4));
 }
@@ -119,7 +119,7 @@ void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
 void nnOF_timer(void)
 {
 	totaltime ++; // Because this is called every 500ms totaltime is actually 2 x the real time
-	// Round robin the timer events so they don't have such a big impact on switching	
+	// Round robin the timer events so they don't have such a big impact on switching
 	if (timer_alt == 0){
 		update_port_stats();
 		timer_alt = 1;
@@ -128,7 +128,7 @@ void nnOF_timer(void)
 		timer_alt = 2;
 	} else if (timer_alt == 2){
 		flow_timeouts();
-		timer_alt = 0;	
+		timer_alt = 0;
 	}
 	return;
 }
@@ -139,13 +139,13 @@ void nnOF_timer(void)
 *
 *	@param *pBuffer - pointer to the buffer that contains the packet to be macthed.
 *	@param port - The port that the packet was received on.
-*	
+*
 */
 int flowmatch10(uint8_t *pBuffer, int port)
 {
 	int matched_flow = -1;
 	int i;
-	
+
 	uint8_t eth_src[6];
 	uint8_t eth_dst[6];
 	uint16_t eth_prot;
@@ -164,7 +164,7 @@ int flowmatch10(uint8_t *pBuffer, int port)
 	bool vlan_match;
 	bool vtag = false;
 	uint64_t zero_field = 0;
-	
+
 	memcpy(&eth_dst, pBuffer, 6);
 	memcpy(&eth_src, pBuffer + 6, 6);
 	memcpy(&eth_prot, pBuffer + 12, 2);
@@ -182,6 +182,7 @@ int flowmatch10(uint8_t *pBuffer, int port)
 		memcpy(&eth_prot, pBuffer + 16, 2);	// Add 4 bytes to the offset
 		vtag = true;
 	}
+
 	// IP packets
 	if (ntohs(eth_prot) == 0x0800)
 	{
@@ -228,10 +229,10 @@ int flowmatch10(uint8_t *pBuffer, int port)
 		{
 			continue;
 		}
-		
-		// If this flow is of a lower priority then one that is already match then there is no point going through a check.	
+
+		// If this flow is of a lower priority then one that is already match then there is no point going through a check.
 		if(ntohs(flow_match[i].priority) <= ntohs(flow_match[matched_flow].priority)) continue;
-		
+
 		port_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_IN_PORT) || ntohs(flow_match[i].match.in_port) == port || flow_match[i].match.in_port == 0;
 		eth_src_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_DL_SRC) || memcmp(eth_src, flow_match[i].match.dl_src, 6) == 0 || memcmp(flow_match[i].match.dl_src, zero_field, 6) == 0;
 		eth_dst_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_DL_DST) || memcmp(eth_dst, flow_match[i].match.dl_dst, 6) == 0 || memcmp(flow_match[i].match.dl_dst, zero_field, 6) == 0;
@@ -241,7 +242,7 @@ int flowmatch10(uint8_t *pBuffer, int port)
 		uint8_t ip_src_wild = ntohl(flow_match[i].match.wildcards) >> 8; // OFPFW_NW_SRC_SHIFT
 		ip_src_wild &= 63; // OFPFW_NW_SRC_BITS
 		ip_src_match = (ip_src_wild >= 32) || (ntohs(eth_prot) == 0x0800 && (ntohl(ip_src) >> ip_src_wild) == (ntohl(flow_match[i].match.nw_src) >> ip_src_wild)) || flow_match[i].match.nw_src == 0;
-		
+
 		uint8_t ip_dst_wild = ntohl(flow_match[i].match.wildcards) >> 14;
 		ip_dst_wild &= 63;
 		ip_dst_match = (ip_dst_wild >= 32) || (ntohs(eth_prot) == 0x0800 && (ntohl(ip_dst) >> ip_dst_wild) == (ntohl(flow_match[i].match.nw_dst) >> ip_dst_wild)) || flow_match[i].match.nw_dst == 0;
@@ -265,7 +266,7 @@ int flowmatch10(uint8_t *pBuffer, int port)
 			ip_dst_match = true;
 			tcp_src_match = true;
 			tcp_dst_match = true;
-		}		
+		}
 		if (port_match && eth_src_match && eth_dst_match && eth_prot_match && ip_src_match && ip_dst_match && ip_prot_match && tcp_src_match && tcp_dst_match && vlan_match)
 		{
 			if (matched_flow > -1)
@@ -280,110 +281,102 @@ int flowmatch10(uint8_t *pBuffer, int port)
 	return matched_flow;
 }
 
+
+void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
+        fields->payload = pBuffer;
+        fields->eth_prot = *(uint16_t*)(fields->payload + 12);
+
+        // VLAN tagged
+        if (ntohs(fields->eth_prot) == 0x8100)
+        {
+                fields->payload += 4;
+                fields->vlanid = (uint16_t*)(fields->payload + 10);
+                fields->eth_prot = *(uint16_t*)(fields->payload + 12);
+                fields->isVlanTag = true;
+        }
+
+        // IP packets
+        if (ntohs(fields->eth_prot) == 0x0800)
+        {
+                fields->ip_src = (uint32_t*)(fields->payload + 26);
+                fields->ip_dst = (uint32_t*)(fields->payload + 30);
+                fields->ip_prot = *(uint8_t*)(fields->payload + 23);
+                // TCP / UDP
+                if (fields->ip_prot == 6 || fields->ip_prot == 17)
+                {
+                        fields->tcp_src = (uint16_t*)fields->payload + 34;
+                        fields->tcp_dst = (uint16_t*)fields->payload + 36;
+                }
+        }
+
+	fields->parsed = true;
+}
+
 /*
 *	Matches packet headers against the installed flows for OpenFlow v1.3 (0x04).
 *	Returns the flow number if it matches.
 *
 *	@param *pBuffer - pointer to the buffer that contains the packet to be macthed.
 *	@param port - The port that the packet was received on.
-*	
+*
 */
-int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
+int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fields *fields)
 {
 	int matched_flow = -1;
 	int priority_match = -1;
-	uint8_t eth_src[6];
-	uint8_t eth_dst[6];
-	uint16_t eth_prot;
-	uint16_t vlanid = 0;
-	uint32_t ip_src;
-	uint32_t ip_dst;
-	uint8_t ip_prot;
-	uint16_t tcp_src;
-	uint16_t tcp_dst;
-	bool vtag = false;
-	int match_size;
-	uint8_t oxm_value8;
+	uint8_t *eth_dst = pBuffer;
+	uint8_t *eth_src = pBuffer + 6;
 	uint16_t oxm_value16;
-	uint32_t oxm_value32;
 	uint8_t oxm_ipv4[4];
-	uint16_t oxm_ipv6[8];
-						
-	memcpy(&eth_dst, pBuffer, 6);
-	memcpy(&eth_src, pBuffer + 6, 6);
-	memcpy(&eth_prot, pBuffer + 12, 2);
 
-	if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
-	{
-		// Not sure exactly why this happens but it causes a lot of issues
-		return -2;
+	if (!fields->parsed) {
+		if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
+		{
+			// Not sure exactly why this happens but it causes a lot of issues
+			return -2;
+		}
+
+		packet_fields_parser(pBuffer, fields);
 	}
 
-	// VLAN tagged
-	if (ntohs(eth_prot) == 0x8100)
-	{
-		memcpy(&vlanid, pBuffer + 14, 2);
-		memcpy(&eth_prot, pBuffer + 16, 2);	// Add 4 bytes to the offset
-		vtag = true;
-	}
-	// IP packets
-	if (ntohs(eth_prot) == 0x0800)
-	{
-		if (vtag == true)	// Add 4 bytes to the offset
-		{
-			memcpy(&ip_src, pBuffer + 30, 4);
-			memcpy(&ip_dst, pBuffer + 34, 4);
-			memcpy(&ip_prot, pBuffer + 27, 1);
-			} else {
-			memcpy(&ip_src, pBuffer + 26, 4);
-			memcpy(&ip_dst, pBuffer + 30, 4);
-			memcpy(&ip_prot, pBuffer + 23, 1);
-		}
-		// TCP / UDP
-		if (ip_prot == 6 || ip_prot == 17)
-		{
-			if (vtag == true)	// Add 4 bytes to the offset
-			{
-				memcpy(&tcp_src, pBuffer + 38, 2);
-				memcpy(&tcp_dst, pBuffer + 40, 2);
-				} else {
-				memcpy(&tcp_src, pBuffer + 34, 2);
-				memcpy(&tcp_dst, pBuffer + 36, 2);
-			}
-		}
-	}
-	if (trace == true) printf("Looking for match in table %d from port %d : %.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", table_id, port, eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5], eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5]);
+	TRACE("Looking for match in table %d from port %d : "
+		"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X eth type %4.4X",
+		table_id, port,
+		eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5],
+		eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5],
+		ntohs(fields->eth_prot))
+
 	for (int i=0;i<iLastFlow;i++)
 	{
 		// Make sure its an active flow
 		if (flow_counters[i].active == false) continue;
-		
+
 		// If the flow is not in the requested table then fail
 		if (table_id != flow_match13[i].table_id) continue;
-					
-		// If the flow has no match fields (full wild) it is an automatic match	
+
+		// If the flow has no match fields (full wild) it is an automatic match
 		if (ofp13_oxm_match[i] ==  NULL)
 		{
-			if ( matched_flow == -1 || (ntohs(flow_match13[i].priority) > ntohs(flow_match13[matched_flow].priority)) ) matched_flow = i;
+			if (matched_flow == -1 || (ntohs(flow_match13[i].priority) > ntohs(flow_match13[matched_flow].priority))) matched_flow = i;
 			continue;
 		}
 		// If this flow is of a lower priority then one that is already match then there is no point going through a check.
 		if (matched_flow > -1 && (ntohs(flow_match13[matched_flow].priority) >= ntohs(flow_match13[i].priority))) continue;
-		
+
 		// Main flow match loop
 		priority_match = 0;
 		uint8_t *hdr = ofp13_oxm_match[i];
-		while (hdr < ofp13_oxm_match[i] + ntohs(flow_match13[i].match.length) - 4 )
+		uint8_t *tail = hdr + ntohs(flow_match13[i].match.length) - 4;
+		while (hdr < tail)
 		{
 			uint32_t field = ntohl(*(uint32_t*)(hdr));
 			uint8_t *oxm_value = hdr + 4;
 			hdr += 4 + OXM_LENGTH(field);
-			
+
 			switch(field)
 			{
 				case OXM_OF_IN_PORT:
-				memcpy(&oxm_value32, oxm_value, 4);
-				if ( port != ntohl(oxm_value32))
+				if (port != ntohl(*(uint32_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
@@ -395,9 +388,9 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 					priority_match = -1;
 				}
 				break;
-				
+
 				case OXM_OF_ETH_DST_W:
-				for( int j=0; j<6; j++ )
+				for (int j=0; j<6; j++ )
 				{
 					if (oxm_value[j] != eth_dst[j] & oxm_value[6+j]){
 						priority_match = -1;
@@ -413,7 +406,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 				break;
 
 				case OXM_OF_ETH_SRC_W:
-				for( int j=0; j<6; j++ )
+				for (int j=0; j<6; j++ )
 				{
 					if (oxm_value[j] != eth_src[j] & oxm_value[6+j]){
 						priority_match = -1;
@@ -422,30 +415,28 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 				break;
 
 				case OXM_OF_ETH_TYPE:
-				memcpy(&oxm_value16, oxm_value, 2);
-				if (eth_prot != oxm_value16)
-				{
-					priority_match = -1;
-				}			
-				break;
-				
-				case OXM_OF_IP_PROTO:
-				if (ip_prot != *oxm_value)
-				{
-					priority_match = -1;
-				}			
-				break;
-
-				case OXM_OF_IPV4_SRC:
-				memcpy(oxm_ipv4, &ip_src, 4);
-				if (memcmp(oxm_ipv4, oxm_value, 4) != 0)
+				if (fields->eth_prot != *(uint16_t*)oxm_value)
 				{
 					priority_match = -1;
 				}
 				break;
-				
+
+				case OXM_OF_IP_PROTO:
+				if (fields->ip_prot != *oxm_value)
+				{
+					priority_match = -1;
+				}
+				break;
+
+				case OXM_OF_IPV4_SRC:
+				if (memcmp(fields->ip_src, oxm_value, 4) != 0)
+				{
+					priority_match = -1;
+				}
+				break;
+
 				case OXM_OF_IPV4_SRC_W:
-				memcpy(oxm_ipv4, &ip_src, 4);
+				memcpy(oxm_ipv4, fields->ip_src, 4);
 				for (int j=0; j<4; j++)
 				{
 					oxm_ipv4[j] &= oxm_value[4+j];
@@ -457,15 +448,14 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 				break;
 
 				case OXM_OF_IPV4_DST:
-				memcpy(oxm_ipv4, &ip_dst, 4);
-				if (memcmp(oxm_ipv4, oxm_value, 4) != 0)
+				if (memcmp(fields->ip_dst, oxm_value, 4) != 0)
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_IPV4_DST_W:
-				memcpy(oxm_ipv4, &ip_dst, 4);
+				memcpy(oxm_ipv4, fields->ip_dst, 4);
 				for (int j=0; j<4; j++ )
 				{
 					oxm_ipv4[j] &= oxm_value[4+j];
@@ -477,41 +467,37 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 				break;
 
 				case OXM_OF_TCP_SRC:
-				memcpy(&oxm_value16, oxm_value, 2);
-				if (tcp_src != oxm_value16)
+				if (!(fields->ip_prot == 6 && *fields->tcp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_TCP_DST:
-				memcpy(&oxm_value16, oxm_value, 2);
-				if (tcp_dst != oxm_value16)
+				if (!(fields->ip_prot == 6 && *fields->tcp_dst == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_SRC:
-				memcpy(&oxm_value16, oxm_value, 2);
-				if (tcp_src != oxm_value16)
+				if (!(fields->ip_prot == 17 && *fields->tcp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_DST:
-				memcpy(&oxm_value16, oxm_value, 2);
-				if (tcp_dst != oxm_value16)
+				if (!(fields->ip_prot == 17 && *fields->tcp_dst != *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
-										
+
 				case OXM_OF_VLAN_VID:
-				if (vtag)
+				if (fields->isVlanTag)
 				{
-					oxm_value16 = htons(OFPVID_PRESENT | ntohs(vlanid));
+					oxm_value16 = htons(OFPVID_PRESENT | ntohs(*fields->vlanid));
 				}else{
 					oxm_value16 = htons(OFPVID_NONE);
 				}
@@ -519,12 +505,12 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 				{
 					priority_match = -1;
 				}
-				break;			
+				break;
 
 				case OXM_OF_VLAN_VID_W:
-				if (vtag)
+				if (fields->isVlanTag)
 				{
-					oxm_value16 = htons(OFPVID_PRESENT | ntohs(vlanid));
+					oxm_value16 = htons(OFPVID_PRESENT | ntohs(*fields->vlanid));
 				}else{
 					oxm_value16 = htons(OFPVID_NONE);
 				}
@@ -534,15 +520,14 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 					priority_match = -1;
 				}
 				break;
-				
 			}
-			
-			if ( priority_match == -1 )
+
+			if (priority_match == -1)
 			{
 				break;
 			}
 		}
-		if ( priority_match != -1 )
+		if (priority_match != -1)
 		{
 			matched_flow = i;
 		}
@@ -556,7 +541,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id)
 *
 *	@param *match_a - pointer to the first match field
 *	@param *match_b - pointer to the second match field
-*	
+*
 */
 int field_match10(struct ofp_match *match_a, struct ofp_match *match_b)
 {
@@ -568,7 +553,7 @@ int field_match10(struct ofp_match *match_a, struct ofp_match *match_b)
 	ip_src_wild &= 63;
 	uint8_t ip_dst_wild = ntohl(match_a->wildcards) >> 14;
 	ip_dst_wild &= 63;
-	
+
 	// Check all the match fields. There is definitely a more elegant way of doing this and it's on my TODO list!
 	match += (((ntohl(match_a->nw_dst) >> ip_dst_wild) == (ntohl(match_b->nw_dst) >> ip_dst_wild)) || ip_dst_wild == 32);
 	match += (((ntohl(match_a->nw_src) >> ip_src_wild) == (ntohl(match_b->nw_src) >> ip_src_wild)) || ip_src_wild == 32);
@@ -812,126 +797,131 @@ static uint32_t match_prereq(uint8_t *oxm, int length)
 */
 int field_match13(uint8_t *oxm_a, int len_a, uint8_t *oxm_b, int len_b)
 {
+	if (len_a == 0) {
+		return 1;
+	}
 	uint32_t prereq_a = match_prereq(oxm_a, len_a);
 	if (prereq_a & PREREQ_INVALID != 0){
 		return 0;
 	}
-	uint8_t *bhdr = oxm_b;
-	while(bhdr < oxm_b + len_b){
+	uint8_t *ahdr = oxm_a;
+	while (ahdr < oxm_a + len_a){
+		uint32_t afield = *(uint32_t*)(ahdr);
+		uint8_t *bhdr = oxm_b;
 		uint32_t bfield = *(uint32_t*)(bhdr);
-		uint8_t *ahdr = oxm_a;
-		while(ahdr < oxm_a + len_a){
-			uint32_t afield = *(uint32_t*)(ahdr);
-			if(bfield == afield) {
-				if(OXM_HASMASK(bfield)){
-					int length = OXM_LENGTH(bfield)/2;
-					if(OXM_HASMASK(afield)){
-						for(int i=0; i<length; i++){
-							if (~ahdr[4+length+i] & bhdr[4+length+i] != 0){
-								return 0;
-							}
-						}
-					}
-					for(int i=0; i<length; i++){
-						if (ahdr[4+i] & bhdr[4+length+i] != bhdr[4+i]){
+		while (afield != bfield && bhdr < oxm_b + len_b)
+		{
+			bhdr += 4 + OXM_LENGTH(bfield);
+			bfield = *(uint32_t*)(bhdr);
+		}
+		if (afield != bfield)
+		{
+			return 0;
+		}
+		switch(bfield){
+			uint16_t eth_type;
+			case OXM_OF_ETH_TYPE:
+				eth_type = ntohs(*(uint16_t*)(bhdr+4));
+				switch (eth_type){
+					case 0x0800:
+						if (prereq_a & (PREREQ_ARP | PREREQ_MPLS | PREREQ_PBB) != 0){
 							return 0;
 						}
-					}
-					break;
-				}else if (memcmp(ahdr+4, bhdr+4, OXM_LENGTH(bfield))==0){
-					break;
-				}else{
-					return 0;
+						if (prereq_a & PREREQ_ETH_TYPE_MASK == PREREQ_IPV6){
+							return 0;
+						}
+						break;
+					case 0x86dd:
+						if (prereq_a & (PREREQ_ARP | PREREQ_MPLS | PREREQ_PBB) != 0){
+							return 0;
+						}
+						if (prereq_a & PREREQ_ETH_TYPE_MASK == PREREQ_IPV4){
+							return 0;
+						}
+						break;
+					case 0x0806:
+						if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_ARP != 0) {
+							return 0;
+						}
+						break;
+					case 0x8847:
+					case 0x8848:
+						if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_MPLS != 0) {
+							return 0;
+						}
+						break;
+					case 0x88e7:
+						if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_PBB != 0) {
+							return 0;
+						}
+						break;
 				}
-			}
-			switch(bfield){
-				uint16_t eth_type;
-				case OXM_OF_ETH_TYPE:
-					eth_type = ntohs(*(uint16_t*)(bhdr+4));
-					switch (eth_type){
-						case 0x0800:
-							if (prereq_a & (PREREQ_ARP | PREREQ_MPLS | PREREQ_PBB) != 0){
-								return 0;
-							}
-							if (prereq_a & PREREQ_ETH_TYPE_MASK == PREREQ_IPV6){
-								return 0;
-							}
-							break;
-						case 0x86dd:
-							if (prereq_a & (PREREQ_ARP | PREREQ_MPLS | PREREQ_PBB) != 0){
-								return 0;
-							}
-							if (prereq_a & PREREQ_ETH_TYPE_MASK == PREREQ_IPV4){
-								return 0;
-							}
-							break;
-						case 0x0806:
-							if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_ARP != 0) {
-								return 0;
-							}
-							break;
-						case 0x8847:
-						case 0x8848:
-							if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_MPLS != 0) {
-								return 0;
-							}
-							break;
-						case 0x88e7:
-							if (prereq_a & PREREQ_ETH_TYPE_MASK & ~PREREQ_PBB != 0) {
-								return 0;
-							}
-							break;
-					}
-					break;
-				case OXM_OF_IP_PROTO:
-					switch(bhdr[4]){
-						case 1:
-							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_ICMPV4 != 0) {
-								return 0;
-							}
-							break;
-						case 6:
-							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_TCP != 0) {
-								return 0;
-							}
-							break;
-						case 17:
-							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_UDP != 0){
-								return 0;
-							}
-							break;
-						case 58:
-							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_ICMPV6 != 0){
-								return 0;
-							}
-							break;
-						case 132:
-							if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_SCTP != 0){
-								return 0;
-							}
-							break;
-					}
-					break;
-				case OXM_OF_ICMPV6_TYPE:
-					switch(bhdr[4]){
-						case 135:
-							if (prereq_a & PREREQ_ND_MASK & ~PREREQ_ND_SLL != 0){
-								return 0;
-							}
-							break;
-						case 136:
-							if (prereq_a & PREREQ_ND_MASK & ~PREREQ_ND_TLL != 0){
-								return 0;
-							}
-							break;
-					}
-					break;
-			}
-			ahdr += 4 + OXM_LENGTH(afield);
+				break;
+			case OXM_OF_IP_PROTO:
+				switch(bhdr[4]){
+					case 1:
+						if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_ICMPV4 != 0) {
+							return 0;
+						}
+						break;
+					case 6:
+						if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_TCP != 0) {
+							return 0;
+						}
+						break;
+					case 17:
+						if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_UDP != 0){
+							return 0;
+						}
+						break;
+					case 58:
+						if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_ICMPV6 != 0){
+							return 0;
+						}
+						break;
+					case 132:
+						if (prereq_a & PREREQ_IP_PROTO_MASK & ~PREREQ_SCTP != 0){
+							return 0;
+						}
+						break;
+				}
+				break;
+			case OXM_OF_ICMPV6_TYPE:
+				switch(bhdr[4]){
+					case 135:
+						if (prereq_a & PREREQ_ND_MASK & ~PREREQ_ND_SLL != 0){
+							return 0;
+						}
+						break;
+					case 136:
+						if (prereq_a & PREREQ_ND_MASK & ~PREREQ_ND_TLL != 0){
+							return 0;
+						}
+						break;
+				}
+				break;
 		}
-		bhdr += 4 + OXM_LENGTH(bfield);
+		if(OXM_HASMASK(bfield)){
+                        int length = OXM_LENGTH(bfield)/2;
+                        if(OXM_HASMASK(afield)){
+                                for(int i=0; i<length; i++){
+                                        if (~ahdr[4+length+i] & bhdr[4+length+i] != 0){
+                                                return 0;
+                                        }
+                                }
+                                for(int i=0; i<length; i++){
+                                        if (ahdr[4+i] & bhdr[4+length+i] != bhdr[4+i]){
+                                                return 0;
+                                        }
+                                }
+			} else if (memcmp(ahdr+4, bhdr+4, OXM_LENGTH(bfield)) != 0){
+                                return 0;
+                        }
+		} else if (memcmp(ahdr+4, bhdr+4, OXM_LENGTH(bfield)) != 0){
+			return 0;
+		}
+		ahdr += 4 + OXM_LENGTH(afield);
 	}
-
 	uint32_t prereq_b = match_prereq(oxm_b, len_b);
 	if (prereq_b & PREREQ_INVALID != 0){
 		return 0;
@@ -967,7 +957,7 @@ int field_match13(uint8_t *oxm_a, int len_a, uint8_t *oxm_b, int len_b)
 *	Remove a flow entry from the flow table
 *
 *	@param flow_id - the idex number of the flow to remove
-*	
+*
 */
 void remove_flow13(int flow_id)
 {
@@ -1023,7 +1013,7 @@ void flow_timeouts()
 					iLastFlow --;
 					return;
 				}
-					
+
 				if (flow_match[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match[i].hard_timeout))
 				{
 					if (flow_match[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
@@ -1059,7 +1049,7 @@ void flow_timeouts()
 					remove_flow13(i);
 					return;
 				}
-					
+
 				if (flow_match13[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match13[i].hard_timeout))
 				{
 					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
@@ -1085,7 +1075,7 @@ void flow_timeouts()
 
 /*
 *	Clears the flow table
-*	
+*
 */
 void clear_flows(void)
 {
@@ -1111,7 +1101,7 @@ void clear_flows(void)
 *	@param *buffer- pointer to the buffer to store the response
 *	@param *first - first flow to include
 *	@param *last - last flow to include
-*	
+*
 */
 int flow_stats_msg10(char *buffer, int first, int last)
 {
@@ -1124,7 +1114,7 @@ int flow_stats_msg10(char *buffer, int first, int last)
 	int stats_size = 0;
 	int actionsize = 0;
 	if ((last - first) > 20) last = first + 20;	// Only show first 20 flows to conserve memory
-	
+
 	for(int k=first; k<last;k++)
 	{
 		action_hdr1 = flow_actions[k].action1;
@@ -1144,31 +1134,31 @@ int flow_stats_msg10(char *buffer, int first, int last)
 		flow_stats.byte_count = htonll(flow_counters[k].bytes);
 		actionsize = ntohs(action_hdr1->len) + ntohs(action_hdr2->len) + ntohs(action_hdr3->len) + ntohs(action_hdr4->len);
 		flow_stats.length = htons(stats_size + actionsize);
-		
+
 		memcpy(buffer + len, &flow_stats, stats_size);
 		len += stats_size;
-		
+
 		if(ntohs(action_hdr1->len) > 0)
 		{
 			memcpy(buffer + len, &flow_actions[k].action1, ntohs(action_hdr1->len));
 			stats_size += ntohs(action_hdr1->len);
 			len += ntohs(action_hdr1->len);
 		}
-		
+
 		if(ntohs(action_hdr2->len) > 0)
 		{
 			memcpy(buffer + len, &flow_actions[k].action2, ntohs(action_hdr2->len));
 			stats_size += ntohs(action_hdr2->len);
 			len += ntohs(action_hdr2->len);
 		}
-		
+
 		if(ntohs(action_hdr3->len) > 0)
 		{
 			memcpy(buffer + len, &flow_actions[k].action3, ntohs(action_hdr3->len));
 			stats_size += ntohs(action_hdr3->len);
 			len += ntohs(action_hdr3->len);
 		}
-		
+
 		if(ntohs(action_hdr4->len) > 0)
 		{
 			memcpy(buffer + len, &flow_actions[k].action4, ntohs(action_hdr4->len));
@@ -1195,8 +1185,8 @@ int flow_stats_msg13(char *buffer, int first, int last)
 	int inst_size;
 	int stats_len;
 	int len;
-	int pad = 0;	
-	
+	int pad = 0;
+
 	for(int k = first; k<last;k++)
 	{
 		// ofp_flow_stats fixed fields are the same length with ofp_flow_mod
@@ -1227,5 +1217,5 @@ int flow_stats_msg13(char *buffer, int first, int last)
 		buffer_ptr += ntohs(flow_stats.length);
 	}
 	return (buffer_ptr - buffer);
-	
+
 }

@@ -642,6 +642,9 @@
     <Compile Include="src\ASF\common\utils\membag\membag.c">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\trace.h">
+      <SubType>compile</SubType>
+    </Compile>
     <None Include="src\ASF\common\utils\membag\membag.h">
       <SubType>compile</SubType>
     </None>

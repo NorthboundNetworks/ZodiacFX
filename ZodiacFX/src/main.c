@@ -9,7 +9,7 @@
 /*
  * This file is part of the Zodiac FX firmware.
  * Copyright (c) 2016 Northbound Networks.
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -22,10 +22,10 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  * Author: Paul Zanna <paul@northboundnetworks.com>
  *
- */ 
+ */
 
 
 #include <asf.h>
@@ -62,7 +62,7 @@ uint8_t NativePortMatrix;
 
 /*
 *	Coverts the temp sensor volatge to temp
-*	
+*
 */
 static void afec_temp_sensor_end_conversion(void)
 {
@@ -102,7 +102,7 @@ void temp_init(void)
 /*
 *	This function is where bad code goes to die!
 *	Hard faults are trapped here and won't return.
-*	
+*
 */
 void HardFault_Handler(void)
 {
@@ -122,42 +122,42 @@ int main (void)
 	cCommand[0] = '\0';
 	charcount = 0;
 	struct ip_addr x_ip_addr, x_net_mask, x_gateway;
-	
+
 	sysclk_init();
 	board_init();
-		
+
 	// Set up the GPIO pin for the Mater Select jumper
 	ioport_init();
 	ioport_set_pin_dir(MASTER_SEL, IOPORT_DIR_INPUT);
-	
+
 	masterselect = ioport_get_pin_level(MASTER_SEL);	// true = slave
 	stacking_init(masterselect);	// Initialise the stacking connector as either master or slave
-	
+
 	// Set the IRQ line as either master or slave
 	if(masterselect) {
 		ioport_set_pin_dir(SPI_IRQ1, IOPORT_DIR_OUTPUT);
 	} else {
 		ioport_set_pin_dir(SPI_IRQ1, IOPORT_DIR_INPUT);
 	}
-	
+
 	irq_initialize_vectors(); // Initialize interrupt vector table support.
-	
+
 	cpu_irq_enable(); // Enable interrupts
-	
-	stdio_usb_init();	
+
+	stdio_usb_init();
 	spi_init();
 	eeprom_init();
 	temp_init();
 	membag_init();
-		
+
 	loadConfig(); // Load Config
-	
+
 	IP4_ADDR(&x_ip_addr, Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1],Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]);
 	IP4_ADDR(&x_net_mask, Zodiac_Config.netmask[0], Zodiac_Config.netmask[1],Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);
 	IP4_ADDR(&x_gateway, Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1],Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
-	
+
 	switch_init();
-	
+
 	/* Initialize lwIP. */
 	lwip_init();
 
@@ -168,13 +168,13 @@ int main (void)
 	netif_set_default(&gs_net_if);
 
 	netif_set_up(&gs_net_if);
-	
+
 	// Telnet to be included in v0.63
-	//telnet_init(); 
+	//telnet_init();
 
 	/* Initialize timer. */
 	sys_init_timing();
-	
+
 	int v,p;
 	// Create port map
 	for (v = 0;v < MAX_VLANS;v++)
@@ -186,7 +186,7 @@ int main (void)
 				if (Zodiac_Config.vlan_list[v].portmap[p] == 1) Zodiac_Config.of_port[p] = 1; // Port is assigned to an OpenFlow VLAN
 			}
 		}
-		
+
 		if (Zodiac_Config.vlan_list[v].uActive == 1 && Zodiac_Config.vlan_list[v].uVlanType == 2)
 		{
 			for(p=0;p<4;p++)
@@ -198,12 +198,12 @@ int main (void)
 				}
 			}
 		}
-	}	
-	
+	}
+
 	while(1)
 	{
 		task_switch(&gs_net_if);
-		task_command(cCommand, cCommand_last);	
+		task_command(cCommand, cCommand_last);
 		sys_check_timeouts();
 		task_openflow();
 	}

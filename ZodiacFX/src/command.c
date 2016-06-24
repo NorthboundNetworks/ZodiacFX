@@ -9,7 +9,7 @@
 /*
  * This file is part of the Zodiac FX firmware.
  * Copyright (c) 2016 Northbound Networks.
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -22,7 +22,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  * Author: Paul Zanna <paul@northboundnetworks.com>
  *
  */
@@ -71,13 +71,13 @@ extern int OF_Version;
 
 
 // Local Variables
-bool showintro = true;	
+bool showintro = true;
 uint8_t uCLIContext = 0;
 struct arp_header arp_test;
 uint8_t esc_char = 0;
 
 
-// Internal Functions	
+// Internal Functions
 void saveConfig(void);
 void command_root(char *command, char *param1, char *param2, char *param3);
 void command_config(char *command, char *param1, char *param2, char *param3);
@@ -91,7 +91,7 @@ void printhelp(void);
 *	Converts a 64bit value from host to network format
 *
 *	@param n - value to convert
-*	
+*
 */
 static inline uint64_t (htonll)(uint64_t n)
 {
@@ -99,7 +99,7 @@ static inline uint64_t (htonll)(uint64_t n)
 }
 
 /*
-*	Load the configuration settings from EEPROM 
+*	Load the configuration settings from EEPROM
 *
 */
 void loadConfig(void)
@@ -109,7 +109,7 @@ void loadConfig(void)
 }
 
 /*
-*	Save the configuration settings to EEPROM 
+*	Save the configuration settings to EEPROM
 *
 */
 void saveConfig(void)
@@ -132,18 +132,18 @@ void task_command(char *str, char *str_last)
 	char *param2;
 	char *param3;
 	char *pch;
-		
+
 	while(udi_cdc_is_rx_ready()){
 		ch = udi_cdc_getc();
-		
+
 		if (trace == true) trace = false;
-				
+
 		if (showintro == true)	// Show the intro only on the first key press
 		{
 			printintro();
 			showintro = false;
 			ch = 13;
-		}	
+		}
 		if (ch == 27) // Is this the start of an escape key sequence?
 		{
 			esc_char = 1;
@@ -160,9 +160,9 @@ void task_command(char *str, char *str_last)
 			charcount = charcount_last;
 			printf("%s",str);
 			esc_char = 0;
-			return;		
+			return;
 		}
-		
+
 		if (ch == 13)	// Enter Key
 		{
 			printf("\r\n");
@@ -177,7 +177,7 @@ void task_command(char *str, char *str_last)
 			param2 = pch;
 			pch = strtok (NULL, " ");
 			param3 = pch;
-			
+
 			if (charcount > 0)
 			{
 				switch(uCLIContext)
@@ -185,35 +185,35 @@ void task_command(char *str, char *str_last)
 					case CLI_ROOT:
 					command_root(command, param1, param2, param3);
 					break;
-					
+
 					case CLI_CONFIG:
 					command_config(command, param1, param2, param3);
 					break;
-					
+
 					case CLI_OPENFLOW:
 					command_openflow(command, param1, param2, param3);
 					break;
-					
+
 					case CLI_DEBUG:
 					command_debug(command, param1, param2, param3);
 					break;
 				};
 			}
-			
+
 			switch(uCLIContext)
 			{
 				case CLI_ROOT:
 				printf("%s# ",Zodiac_Config.device_name);
 				break;
-				
+
 				case CLI_CONFIG:
 				printf("%s(config)# ",Zodiac_Config.device_name);
 				break;
-				
+
 				case CLI_OPENFLOW:
 				printf("%s(openflow)# ",Zodiac_Config.device_name);
 				break;
-				
+
 				case CLI_DEBUG:
 				printf("%s(debug)# ",Zodiac_Config.device_name);
 				break;
@@ -222,9 +222,9 @@ void task_command(char *str, char *str_last)
 			str[0] = '\0';
 			esc_char = 0;
 			return;
-			
+
 		} else if ((ch == 127 || ch == 8) && charcount > 0)	// Backspace key
-		{	
+		{
 			charcount--;
 			char tempstr[64];
 			tempstr[0] = '\0';
@@ -233,7 +233,7 @@ void task_command(char *str, char *str_last)
 			printf("%c",ch); // echo to output
 			esc_char = 0;
 			return;
-			
+
 		} else if (charcount < 63 && ch > 31 && ch < 127 && esc_char == 0)	// Alphanumeric key
 		{
 			strncat(str,&ch,1);
@@ -242,14 +242,14 @@ void task_command(char *str, char *str_last)
 			esc_char = 0;
 			return;
 		}
-		
+
 		if (esc_char > 0) esc_char = 0; // If the escape key wasn't up arrow (ascii 65) then clear to flag
 	}
 }
 
 /*
 *	Commands within the root context
-*	
+*
 *	@param command - pointer to the command string
 *	@param param1 - pointer to parameter 1
 *	@param param2- pointer to parameter 2
@@ -262,12 +262,12 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		uCLIContext = CLI_CONFIG;
 		return;
 	}
-	
+
 	if (strcmp(command, "openflow")==0){
 		uCLIContext = CLI_OPENFLOW;
 		return;
 	}
-	
+
 	if (strcmp(command, "debug")==0){
 		uCLIContext = CLI_DEBUG;
 		return;
@@ -279,15 +279,15 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		printhelp();
 		return;
 
-	}	
-	
+	}
+
 	// Display firmware version
 	if (strcmp(command, "show") == 0 && strcmp(param1, "version") == 0)
 	{
 		printf("Firmware version: %s\r\n\n",VERSION);
 		return;
 	}
-	
+
 	// Display ports statics
 	if (strcmp(command, "show") == 0 && strcmp(param1, "ports") == 0)
 	{
@@ -301,7 +301,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 			if (port_status[i] == 0) printf(" Status: DOWN\r\n");
 			for (int x=0;x<MAX_VLANS;x++)
 			{
-				if (Zodiac_Config.vlan_list[x].portmap[i] == 1) 
+				if (Zodiac_Config.vlan_list[x].portmap[i] == 1)
 				{
 					if (Zodiac_Config.vlan_list[x].uVlanType == 0) printf(" VLAN type: Unassigned\r\n");
 					if (Zodiac_Config.vlan_list[x].uVlanType == 1) printf(" VLAN type: OpenFlow\r\n");
@@ -310,7 +310,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 				}
 			}
 			if( OF_Version == 1)
-			{			
+			{
 				printf(" RX Bytes: %" PRIu64 "\r\n", phys10_port_stats[i].rx_bytes);
 				printf(" TX Bytes: %" PRIu64 "\r\n", phys10_port_stats[i].tx_bytes);
 				if (Zodiac_Config.of_port[i] == 1) printf(" RX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].rx_packets);
@@ -329,10 +329,10 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 				printf(" TX Dropped Packets: %" PRIu64 "\r\n", phys13_port_stats[i].tx_dropped);
 				printf(" RX CRC Errors: %" PRIu64 "\r\n", phys13_port_stats[i].rx_crc_err);
 			}
-			
+
 		}
 		printf("\r\n-------------------------------------------------------------------------\r\n\n");
-		
+
 		return;
 	}
 
@@ -348,7 +348,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		printf(" Firmware Version: %s\r\n",VERSION);
 		printf(" CPU Temp: %d C\r\n", (int)ul_temp);
 		printf(" Uptime: %02d:%02d:%02d", hr, min, sec);
-		printf("\r\n-------------------------------------------------------------------------\r\n\n");	
+		printf("\r\n-------------------------------------------------------------------------\r\n\n");
 		return;
 	}
 
@@ -363,7 +363,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		Zodiac_Config.MAC_address[3] = 0x6c;
 		Zodiac_Config.MAC_address[4] = mac5;
 		Zodiac_Config.MAC_address[5] = mac6;
-		
+
 		struct zodiac_config reset_config =
 		{
 			"Zodiac_FX",		// Name
@@ -376,7 +376,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 			1					// OpenFlow enabled
 		};
 		memset(&reset_config.vlan_list, 0, sizeof(struct virtlan)* MAX_VLANS); // Clear vlan array
-	
+
 		// Config VLAN 100
 		sprintf(&reset_config.vlan_list[0].cVlanName, "Openflow");	// Vlan name
 		reset_config.vlan_list[0].portmap[0] = 1;		// Assign port 1 to this vlan
@@ -386,7 +386,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		reset_config.vlan_list[0].uVlanID = 100;	// Vlan ID is 100
 		reset_config.vlan_list[0].uVlanType = 1;	// Set as an Openflow Vlan
 		reset_config.vlan_list[0].uTagged = 0;		// Set as untagged
-	
+
 		// Config VLAN 200
 		sprintf(&reset_config.vlan_list[1].cVlanName, "Controller");
 		reset_config.vlan_list[1].portmap[3] = 1;		// Assign port 4 to this vlan
@@ -394,26 +394,26 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		reset_config.vlan_list[1].uVlanID = 200;	// Vlan ID is 200
 		reset_config.vlan_list[1].uVlanType = 2;	// Set as an Native Vlan
 		reset_config.vlan_list[1].uTagged = 0;		// Set as untagged
-	
+
 		// Set ports
 		reset_config.of_port[0] = 1;		// Port 1 is an OpenFlow port
 		reset_config.of_port[1] = 1;		// Port 2 is an Openflow port
 		reset_config.of_port[2] = 1;		// Port 3 is an OpenFlow port
 		reset_config.of_port[3] = 2;		// Port 4 is an Native port
-	
+
 		// Failstate
 		reset_config.failstate = 0;			// Failstate Secure
-	
+
 		// Force OpenFlow version
 		reset_config.of_version = 0;			// Force version disabled
-	
+
 		memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existng MAC address so it is not reset
 		memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
 		saveConfig();
 		printf("Setup complete, MAC Address = %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
 		return;
 	}
-		
+
 	// Unknown Command
 	printf("Unknown command\r\n");
 	return;
@@ -421,7 +421,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 
 /*
 *	Commands within the config context
-*	
+*
 *	@param command - pointer to the command string
 *	@param param1 - pointer to parameter 1
 *	@param param2- pointer to parameter 2
@@ -429,7 +429,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 */
 void command_config(char *command, char *param1, char *param2, char *param3)
 {
-	// Return to root context 
+	// Return to root context
 	if (strcmp(command, "exit")==0){
 		uCLIContext = CLI_ROOT;
 		return;
@@ -442,19 +442,19 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		return;
 
 	}
-		
+
 	// Load config
 	if (strcmp(command, "load")==0){
 		loadConfig();
 		return;
 	}
-	
+
 	// Save config
 	if (strcmp(command, "save")==0){
 		saveConfig();
 		return;
-	}	
-	
+	}
+
 	// Display Config
 	if (strcmp(command, "show")==0 && strcmp(param1, "config")==0){
 		printf("\r\n-------------------------------------------------------------------------\r\n");
@@ -473,7 +473,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		if (Zodiac_Config.of_version == 1) {
 			printf(" Force OpenFlow version: 1.0 (0x01)\r\n");
 		} else if (Zodiac_Config.of_version == 4){
-			printf(" Force OpenFlow version: 1.3 (0x04)\r\n");	
+			printf(" Force OpenFlow version: 1.3 (0x04)\r\n");
 		} else {
 			printf(" Force OpenFlow version: Disabled\r\n");
 		}
@@ -482,7 +482,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		printf(" Stacking Status: Unavailable\r\n");
 		printf("\r\n-------------------------------------------------------------------------\r\n\n");
 		return;
-	}	
+	}
 
 	// Display Config
 	if (strcmp(command, "show")==0 && strcmp(param1, "vlans")==0){
@@ -491,7 +491,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		printf("-------------------------------------------------------------------------\r\n");
 		for (x=0;x<MAX_VLANS;x++)
 		{
-			if (Zodiac_Config.vlan_list[x].uActive == 1) 
+			if (Zodiac_Config.vlan_list[x].uActive == 1)
 			{
 				printf("\t%d\t\t'%s'\t\t",Zodiac_Config.vlan_list[x].uVlanID, Zodiac_Config.vlan_list[x].cVlanName);
 				if (Zodiac_Config.vlan_list[x].uVlanType == 0) printf("Undefined\r\n");
@@ -530,7 +530,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		printf("No more VLANs available\r\n");
 		return;
 	}
-	
+
 	// Delete an existing VLAN
 	if (strcmp(command, "delete")==0 && strcmp(param1, "vlan")==0)
 	{
@@ -550,7 +550,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		}
 			printf("Unknown VLAN ID\r\n");
 			return;
-	}	
+	}
 
 	// Set VLAN type
 	if (strcmp(command, "set")==0 && strcmp(param1, "vlan-type")==0)
@@ -578,19 +578,19 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 			printf("Unknown VLAN ID\r\n");
 			return;
 	}
-	
+
 	// Add port to VLAN
 	if (strcmp(command, "add")==0 && strcmp(param1, "vlan-port")==0)
 	{
 		int vlanid, port, x;
 		sscanf(param2, "%d", &vlanid);
 		sscanf(param3, "%d", &port);
-		
+
 		if (port < 1 || port > 4){
 			printf("Invalid port number, ports are numbered 1 - 4\r\n");
 			return;
 		}
-		
+
 		// Check if the port is already assigned to a VLAN
 		for (x=0;x<MAX_VLANS;x++){
 			if(Zodiac_Config.vlan_list[x].portmap[port-1] == 1)
@@ -599,7 +599,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 				return;
 			}
 		}
-		
+
 		// Assign the port to the requested VLAN
 		for (x=0;x<MAX_VLANS;x++)
 		{
@@ -615,19 +615,19 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		}
 			printf("Unknown VLAN ID\r\n");
 			return;
-	}	
+	}
 
 	// Delete a port from a VLAN
 	if (strcmp(command, "delete")==0 && strcmp(param1, "vlan-port")==0)
 	{
 		int port, x;
 		sscanf(param2, "%d", &port);
-		
+
 		if (port < 1 || port > 4){
 			printf("Invalid port number, ports are numbered 1 - 4\r\n");
 			return;
 		}
-		
+
 		// Check if the port is already assigned to a VLAN
 		for (x=0;x<MAX_VLANS;x++){
 			if(Zodiac_Config.vlan_list[x].portmap[port-1] == 1)
@@ -647,7 +647,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 // Configuration commands
 //
 //
-	
+
 	// Set Device Name
 	if (strcmp(command, "set")==0 && strcmp(param1, "name")==0)
 	{
@@ -657,7 +657,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		printf("Device name set to '%s'\r\n",Zodiac_Config.device_name);
 		return;
 	}
-	
+
 	// Set MAC Address
 	if (strcmp(command, "set")==0 && strcmp(param1, "mac-address")==0)
 	{
@@ -671,9 +671,9 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		Zodiac_Config.MAC_address[0] = mac1;
 		Zodiac_Config.MAC_address[1] = mac2;
 		Zodiac_Config.MAC_address[2] = mac3;
-		Zodiac_Config.MAC_address[3] = mac4;		
-		Zodiac_Config.MAC_address[4] = mac5;		
-		Zodiac_Config.MAC_address[5] = mac6;		
+		Zodiac_Config.MAC_address[3] = mac4;
+		Zodiac_Config.MAC_address[4] = mac5;
+		Zodiac_Config.MAC_address[5] = mac6;
 		printf("MAC Address set to %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
 		return;
 	}
@@ -713,7 +713,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		printf("Netmask set to %d.%d.%d.%d\r\n" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);
 		return;
 	}
-	
+
 	// Set Gateway Address
 	if (strcmp(command, "set")==0 && strcmp(param1, "gateway")==0)
 	{
@@ -749,7 +749,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		printf("OpenFlow Server address set to %d.%d.%d.%d\r\n" , Zodiac_Config.OFIP_address[0], Zodiac_Config.OFIP_address[1], Zodiac_Config.OFIP_address[2], Zodiac_Config.OFIP_address[3]);
 		return;
 	}
-	
+
 	// Set OpenFlow Controller Port
 	if (strcmp(command, "set")==0 && strcmp(param1, "of-port")==0)
 	{
@@ -757,11 +757,11 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		printf("OpenFlow Port set to %d\r\n" , Zodiac_Config.OFPort);
 		return;
 	}
-	
+
 	// Reset the device to a basic configuration
 	if (strcmp(command, "factory")==0 && strcmp(param1, "reset")==0)
-	{	
-		struct zodiac_config reset_config = 
+	{
+		struct zodiac_config reset_config =
 		{
 			"Zodiac_FX",		// Name
 			0,0,0,0,0,0,		// MAC Address
@@ -773,37 +773,37 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 			1					// OpenFlow enabled
 		};
 		memset(&reset_config.vlan_list, 0, sizeof(struct virtlan)* MAX_VLANS); // Clear vlan array
-		
+
 		// Config VLAN 100
 		sprintf(&reset_config.vlan_list[0].cVlanName, "Openflow");	// Vlan name
 		reset_config.vlan_list[0].portmap[0] = 1;		// Assign port 1 to this vlan
-		reset_config.vlan_list[0].portmap[1] = 1;		// Assign port 2 to this vlan		
+		reset_config.vlan_list[0].portmap[1] = 1;		// Assign port 2 to this vlan
 		reset_config.vlan_list[0].portmap[2] = 1;		// Assign port 3 to this vlan
 		reset_config.vlan_list[0].uActive = 1;		// Vlan is active
 		reset_config.vlan_list[0].uVlanID = 100;	// Vlan ID is 100
 		reset_config.vlan_list[0].uVlanType = 1;	// Set as an Openflow Vlan
-		reset_config.vlan_list[0].uTagged = 0;		// Set as untagged	
-		
+		reset_config.vlan_list[0].uTagged = 0;		// Set as untagged
+
 		// Config VLAN 200
 		sprintf(&reset_config.vlan_list[1].cVlanName, "Controller");
 		reset_config.vlan_list[1].portmap[3] = 1;		// Assign port 4 to this vlan
 		reset_config.vlan_list[1].uActive = 1;		// Vlan is active
 		reset_config.vlan_list[1].uVlanID = 200;	// Vlan ID is 200
 		reset_config.vlan_list[1].uVlanType = 2;	// Set as an Native Vlan
-		reset_config.vlan_list[1].uTagged = 0;		// Set as untagged			
-		
+		reset_config.vlan_list[1].uTagged = 0;		// Set as untagged
+
 		// Set ports
 		reset_config.of_port[0] = 1;		// Port 1 is an OpenFlow port
 		reset_config.of_port[1] = 1;		// Port 2 is an Openflow port
 		reset_config.of_port[2] = 1;		// Port 3 is an OpenFlow port
 		reset_config.of_port[3] = 2;		// Port 4 is an Native port
-		
+
 		// Failstate
 		reset_config.failstate = 0;			// Failstate Secure
-		
+
 		// Force OpenFlow version
 		reset_config.of_version = 0;			// Force version disabled
-								
+
 		memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existng MAC address so it is not reset
 		memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
 		saveConfig();
@@ -845,15 +845,15 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		}
 		return;
 	}
-		
+
 	// Unknown Command
 	printf("Unknown command\r\n");
-	return;	
+	return;
 }
 
 /*
 *	Commands within the OpenFlow context
-*	
+*
 *	@param command - pointer to the command string
 *	@param param1 - pointer to parameter 1
 *	@param param2- pointer to parameter 2
@@ -873,17 +873,17 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		return;
 
 	}
-			
+
 	// Openflow Flows
 	if (strcmp(command, "show") == 0 && strcmp(param1, "flows") == 0)
 	{
 		int i;
-		struct ofp_action_header * act_hdr;	
+		struct ofp_action_header * act_hdr;
 		if (iLastFlow > 0)
 		{
 			// OpenFlow v1.0 (0x01) Flow Table
 			if( OF_Version == 1)
-			{				
+			{
 				printf("\r\n-------------------------------------------------------------------------\r\n");
 				for (i=0;i<iLastFlow;i++)
 				{
@@ -921,26 +921,27 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						if(q == 1) act_hdr = flow_actions[i].action2;
 						if(q == 2) act_hdr = flow_actions[i].action3;
 						if(q == 3) act_hdr = flow_actions[i].action4;
-						
+
 						if(act_hdr->len == 0 && q == 0) printf("   DROP\r\n"); // No actions = DROP
-					
+
 						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_OUTPUT) // Output to port action
 						{
 							struct ofp_action_output * action_out = act_hdr;
 							printf("  Action %d:\r\n",q+1);
 							if (ntohs(action_out->port) <= 255) printf("   Output: %d\r\n", ntohs(action_out->port));
-							if (ntohs(action_out->port) == OFPP_CONTROLLER) printf("   Output: CONTROLLER\r\n");
-							if (ntohs(action_out->port) == OFPP_ALL) printf("   Output: ALL\r\n");
+							if (ntohs(action_out->port) == OFPP_IN_PORT) printf("   Output: IN_PORT\r\n");
 							if (ntohs(action_out->port) == OFPP_FLOOD) printf("   Output: FLOOD\r\n");
+							if (ntohs(action_out->port) == OFPP_ALL) printf("   Output: ALL\r\n");
+							if (ntohs(action_out->port) == OFPP_CONTROLLER) printf("   Output: CONTROLLER\r\n");
 						}
-						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_VLAN_VID) // 
+						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_VLAN_VID) //
 						{
 							struct ofp_action_vlan_vid *action_vlanid = act_hdr;
 							printf("  Action %d:\r\n",q+1);
 							printf("   Set VLAN ID: %d\r\n", ntohs(action_vlanid->vlan_vid));
 						}
-				
-						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_DL_DST) // 
+
+						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_DL_DST) //
 						{
 							struct ofp_action_dl_addr *action_setdl = act_hdr;
 							printf("  Action %d:\r\n",q+1);
@@ -951,12 +952,12 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							struct ofp_action_dl_addr *action_setdl = act_hdr;
 							printf("  Action %d:\r\n",q+1);
 							printf("   Set Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", action_setdl->dl_addr[0],action_setdl->dl_addr[1],action_setdl->dl_addr[2],action_setdl->dl_addr[3],action_setdl->dl_addr[4],action_setdl->dl_addr[5]);
-						}				
+						}
 						if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_STRIP_VLAN) //
 						{
 							printf("  Action %d:\r\n",q+1);
 							printf("   Strip VLAN tag\r\n");
-						}			
+						}
 					}
 				}
 				printf("\r\n-------------------------------------------------------------------------\r\n\n");
@@ -976,7 +977,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				uint8_t oxm_eth[6];
 				uint8_t oxm_ipv4[4];
 				uint16_t oxm_ipv6[8];
-				
+
 				printf("\r\n-------------------------------------------------------------------------\r\n");
 				for (i=0;i<iLastFlow;i++)
 				{
@@ -995,12 +996,12 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							memcpy(&oxm_value32, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
 							printf("  In Port: %d\r\n",ntohl(oxm_value32));
 							break;
-							
+
 							case OFPXMT_OFB_ETH_DST:
 							memcpy(&oxm_eth, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 6);
 							printf("  Destination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
 							break;
-				
+
 							case OFPXMT_OFB_ETH_SRC:
 							memcpy(&oxm_eth, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 6);
 							printf("  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
@@ -1031,15 +1032,15 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 								printf("  Source IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
 							}
 							break;
-							
-							case OFPXMT_OFB_IPV4_DST:					
-							if (has_mask) 
+
+							case OFPXMT_OFB_IPV4_DST:
+							if (has_mask)
 							{
 								memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 8);
 								printf("  Destination IP:  %d.%d.%d.%d / %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3], oxm_ipv4[4], oxm_ipv4[5], oxm_ipv4[6], oxm_ipv4[7]);
 							} else {
 								memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
-								printf("  Destination IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);								
+								printf("  Destination IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
 							}
 							break;
 
@@ -1047,12 +1048,12 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							memcpy(&oxm_ipv6, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 16);
 							printf("  Source IP: %.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X\r\n", oxm_ipv6[0], oxm_ipv6[1], oxm_ipv6[2], oxm_ipv6[3], oxm_ipv6[4], oxm_ipv6[5], oxm_ipv6[6], oxm_ipv6[7]);
 							break;
-							
+
 							case OFPXMT_OFB_IPV6_DST:
 							memcpy(&oxm_ipv6, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 16);
 							printf("  Destination IP:  %.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X\r\n", oxm_ipv6[0], oxm_ipv6[1], oxm_ipv6[2], oxm_ipv6[3], oxm_ipv6[4], oxm_ipv6[5], oxm_ipv6[6], oxm_ipv6[7]);
 							break;
-																					
+
 							case OFPXMT_OFB_TCP_SRC:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 							printf("  Source TCP Port: %d\r\n",ntohs(oxm_value16));
@@ -1072,12 +1073,12 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 							printf("  Destination UDP Port: %d\r\n",ntohs(oxm_value16));
 							break;
-																																		
+
 							case OFPXMT_OFB_VLAN_VID:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 							if (oxm_value16 != 0) printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
 							break;
-							
+
 						};
 						match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
 					}
@@ -1114,33 +1115,39 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 									if (htonl(act_output->port) < OFPP13_MAX)
 									{
 										printf("   Output Port: %d\r\n", htonl(act_output->port));
-									} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
+									} else if (htonl(act_output->port) == OFPP13_IN_PORT)
 									{
-										printf("   Output: CONTROLLER \r\n");
+										printf("   Output: IN_PORT \r\n");
 									} else if (htonl(act_output->port) == OFPP13_FLOOD)
 									{
 										printf("   Output: FLOOD \r\n");
+									} else if (htonl(act_output->port) == OFPP13_ALL)
+									{
+										printf("   Output: ALL \r\n");
+									} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
+									{
+										printf("   Output: CONTROLLER \r\n");
 									}
 									act_output = NULL;
 								}
-								
+
 								if (htons(act_hdr->type) == OFPAT13_SET_FIELD)
 								{
 									struct ofp13_action_set_field *act_set_field = act_hdr;
 									memcpy(&oxm_header, act_set_field->field,4);
-									oxm_header.oxm_field = oxm_header.oxm_field >> 1;		
+									oxm_header.oxm_field = oxm_header.oxm_field >> 1;
 									switch(oxm_header.oxm_field)
 									{
 										case OFPXMT_OFB_VLAN_VID:
 										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 										printf("   Set VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
 										break;
-										
+
 										case OFPXMT_OFB_ETH_SRC:
 										memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
-										printf("   Set Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);										
+										printf("   Set Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
 										break;
-										
+
 										case OFPXMT_OFB_ETH_DST:
 										memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
 										printf("   Set Destination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
@@ -1153,7 +1160,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 										if (ntohs(oxm_value16) == 0x86dd )printf("   Set ETH Type: IPv6\r\n");
 										if (ntohs(oxm_value16) == 0x8100 )printf("   Set ETH Type: VLAN\r\n");
 										break;
-																				
+
 										case OFPXMT_OFB_IPV4_SRC:
 										memcpy(&oxm_ipv4, act_set_field->field + sizeof(struct oxm_header13), 4);
 										printf("   Set Source IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
@@ -1165,37 +1172,37 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 										if (oxm_value16 == 6)printf("   Set IP Protocol: TCP\r\n");
 										if (oxm_value16 == 17)printf("   Set IP Protocol: UDP\r\n");
 										break;
-																														
+
 										case OFPXMT_OFB_IPV4_DST:
 										memcpy(&oxm_ipv4, act_set_field->field + sizeof(struct oxm_header13), 4);
 										printf("   Set Destination IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
 										break;
-										
+
 										case OFPXMT_OFB_TCP_SRC:
 										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 										printf("   Set TCP Source Port:  %d\r\n", ntohs(oxm_value16));
 										break;
-										
+
 										case OFPXMT_OFB_TCP_DST:
 										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 										printf("   Set TCP Destination Port:  %d\r\n", ntohs(oxm_value16));
 										break;
-										
+
 										case OFPXMT_OFB_UDP_SRC:
 										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 										printf("   Set UDP Source Port:  %d\r\n", ntohs(oxm_value16));
 										break;
-										
+
 										case OFPXMT_OFB_UDP_DST:
 										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 										printf("   Set UDP Destination Port:  %d\r\n", ntohs(oxm_value16));
 										break;
-										
+
 										case OFPXMT_OFB_ICMPV4_TYPE:
 										memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
 										printf("   Set ICMP Type:  %d\r\n", oxm_value8);
 										break;
-										
+
 										case OFPXMT_OFB_ICMPV4_CODE:
 										memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
 										printf("   Set ICMP Code:  %d\r\n", oxm_value8);
@@ -1205,30 +1212,30 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 										printf("   Set ARP OP Code:  %d\r\n", ntohs(oxm_value16));
 										break;
-									
+
 										case OFPXMT_OFB_ARP_SPA:
 										memcpy(&oxm_ipv4, act_set_field->field + sizeof(struct oxm_header13), 4);
 										printf("   Set ARP Source IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
 										break;
-										
+
 										case OFPXMT_OFB_ARP_TPA:
 										memcpy(&oxm_ipv4, act_set_field->field + sizeof(struct oxm_header13), 4);
 										printf("   Set ARP Target IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
-										break;										
+										break;
 
 										case OFPXMT_OFB_ARP_SHA:
 										memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
 										printf("   Set ARP Source HA: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
 										break;
-										
+
 										case OFPXMT_OFB_ARP_THA:
 										memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
 										printf("   Set ARP Target HA: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
-										break;										
-																				
-									};													
+										break;
+
+									};
 								}
-								
+
 								if (htons(act_hdr->type) == OFPAT13_PUSH_VLAN)
 								{
 									struct ofp13_action_push *act_push = act_hdr;
@@ -1239,7 +1246,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 								{
 									printf("   Pop VLAN tag\r\n");
 								}
-																
+
 								act_size += htons(act_hdr->len);
 							}
 						}
@@ -1271,7 +1278,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						printf("   DROP \r\n");
 					}
 				}
-				printf("\r\n-------------------------------------------------------------------------\r\n\n");				
+				printf("\r\n-------------------------------------------------------------------------\r\n\n");
 			}
 		} else {
 			printf("No Flows installed!\r\n");
@@ -1294,9 +1301,9 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				printf(" Bytes: %d\r\n",table_counters[0].byte_count);
 				printf("\r\n");
 			} else printf("No Flows.\r\n");
-			printf("-------------------------------------------------------------------------\r\n");			
+			printf("-------------------------------------------------------------------------\r\n");
 		}
-		
+
 		if( OF_Version == 4)
 		{
 			int flow_count;
@@ -1317,8 +1324,8 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf(" Flows: %d\r\n",flow_count);
 					printf(" Lookups: %d\r\n",table_counters[x].lookup_count);
 					printf(" Matches: %d\r\n",table_counters[x].matched_count);
-					printf(" Bytes: %d\r\n",table_counters[x].byte_count); 
-					printf("\r\n");	
+					printf(" Bytes: %d\r\n",table_counters[x].byte_count);
+					printf("\r\n");
 				}
 			}
 			printf("-------------------------------------------------------------------------\r\n");
@@ -1331,7 +1338,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 	{
 		printf("\r\n-------------------------------------------------------------------------\r\n");
 		printf("OpenFlow Status\r");
-		if (tcp_pcb->state != ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED) printf(" Status: Disconnected\r\n");			
+		if (tcp_pcb->state != ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED) printf(" Status: Disconnected\r\n");
 		if (tcp_pcb->state == ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED) printf(" Status: Connected\r\n");
 		if (Zodiac_Config.OFEnabled == OF_DISABLED) printf(" Status: Disabled\r\n");
 		if (OF_Version == 1)
@@ -1370,12 +1377,12 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				matched_count += table_counters[x].matched_count;
 			}
 			printf(" Total Lookups: %d\r\n",lookup_count);
-			printf(" Total Matches: %d\r\n",matched_count);	
-		}		
-		printf("\r\n-------------------------------------------------------------------------\r\n");		
+			printf(" Total Matches: %d\r\n",matched_count);
+		}
+		printf("\r\n-------------------------------------------------------------------------\r\n");
 		return;
 	}
-	
+
 	// Enable OpenFlow
 	if (strcmp(command, "enable")==0)
 	{
@@ -1386,7 +1393,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
-	// Disable OpenFlow	
+	// Disable OpenFlow
 	if (strcmp(command, "disable")==0)
 	{
 		Zodiac_Config.OFEnabled = OF_DISABLED;
@@ -1402,15 +1409,15 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		clear_flows();
 		return;
 	}
-	
+
 	// Unknown Command
 	printf("Unknown command\r\n");
-	return;	
+	return;
 }
 
 /*
 *	Commands within the debug context
-*	
+*
 *	@param command - pointer to the command string
 *	@param param1 - pointer to parameter 1
 *	@param param2- pointer to parameter 2
@@ -1430,7 +1437,7 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		return;
 
 	}
-			
+
 	if (strcmp(command, "read")==0)
 	{
 		int n = switch_read(atoi(param1));
@@ -1461,13 +1468,13 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 	if (strcmp(command, "trace")==0)
 	{
 		trace = true;
-		printf("Starting trace...\r\n"); 
+		printf("Starting trace...\r\n");
 		return;
 	}
-			
+
 	// Unknown Command response
 	printf("Unknown command\r\n");
-	return;	
+	return;
 }
 /*
 *	Print the intro screen

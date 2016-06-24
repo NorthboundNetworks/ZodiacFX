@@ -9,7 +9,7 @@
 /*
  * This file is part of the Zodiac FX firmware.
  * Copyright (c) 2016 Northbound Networks.
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -22,7 +22,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  * Author: Paul Zanna <paul@northboundnetworks.com>
  *
  */
@@ -66,7 +66,6 @@ struct oxm_header13
 	uint8_t oxm_len;
 };
 
-
 void task_openflow(void);
 void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
 void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
@@ -77,7 +76,7 @@ void barrier10_reply(uint32_t xid);
 void barrier13_reply(uint32_t xid);
 void sendtcp(const void *buffer, u16_t len);
 void flowrem_notif(int flowid, uint8_t reason);
-	
+
 #define HTONS(x) ((((x) & 0xff) << 8) | (((x) & 0xff00) >> 8))
 #define NTOHS(x) HTONS(x)
 #define HTONL(x) ((((x) & 0xff) << 24) | \

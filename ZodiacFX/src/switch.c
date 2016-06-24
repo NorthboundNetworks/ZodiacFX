@@ -9,7 +9,7 @@
 /*
  * This file is part of the Zodiac FX firmware.
  * Copyright (c) 2016 Northbound Networks.
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -22,7 +22,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  * Author: Paul Zanna <paul@northboundnetworks.com>
  *
  */
@@ -30,6 +30,7 @@
 #include <asf.h>
 #include <stdlib.h>
 #include <string.h>
+#include "trace.h"
 #include "openflow.h"
 #include "switch.h"
 #include "conf_eth.h"
@@ -48,7 +49,6 @@ struct ofp10_port_stats phys10_port_stats[4];
 struct ofp13_port_stats phys13_port_stats[4];
 uint8_t port_status[4];
 extern uint8_t NativePortMatrix;
-extern bool trace;
 /** Buffer for ethernet packets */
 static volatile uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 
@@ -110,7 +110,7 @@ void stack_write(uint8_t value)
 {
 	uint8_t uc_pcs;
 	static uint16_t data;
-	
+
 	for (int i = 0; i < 16; i++) {
 		spi_write(SPI_MASTER_BASE, value + i, 0, 0);
 		/* Wait transfer done. */
@@ -119,7 +119,7 @@ void stack_write(uint8_t value)
 		printf("%d , %d\r", data, ioport_get_pin_level(SPI_IRQ1));
 	}
 	return;
-} 
+}
 
 /*
 *	Initialise the SPI interface to MASTER or SLAVE based on the stacking jumper
@@ -140,12 +140,12 @@ void stacking_init(bool master)
 *
 */
 void spi_slave_initialize(void)
-{	
+{
 	NVIC_DisableIRQ(SPI_IRQn);
 	NVIC_ClearPendingIRQ(SPI_IRQn);
 	NVIC_SetPriority(SPI_IRQn, 0);
 	NVIC_EnableIRQ(SPI_IRQn);
-	
+
 	/* Configure an SPI peripheral. */
 	spi_enable_clock(SPI_SLAVE_BASE);
 	spi_disable(SPI_SLAVE_BASE);
@@ -176,10 +176,10 @@ void spi_master_initialize(void)
 	spi_set_peripheral_chip_select_value(SPI_MASTER_BASE, SPI_CHIP_PCS);
 	spi_set_fixed_peripheral_select(SPI_MASTER_BASE);
 	spi_disable_peripheral_select_decode(SPI_MASTER_BASE);
-	
+
 	spi_set_transfer_delay(SPI_MASTER_BASE, SPI_CHIP_SEL, SPI_DLYBS, SPI_DLYBCT);
 	spi_set_bits_per_transfer(SPI_MASTER_BASE, SPI_CHIP_SEL, SPI_CSR_BITS_8_BIT);
-	spi_set_baudrate_div(SPI_MASTER_BASE, SPI_CHIP_SEL, (sysclk_get_cpu_hz() / gs_ul_spi_clock));	
+	spi_set_baudrate_div(SPI_MASTER_BASE, SPI_CHIP_SEL, (sysclk_get_cpu_hz() / gs_ul_spi_clock));
 	spi_configure_cs_behavior(SPI_MASTER_BASE, SPI_CHIP_SEL, SPI_CS_KEEP_LOW);
 	spi_set_clock_polarity(SPI_MASTER_BASE, SPI_CHIP_SEL, SPI_CLK_POLARITY);
 	spi_set_clock_phase(SPI_MASTER_BASE, SPI_CHIP_SEL, SPI_CLK_PHASE);
@@ -214,13 +214,13 @@ void SPI_Handler(void)
 int switch_read(uint8_t param1)
 {
 	uint8_t reg[2];
-	
+
 	if (param1 < 128) {
 		reg[0] = 96;
 		} else {
 		reg[0] = 97;
 	}
-	
+
 	reg[1] = param1 << 1;
 
 	/* Select the DF memory to check. */
@@ -231,10 +231,10 @@ int switch_read(uint8_t param1)
 
 	/* Receive Manufacturer ID. */
 	usart_spi_read_packet(USART_SPI, reg, 1);
-	
+
 	/* Deselect the checked DF memory. */
 	usart_spi_deselect_device(USART_SPI, &USART_SPI_DEVICE);
-	
+
 	return reg[0];
 }
 
@@ -245,22 +245,22 @@ int switch_read(uint8_t param1)
 int switch_write(uint8_t param1, uint8_t param2)
 {
 	uint8_t reg[3];
-	
+
 	if (param1 < 128) {
 		reg[0] = 64;
 		} else {
 		reg[0] = 65;
 	}
-	
+
 	reg[1] = param1 << 1;
 	reg[2] = param2;
-	
+
 	/* Select the DF memory to check. */
 	usart_spi_select_device(USART_SPI, &USART_SPI_DEVICE);
 
 	/* Send the Manufacturer ID Read command. */
 	usart_spi_write_packet(USART_SPI, reg, 3);
-	
+
 	/* Deselect the checked DF memory. */
 	usart_spi_deselect_device(USART_SPI, &USART_SPI_DEVICE);
 	for(int x = 0;x<100000;x++);
@@ -301,7 +301,7 @@ void enableOF(void)
 *	It can take over 100ms to get a response so we only query one port per call
 */
 void update_port_stats(void)
-{	
+{
 	if (OF_Version == 1)
 	{
 		phys10_port_stats[stats_rr].tx_bytes += readtxbytes(stats_rr+1);
@@ -310,7 +310,7 @@ void update_port_stats(void)
 		phys10_port_stats[stats_rr].rx_dropped += readrxdrop(stats_rr+1);
 		phys10_port_stats[stats_rr].rx_crc_err += readrxdrop(stats_rr+1);
 	}
-		
+
 	if (OF_Version == 4)
 	{
 		phys13_port_stats[stats_rr].tx_bytes += readtxbytes(stats_rr+1);
@@ -423,14 +423,14 @@ void update_port_status(void)
 
 /*
 *	GMAC write function
-*	
+*
 *	@param *p_buffer - pointer to the buffer containing the data to send.
 *	@param ul_size - size of the data.
 *	@param port - the port to send the data out from.
 *
 */
 void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
-{	
+{
 	if (ul_size > GMAC_FRAME_LENTGH_MAX)
 	{
 		return;
@@ -445,7 +445,7 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
 	if (port & 4) phys13_port_stats[2].tx_packets++;
 	if (port & 8) phys13_port_stats[3].tx_packets++;
 	// Add padding
-	if (ul_size < 60) 
+	if (ul_size < 60)
 	{
 		memset(&gmacbuffer, 0, 61);
 		memcpy(&gmacbuffer,p_buffer, ul_size);
@@ -481,14 +481,14 @@ void switch_init(void)
 {
 		volatile uint32_t ul_delay;
 		gmac_options_t gmac_option;
-		
+
 		/* Wait for PHY to be ready (CAT811: Max400ms) */
 		ul_delay = sysclk_get_cpu_hz() / 1000 / 3 * 400;
 		while (ul_delay--);
-		
+
 		/* Enable GMAC clock */
 		pmc_enable_periph_clk(ID_GMAC);
-		
+
 		/* Fill in GMAC options */
 		gmac_option.uc_copy_all_frame = 1;
 		gmac_option.uc_no_boardcast = 0;
@@ -499,11 +499,11 @@ void switch_init(void)
 		gmac_option.uc_mac_addr[4] = Zodiac_Config.MAC_address[4];
 		gmac_option.uc_mac_addr[5] = Zodiac_Config.MAC_address[5];
 		gs_gmac_dev.p_hw = GMAC;
-		
+
 		/* Init KSZ8795 registers */
 		switch_write(86,232);	// Set CPU interface to MII
 		switch_write(12,70);	// Turn on tail tag mode
-		
+
 		/* Because we use the tail tag mode on the KS8795 the additional
 		byte on the end makes the frame size 1519 bytes. This causes the packet
 		to fail the Max Legal size check, so setting byte 1 on global register 4
@@ -524,12 +524,12 @@ void switch_init(void)
 		while (ethernet_phy_set_link(GMAC, BOARD_GMAC_PHY_ADDR, 1) != GMAC_OK) {
 			return;
 		}
-		
+
 		// clear port stat counters
 		memset(&phys10_port_stats, 0, sizeof(struct ofp10_port_stats)*4);
 
 		/* Create KSZ8795 VLANs */
-		switch_write(5,0);		// Disable 802.1q	
+		switch_write(5,0);		// Disable 802.1q
 
 		for (int x=0;x<MAX_VLANS;x++)
 		{
@@ -546,7 +546,7 @@ void switch_init(void)
 				}
 				/* Add entry into the VLAN table */
 				int vlanoffset = Zodiac_Config.vlan_list[x].uVlanID / 4;
-				int vlanindex = Zodiac_Config.vlan_list[x].uVlanID - (vlanoffset*4);	
+				int vlanindex = Zodiac_Config.vlan_list[x].uVlanID - (vlanoffset*4);
 				switch_write(110,20);	// Set read VLAN flag
 				switch_write(111, vlanoffset);	// Read entries 0-3
 
@@ -560,17 +560,17 @@ void switch_init(void)
 				if (Zodiac_Config.vlan_list[x].portmap[1] == 1) vlanmaphigh += 1; // Port 2;
 				vlanmaplow = x+1;	// FID = VLAN index number
 				if (Zodiac_Config.vlan_list[x].portmap[0] == 1) vlanmaplow += 128; // Port 1;
-				/* Write settings back to registers */			
+				/* Write settings back to registers */
 				switch_write((119-(vlanindex*2)),vlanmaphigh);
-				switch_write((120-(vlanindex*2)),vlanmaplow);	
+				switch_write((120-(vlanindex*2)),vlanmaplow);
 				switch_write(110,4);	// Set read VLAN flag
-				switch_write(111,vlanoffset);	// Read entries 0-3										
-			} 
+				switch_write(111,vlanoffset);	// Read entries 0-3
+			}
 		}
-		
-		switch_write(5,128);	// Enable 802.1q				
-		disableOF(); // clear all port settings	
-		if (Zodiac_Config.OFEnabled == OF_ENABLED) enableOF();	
+
+		switch_write(5,128);	// Enable 802.1q
+		disableOF(); // clear all port settings
+		if (Zodiac_Config.OFEnabled == OF_ENABLED) enableOF();
 		return;
 }
 /*
@@ -600,15 +600,15 @@ void task_switch(struct netif *netif)
 				nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
 				return;
 			} else {
-				if (trace == true) printf("%d byte received from controller\r\n", ul_rcv_size);
+				TRACE("%d byte received from controller", ul_rcv_size);
 				struct pbuf *p;
-				p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);	
+				p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);
 				memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));
 				p->len = ul_rcv_size-1;
 				p->tot_len = ul_rcv_size-1;
 				netif->input(p, netif);
 				pbuf_free(p);
-				return;	
+				return;
 			}
 		}
 	}
