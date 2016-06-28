@@ -283,32 +283,46 @@ int flowmatch10(uint8_t *pBuffer, int port)
 
 
 void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
-        fields->payload = pBuffer;
-        fields->eth_prot = *(uint16_t*)(fields->payload + 12);
+	static const uint8_t vlan1[2] = { 0x81, 0x00 };
+	static const uint8_t vlan2[2] = { 0x88, 0xa8 };
+	static const uint8_t vlan3[2] = { 0x91, 0x00 };
+	static const uint8_t vlan4[2] = { 0x92, 0x00 };
+	static const uint8_t vlan5[2] = { 0x93, 0x00 };
 
-        // VLAN tagged
-        if (ntohs(fields->eth_prot) == 0x8100)
-        {
-                fields->payload += 4;
-                fields->vlanid = (uint16_t*)(fields->payload + 10);
-                fields->eth_prot = *(uint16_t*)(fields->payload + 12);
-                fields->isVlanTag = true;
-        }
-
-        // IP packets
-        if (ntohs(fields->eth_prot) == 0x0800)
-        {
-                fields->ip_src = (uint32_t*)(fields->payload + 26);
-                fields->ip_dst = (uint32_t*)(fields->payload + 30);
-                fields->ip_prot = *(uint8_t*)(fields->payload + 23);
-                // TCP / UDP
-                if (fields->ip_prot == 6 || fields->ip_prot == 17)
-                {
-                        fields->tcp_src = (uint16_t*)fields->payload + 34;
-                        fields->tcp_dst = (uint16_t*)fields->payload + 36;
-                }
-        }
-
+	fields->isVlanTag = false;
+	uint8_t *eth_type = pBuffer + 12;
+	while(memcmp(eth_type, vlan1, 2)==0
+			|| memcmp(eth_type, vlan2, 2)==0
+			|| memcmp(eth_type, vlan3, 2)==0
+			|| memcmp(eth_type, vlan4, 2)==0
+			|| memcmp(eth_type, vlan5, 2)==0){
+		if(fields->isVlanTag == false){ // save outermost value
+			uint8_t tci[2] = { eth_type[2]&0x0f, eth_type[3] };
+			memcpy(&fields->vlanid, tci, 2);
+		}
+		fields->isVlanTag = true;
+		eth_type += 4;
+	}
+	memcpy(&fields->eth_prot, eth_type, 2);
+	fields->payload = eth_type + 2; // payload points to ip_hdr, etc.
+	
+	if(ntohs(fields->eth_prot) == 0x0800){
+		struct ip_hdr *iphdr = (struct ip_hdr*)fields->payload;
+		uint8_t *ip_payload = fields->payload + IPH_HL(iphdr) * 4;
+		fields->ip_src = iphdr->src.addr;
+		fields->ip_dst = iphdr->dest.addr;
+		fields->ip_prot = IPH_PROTO(iphdr);
+		if(IPH_PROTO(iphdr)==IP_PROTO_TCP){
+			struct tcp_hdr *tcphdr = (struct tcp_hdr*)ip_payload;
+			fields->tp_src = tcphdr->src;
+			fields->tp_dst = tcphdr->dest;
+		}
+		if(IPH_PROTO(iphdr)==IP_PROTO_UDP){
+			struct udp_hdr *udphdr = (struct udp_hdr*)ip_payload;
+			fields->tp_src = udphdr->src;
+			fields->tp_dst = udphdr->dest;
+		}
+	}
 	fields->parsed = true;
 }
 
@@ -429,7 +443,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_IPV4_SRC:
-				if (memcmp(fields->ip_src, oxm_value, 4) != 0)
+				if (memcmp(&fields->ip_src, oxm_value, 4) != 0)
 				{
 					priority_match = -1;
 				}
@@ -448,7 +462,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_IPV4_DST:
-				if (memcmp(fields->ip_dst, oxm_value, 4) != 0)
+				if (memcmp(&fields->ip_dst, oxm_value, 4) != 0)
 				{
 					priority_match = -1;
 				}
@@ -467,28 +481,28 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_TCP_SRC:
-				if (!(fields->ip_prot == 6 && *fields->tcp_src == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 6 && fields->tp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_TCP_DST:
-				if (!(fields->ip_prot == 6 && *fields->tcp_dst == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 6 && fields->tp_dst == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_SRC:
-				if (!(fields->ip_prot == 17 && *fields->tcp_src == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 17 && fields->tp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_DST:
-				if (!(fields->ip_prot == 17 && *fields->tcp_dst != *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 17 && fields->tp_dst != *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
@@ -497,7 +511,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_VLAN_VID:
 				if (fields->isVlanTag)
 				{
-					oxm_value16 = htons(OFPVID_PRESENT | ntohs(*fields->vlanid));
+					oxm_value16 = htons(OFPVID_PRESENT | ntohs(fields->vlanid));
 				}else{
 					oxm_value16 = htons(OFPVID_NONE);
 				}
@@ -510,7 +524,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_VLAN_VID_W:
 				if (fields->isVlanTag)
 				{
-					oxm_value16 = htons(OFPVID_PRESENT | ntohs(*fields->vlanid));
+					oxm_value16 = htons(OFPVID_PRESENT | ntohs(fields->vlanid));
 				}else{
 					oxm_value16 = htons(OFPVID_NONE);
 				}
