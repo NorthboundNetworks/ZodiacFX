@@ -450,7 +450,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_IPV4_SRC_W:
-				memcpy(oxm_ipv4, fields->ip_src, 4);
+				memcpy(oxm_ipv4, &fields->ip_src, 4);
 				for (int j=0; j<4; j++)
 				{
 					oxm_ipv4[j] &= oxm_value[4+j];
@@ -469,7 +469,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_IPV4_DST_W:
-				memcpy(oxm_ipv4, fields->ip_dst, 4);
+				memcpy(oxm_ipv4, &fields->ip_dst, 4);
 				for (int j=0; j<4; j++ )
 				{
 					oxm_ipv4[j] &= oxm_value[4+j];
