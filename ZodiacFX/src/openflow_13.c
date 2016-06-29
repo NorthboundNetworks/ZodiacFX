@@ -408,7 +408,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 
 void of13_message(struct ofp_header *ofph, int size, int len)
 {
-	struct ofp13_multipart_reply *multi_req;
+	struct ofp13_multipart_request *multi_req;
 	TRACE("%u: OpenFlow message received type = %d", htonl(ofph->xid), ofph->type);
 	switch(ofph->type)
 	{
@@ -669,21 +669,35 @@ int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	struct ofp13_multipart_reply *reply = buffer;
 	reply->header.version = OF_Version;
 	reply->header.type = OFPT13_MULTIPART_REPLY;
-	reply->header.length = htons(len);
 	reply->header.xid = msg->header.xid;
 	reply->type = htons(OFPMP13_TABLE);
 	reply->flags = 0;
+	
 	struct ofp13_table_stats *stats = reply->body;
-	stats->table_id = 0;
-	uint32_t active = 0;
-	for(int i=0; i<iLastFlow; i++) {
-		if (flow_counters[i].active == false){
-			active++;
+	for(uint8_t table_id=0; table_id<=OFPTT_MAX; table_id++){
+		uint32_t active = 0;
+		for(int i=0; i<iLastFlow; i++) {
+			if (flow_counters[i].active == true && flow_match13[i].table_id==table_id){
+				active++;
+			}
 		}
+		if(active == 0){
+			continue;
+		}
+		int len2 = len + sizeof(struct ofp13_table_stats);
+		if(len2 > 2048 - multi_pos){
+			// TODO: shall we support OFPMPF_REPLY_MORE ?
+			break;
+		} else {
+			len = len2;
+		}
+		stats->table_id = table_id;
+		stats->active_count = htonl(active);
+		stats->matched_count = htonll(table_counters[table_id].matched_count);
+		stats->lookup_count = htonll(table_counters[table_id].lookup_count);
+		stats++;
 	}
-	stats->active_count = htonl(active);
-	stats->matched_count = htonll(table_counters[0].matched_count);		// !!Need to add multi-table response!!
-	stats->lookup_count = htonll(table_counters[0].lookup_count);
+	reply->header.length = htons(len);
 	return len;
 }
 
