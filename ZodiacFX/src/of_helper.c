@@ -1049,17 +1049,6 @@ void flow_timeouts()
 				if (flow_match13[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match13[i].idle_timeout))
 				{
 					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_IDLE_TIMEOUT);
-// 					// Clear flow counters
-// 					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
-// 					// Copy the last flow to here to fill the gap
-// 					memcpy(&flow_match13[i], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));
-// 					// If there are OXM match fields move them too
-// 					ofp13_oxm_match[i] = ofp13_oxm_match[iLastFlow-1];
-// 					ofp13_oxm_match[iLastFlow-1] = NULL;
-// 					memcpy(&flow_counters[i], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-// 					// Clear the counters from the last flow that was moved
-// 					memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-// 					iLastFlow --;
 					remove_flow13(i);
 					return;
 				}
@@ -1067,17 +1056,6 @@ void flow_timeouts()
 				if (flow_match13[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match13[i].hard_timeout))
 				{
 					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
-// 					// Clear flow counters
-// 					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
-// 					// Copy the last flow to here to fill the gap
-// 					memcpy(&flow_match13[i], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));
-// 					// If there are OXM match fields move them too
-// 					ofp13_oxm_match[i] = ofp13_oxm_match[iLastFlow-1];
-// 					ofp13_oxm_match[iLastFlow-1] = NULL;
-// 					memcpy(&flow_counters[i], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-// 					// Clear the counters from the last flow that was moved
-// 					memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-// 					iLastFlow --;
 					remove_flow13(i);
 					return;
 				}
@@ -1094,13 +1072,14 @@ void flow_timeouts()
 void clear_flows(void)
 {
 	iLastFlow = 0;
+	membag_init();
+		
 	for(int q=0;q<MAX_FLOWS;q++)
 	{
 		memset(&flow_counters[q], 0, sizeof(struct flows_counter));
 		memset(&flow_actions[q], 0, sizeof(struct flow_tbl_actions));
 		if (ofp13_oxm_match[q] != NULL) ofp13_oxm_match[q] = NULL;
 		if (ofp13_oxm_inst[q] != NULL) ofp13_oxm_inst[q] = NULL;
-		membag_init();
 	}
 	for(int x=0; x<MAX_TABLES;x++)
 	{

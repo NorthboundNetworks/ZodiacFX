@@ -43,6 +43,7 @@
 extern struct zodiac_config Zodiac_Config;
 extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
+extern bool rcv_freq;
 extern int iLastFlow;
 extern int totaltime;
 extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
@@ -413,6 +414,7 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 	switch(ofph->type)
 	{
 		case OFPT13_FEATURES_REQUEST:
+		rcv_freq = true;
 		features_reply13(ofph->xid);
 		break;
 
