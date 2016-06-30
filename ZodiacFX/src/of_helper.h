@@ -36,15 +36,16 @@
 struct packet_fields
 {
 	bool parsed;
-        bool isVlanTag;
+	bool isVlanTag;
 	uint8_t *payload;
-        uint16_t eth_prot;
-        uint8_t ip_prot;
-        uint16_t *vlanid;
-        uint32_t *ip_src;
-        uint32_t *ip_dst;
-        uint16_t *tcp_src;
-        uint16_t *tcp_dst;
+	uint16_t eth_prot;
+	uint8_t ip_prot;
+	uint16_t vlanid;
+	uint32_t ip_src;
+	uint32_t ip_dst;
+	// transport layer
+	uint16_t tp_src;
+	uint16_t tp_dst;
 };
 
 void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields);
