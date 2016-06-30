@@ -665,7 +665,6 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 */
 int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
-	int len = offsetof(struct ofp13_multipart_reply, body) + sizeof(struct ofp13_table_stats);
 	struct ofp13_multipart_reply *reply = buffer;
 	reply->header.version = OF_Version;
 	reply->header.type = OFPT13_MULTIPART_REPLY;
@@ -674,6 +673,7 @@ int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	reply->flags = 0;
 	
 	struct ofp13_table_stats *stats = reply->body;
+	int len = offsetof(struct ofp13_multipart_reply, body);
 	for(uint8_t table_id=0; table_id<=OFPTT_MAX; table_id++){
 		uint32_t active = 0;
 		for(int i=0; i<iLastFlow; i++) {
