@@ -57,7 +57,7 @@ struct flows_counter flow_counters[MAX_FLOWS];
 struct flow_tbl_actions flow_actions[MAX_FLOWS];
 struct table_counter table_counters[MAX_TABLES];
 int iLastFlow = 0;
-uint8_t shared_buffer[SHARED_BUFFER_LEN];
+uint8_t shared_buffer[2048];
 char sysbuf[64];
 struct ip_addr serverIP;
 int OF_Version = 0x00;
