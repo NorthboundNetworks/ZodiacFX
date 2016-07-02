@@ -55,7 +55,7 @@ extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
 extern uint8_t port_status[4];
 extern struct ofp_switch_config Switch_config;
-extern uint8_t shared_buffer[2048];
+extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern int delay_barrier;
 extern uint32_t barrier_xid;
 extern int multi_pos;
