@@ -627,7 +627,6 @@
     <Folder Include="src\lwip\include\posix\sys\" />
     <Folder Include="src\lwip\netif\" />
     <Folder Include="src\lwip\netif\ppp\" />
-    <Folder Include="src\openflow" />
     <Folder Include="src\openflow_spec" />
   </ItemGroup>
   <ItemGroup>
@@ -641,24 +640,6 @@
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\ASF\common\utils\membag\membag.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\openflow\of_helper.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\openflow\of_helper.h">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\openflow\openflow.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\openflow\openflow.h">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\openflow\openflow_10.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\openflow\openflow_13.c">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\trace.h">
@@ -710,6 +691,18 @@
       <SubType>compile</SubType>
     </None>
     <Compile Include="src\config\conf_usart_spi.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\of_helper.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\of_helper.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\openflow_10.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\openflow_13.c">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\openflow_spec\openflow_spec10.h">
@@ -1109,6 +1102,12 @@
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\lwip\netif\slipif.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\openflow.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\openflow.h">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\switch.c">

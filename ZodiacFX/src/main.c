@@ -43,7 +43,7 @@
 #include "telnet.h"
 #include "eeprom.h"
 #include "switch.h"
-#include "openflow/openflow.h"
+#include "openflow.h"
 #include "ksz8795clx/ethernet_phy.h"
 
 // Global variables
