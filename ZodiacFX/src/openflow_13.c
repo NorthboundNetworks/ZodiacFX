@@ -667,26 +667,39 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 */
 int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
+<<<<<<< HEAD
 	int len = offsetof(struct ofp13_multipart_reply, body) + sizeof(struct ofp13_table_stats) * MAX_TABLES;
 	if (SHARED_BUFFER_LEN - multi_pos < len){
 			return 0; // guard for buffer overrun
 	}
 	bzero(buffer, len);
+=======
+	int len = offsetof(struct ofp13_multipart_reply, body) + sizeof(struct ofp13_table_stats);
+>>>>>>> refs/remotes/NorthboundNetworks/Dev_064
 	struct ofp13_multipart_reply *reply = buffer;
 	reply->header.version = OF_Version;
 	reply->header.type = OFPT13_MULTIPART_REPLY;
-	reply->header.length = htons(len);
 	reply->header.xid = msg->header.xid;
 	reply->type = htons(OFPMP13_TABLE);
 	reply->flags = 0;
 	
 	struct ofp13_table_stats *stats = reply->body;
-	for(uint8_t table_id=0; table_id<MAX_TABLES; table_id++){
+	for(uint8_t table_id=0; table_id<=OFPTT_MAX; table_id++){
 		uint32_t active = 0;
 		for(int i=0; i<iLastFlow; i++) {
 			if (flow_counters[i].active == true && flow_match13[i].table_id==table_id){
 				active++;
 			}
+		}
+		if(active == 0){
+			continue;
+		}
+		int len2 = len + sizeof(struct ofp13_table_stats);
+		if(len2 > 2048 - multi_pos){
+			// TODO: shall we support OFPMPF_REPLY_MORE ?
+			break;
+		} else {
+			len = len2;
 		}
 		stats->table_id = table_id;
 		stats->active_count = htonl(active);
@@ -694,6 +707,7 @@ int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 		stats->lookup_count = htonll(table_counters[table_id].lookup_count);
 		stats++;
 	}
+	reply->header.length = htons(len);
 	return len;
 }
 

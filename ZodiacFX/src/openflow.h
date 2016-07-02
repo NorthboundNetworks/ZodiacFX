@@ -85,6 +85,4 @@ void flowrem_notif(int flowid, uint8_t reason);
 (((x) & 0xff000000UL) >> 24))
 #define NTOHL(x) HTONL(x)
 
-#define SHARED_BUFFER_LEN 2048
-
 #endif /* OPENFLOW_H_ */
