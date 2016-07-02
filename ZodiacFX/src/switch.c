@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "trace.h"
-#include "openflow/openflow.h"
+#include "openflow.h"
 #include "switch.h"
 #include "conf_eth.h"
 #include "command.h"
