@@ -57,7 +57,7 @@ struct flows_counter flow_counters[MAX_FLOWS];
 struct flow_tbl_actions flow_actions[MAX_FLOWS];
 struct table_counter table_counters[MAX_TABLES];
 int iLastFlow = 0;
-uint8_t shared_buffer[2048];
+uint8_t shared_buffer[SHARED_BUFFER_LEN];
 char sysbuf[64];
 struct ip_addr serverIP;
 int OF_Version = 0x00;
@@ -71,7 +71,7 @@ uint32_t barrier_xid;
 int totaltime = 0;
 int heartbeat = 0;
 int multi_pos;
-
+bool rcv_freq;
 
 // Internal Functions
 void OF_hello(void);
@@ -192,6 +192,8 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 void OF_hello(void)
 {
 	struct ofp_header ofph;
+	OF_Version = 0x00;
+	rcv_freq = false;
 	// Make sure this is a valid version otherwise it won't connect
 	if (Zodiac_Config.of_version == 1){
 		ofph.version = 1;
@@ -308,12 +310,22 @@ void task_openflow(void)
 	}
 
 
-	if((sys_get_ms() - fast_of_timer) > 500) // every 500 ms (0.5 secs)
+	if((sys_get_ms() - fast_of_timer) > 500)	// every 500 ms (0.5 secs)
 	{
 		fast_of_timer = sys_get_ms();
 		nnOF_timer();
 
-		if (heartbeat > 6 && tcp_con_state == 1) echo_request();	//If we haven't heard anything from the controller for over 3 seconds send an echo request
+		if (heartbeat > (HB_INTERVAL * 2) && tcp_con_state == 1)	//If we haven't heard anything from the controller for more then the heartbeat interval send an echo request
+		{
+			if (rcv_freq == false)	// If we never got a feature request then the handshake failed, disconnect and try again.
+			{
+				tcp_con_state = -1;
+				if(Zodiac_Config.failstate == 0) clear_flows();		// Clear the flow if in secure mode
+				tcp_close(tcp_pcb);
+			} else {
+				echo_request();
+			}
+		}
 		heartbeat++;	// Increment number of seconds since last response
 		if (heartbeat > (HB_TIMEOUT * 2) && tcp_con_state == 1)	// If there is no response from the controller for HB_TIMEOUT seconds reset the connection
 		{
