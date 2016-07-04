@@ -255,7 +255,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							p_uc_data[14] = (p_uc_data[14] & 0xf0) | (oxm_value[0] & 0x0f);
 							p_uc_data[15] = oxm_value[1];
 							memcpy(&fields.vlanid, oxm_value, 2);
-							TRACE("Set VID %u", ntohs(fields.vlanid));
+							TRACE("Set VID %u", (ntohs(fields.vlanid) - OFPVID_PRESENT));
 						}
 						break;
 						// Set Source Ethernet Address

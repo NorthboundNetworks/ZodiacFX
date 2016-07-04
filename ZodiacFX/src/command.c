@@ -1076,7 +1076,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 
 							case OFPXMT_OFB_VLAN_VID:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
-							if (oxm_value16 != 0) printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
+							if (oxm_value16 != 0) printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - OFPVID_PRESENT));
 							break;
 
 						};
@@ -1140,7 +1140,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 									{
 										case OFPXMT_OFB_VLAN_VID:
 										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
-										printf("   Set VLAN ID: %d\r\n",(ntohs(oxm_value16) - 0x1000));
+										printf("   Set VLAN ID: %d\r\n",(ntohs(oxm_value16) - OFPVID_PRESENT));
 										break;
 
 										case OFPXMT_OFB_ETH_SRC:
