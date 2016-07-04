@@ -80,6 +80,7 @@ void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
 	struct ip_hdr *iphdr;
 	struct tcp_hdr *tcphdr;
 	struct udp_hdr *udphdr;
+	struct icmp_echo_hdr *icmphdr;
 	int payload_offset;
 
 	iphdr = p_uc_data + iphdr_offset;
@@ -103,6 +104,11 @@ void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
 		(ip_addr_t*)&(iphdr->dest),
 		IP_PROTO_UDP,
 		packet_size - payload_offset);
+	}
+	if (IPH_PROTO(iphdr) == IP_PROTO_ICMP) {
+		icmphdr = (struct icmp_echo_hdr*)(p_uc_data + payload_offset);
+		icmphdr->chksum = 0;
+		icmphdr->chksum = inet_chksum(icmphdr, packet_size - payload_offset);
 	}
 	pbuf_free(p);
 
