@@ -540,6 +540,13 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 					priority_match = -1;
 				}
 				break;
+
+				case OXM_OF_VLAN_PCP:
+				if (!(fields->isVlanTag && (pBuffer[16]>>5) != oxm_value[0]))
+				{
+					priority_match = -1;
+				}
+				break;
 			}
 
 			if (priority_match == -1)
