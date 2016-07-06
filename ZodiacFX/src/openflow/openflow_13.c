@@ -258,6 +258,15 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							TRACE("Set VID %u", (ntohs(fields.vlanid) - OFPVID_PRESENT));
 						}
 						break;
+
+						case OFPXMT_OFB_VLAN_PCP:
+						if(fields.isVlanTag){
+							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 1);
+							p_uc_data[14] = (oxm_value[0]<<5) | (p_uc_data[14] & 0x0f);
+							TRACE("Set VLAN_PCP %u", oxm_value[0]);
+						}
+						break;
+
 						// Set Source Ethernet Address
 						case OFPXMT_OFB_ETH_SRC:
 						memcpy(p_uc_data + 6, act_set_field->field + sizeof(struct oxm_header13), 6);
