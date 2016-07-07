@@ -283,6 +283,28 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						memcpy(&fields.eth_prot, oxm_value, 2);
 						break;
 
+						case OFPXMT_OFB_IP_DSCP:
+						if (fields.eth_prot == htons(0x0800))
+						{
+							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 1);
+							struct ip_hdr *hdr = fields.payload;
+							IPH_TOS_SET(hdr, (oxm_value[0]<<2)|(IPH_TOS(hdr)&0x3));
+							recalculate_ip_checksum = true;
+							TRACE("Set IP_DSCP %u", oxm_value[0]);
+						}// TODO: IPv6
+						break;
+
+						case OFPXMT_OFB_IP_ECN:
+						if (fields.eth_prot == htons(0x0800))
+						{
+							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 1);
+							struct ip_hdr *hdr = fields.payload;
+							IPH_TOS_SET(hdr, (oxm_value[0]&0x3)|(IPH_TOS(hdr)&0xFC));
+							recalculate_ip_checksum = true;
+							TRACE("Set IP_ECN %u", oxm_value[0]);
+						}// TODO: IPv6
+						break;
+
 						// Set IP protocol
 						case OFPXMT_OFB_IP_PROTO:
 						if (fields.eth_prot == htons(0x0800))	// IPv4 packet
