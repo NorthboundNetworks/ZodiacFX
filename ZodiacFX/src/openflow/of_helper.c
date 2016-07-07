@@ -441,6 +441,26 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				}
 				break;
 
+				case OXM_OF_IP_DSCP:
+				priority_match = -1;
+				if (fields->eth_prot == htons(0x0800)){
+					struct ip_hdr *iph = fields->payload;
+					if(IPH_TOS(iph)>>2 == oxm_value[0]){
+						priority_match = 0;
+					}
+				}
+				break;
+
+				case OXM_OF_IP_ECN:
+				priority_match = -1;
+				if (fields->eth_prot == htons(0x0800)){
+					struct ip_hdr *iph = fields->payload;
+					if((IPH_TOS(iph)&03) == oxm_value[0]){
+						priority_match = 0;
+					}
+				}
+				break;
+
 				case OXM_OF_IP_PROTO:
 				if (fields->ip_prot != *oxm_value)
 				{
@@ -536,6 +556,13 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				}
 				oxm_value16 &= *(uint16_t*)(oxm_value+2);
 				if (oxm_value16 != *(uint16_t*)oxm_value)
+				{
+					priority_match = -1;
+				}
+				break;
+
+				case OXM_OF_VLAN_PCP:
+				if (!(fields->isVlanTag && (pBuffer[14]>>5) == oxm_value[0]))
 				{
 					priority_match = -1;
 				}

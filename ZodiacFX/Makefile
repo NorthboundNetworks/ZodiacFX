@@ -292,10 +292,10 @@ $(PROJECT).elf: \
  src/command.o \
  src/eeprom.o \
  src/main.o \
- src/of_helper.o \
- src/openflow_10.o \
- src/openflow_13.o \
- src/openflow.o \
+ src/openflow/of_helper.o \
+ src/openflow/openflow_10.o \
+ src/openflow/openflow_13.o \
+ src/openflow/openflow.o \
  src/switch.o \
  src/telnet.o \
  src/timers.o \
@@ -395,8 +395,8 @@ src/command.c: \
  src/config/conf_eth.h \
  src/eeprom.h \
  src/switch.h \
- src/openflow.h \
- src/of_helper.h \
+ src/openflow/openflow.h \
+ src/openflow/of_helper.h \
  src/timers.h
 
 src/eeprom.o: src/eeprom.c
@@ -412,50 +412,50 @@ src/main.c: \
  src/command.h \
  src/eeprom.h \
  src/switch.h \
- src/openflow.h \
+ src/openflow/openflow.h \
  src/telnet.h \
  src/ksz8795clx/ethernet_phy.h
 
-src/of_helper.o: src/of_helper.c
+src/openflow/of_helper.o: src/openflow/of_helper.c
 
-src/of_helper.c: \
+src/openflow/of_helper.c: \
  src/config/config_zodiac.h \
- src/openflow.h \
- src/of_helper.h \
+ src/openflow/openflow.h \
+ src/openflow/of_helper.h \
  src/switch.h
 
-src/openflow_10.o: src/openflow_10.c
+src/openflow/openflow_10.o: src/openflow/openflow_10.c
 
-src/openflow_10.c: \
+src/openflow/openflow_10.c: \
  src/command.h \
- src/openflow.h \
+ src/openflow/openflow.h \
  src/switch.h \
- src/of_helper.h
+ src/openflow/of_helper.h
 
-src/openflow_13.o: src/openflow_13.c
+src/openflow/openflow_13.o: src/openflow/openflow_13.c
 
-src/openflow_13.c: \
+src/openflow/openflow_13.c: \
  src/command.h \
- src/openflow.h \
+ src/openflow/openflow.h \
  src/switch.h
 
-src/openflow.o: src/openflow.c
+src/openflow/openflow.o: src/openflow/openflow.c
 
-src/openflow.c: \
- src/openflow.h \
+src/openflow/openflow.c: \
+ src/openflow/openflow.h \
  src/config/config_zodiac.h \
  src/command.h \
  src/switch.h \
  src/timers.h 
 
-src/openflow.h: \
+src/openflow/openflow.h: \
  src/openflow_spec/openflow_spec10.h \
  src/openflow_spec/openflow_spec13.h
 
 src/switch.o: src/switch.c
 
 src/switch.c: \
- src/openflow.h \
+ src/openflow/openflow.h \
  src/switch.h \
  src/config/conf_eth.h \
  src/command.h \
@@ -465,8 +465,8 @@ src/telnet.c: \
  src/command.h \
  src/eeprom.h \
  src/switch.h \
- src/openflow.h \
- src/of_helper.h \
+ src/openflow/openflow.h \
+ src/openflow/of_helper.h \
  src/timers.h \
  src/config/conf_eth.h \
  src/config/config_zodiac.h \
@@ -686,10 +686,10 @@ clean:
 	$(RM) src/command.o
 	$(RM) src/eeprom.o
 	$(RM) src/main.o
-	$(RM) src/of_helper.o
-	$(RM) src/openflow_10.o
-	$(RM) src/openflow_13.o
-	$(RM) src/openflow.o
+	$(RM) src/openflow/of_helper.o
+	$(RM) src/openflow/openflow_10.o
+	$(RM) src/openflow/openflow_13.o
+	$(RM) src/openflow/openflow.o
 	$(RM) src/switch.o
 	$(RM) src/timers.o
 	$(RM) src/ASF/common/boards/user_board/init.o

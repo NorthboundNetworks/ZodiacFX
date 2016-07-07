@@ -202,6 +202,41 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				}
 				break;
 
+				// Push an MPLS tag
+				case OFPAT13_PUSH_MPLS:
+				{
+					uint8_t mpls[4] = {0, 0, 1, 0}; // zeros with bottom stack bit ON
+					if (fields.eth_prot == htons(0x0800)){
+						struct ip_hdr *hdr = fields.payload;
+						mpls[3] = IPH_TTL(hdr);
+					} else if (fields.eth_prot == htons(0x8847) || fields.eth_prot == htons(0x8848)){
+						memcpy(mpls, fields.payload, 4);
+						mpls[2] &= 0xFE; // clear bottom stack bit
+					}
+					struct ofp13_action_push *push = (struct ofp13_action_push*)act_hdr;
+					uint16_t payload_offset = fields.payload - p_uc_data;
+					memmove(fields.payload + 4, fields.payload, packet_size - payload_offset);
+					memcpy(fields.payload - 2, &push->ethertype, 2);
+					memcpy(fields.payload, mpls, 4);
+					packet_size += 4;
+					*ul_size += 4;
+					fields.eth_prot = push->ethertype;
+				}
+				break;
+
+				// Pop an MPLS tag
+				case OFPAT13_POP_MPLS:
+				if(fields.eth_prot == htons(0x8847) || fields.eth_prot == htons(0x8848)){
+					struct ofp13_action_pop_mpls *pop = (struct ofp13_action_pop_mpls*)act_hdr;
+					uint16_t payload_offset = fields.payload - p_uc_data;
+					memmove(fields.payload, fields.payload + 4, packet_size - payload_offset - 4);
+					memcpy(fields.payload - 2, &pop->ethertype, 2);
+					packet_size -= 4;
+					*ul_size -= 4;
+					packet_fields_parser(p_uc_data, &fields);
+				}
+				break;
+
 				// Set Field Action
 				case OFPAT13_SET_FIELD:
 				{
@@ -220,9 +255,18 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							p_uc_data[14] = (p_uc_data[14] & 0xf0) | (oxm_value[0] & 0x0f);
 							p_uc_data[15] = oxm_value[1];
 							memcpy(&fields.vlanid, oxm_value, 2);
-							TRACE("Set VID %u", ntohs(fields.vlanid));
+							TRACE("Set VID %u", (ntohs(fields.vlanid) - OFPVID_PRESENT));
 						}
 						break;
+
+						case OFPXMT_OFB_VLAN_PCP:
+						if(fields.isVlanTag){
+							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 1);
+							p_uc_data[14] = (oxm_value[0]<<5) | (p_uc_data[14] & 0x0f);
+							TRACE("Set VLAN_PCP %u", oxm_value[0]);
+						}
+						break;
+
 						// Set Source Ethernet Address
 						case OFPXMT_OFB_ETH_SRC:
 						memcpy(p_uc_data + 6, act_set_field->field + sizeof(struct oxm_header13), 6);
@@ -237,6 +281,28 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 2);
 						memcpy(fields.payload-2, oxm_value, 2);
 						memcpy(&fields.eth_prot, oxm_value, 2);
+						break;
+
+						case OFPXMT_OFB_IP_DSCP:
+						if (fields.eth_prot == htons(0x0800))
+						{
+							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 1);
+							struct ip_hdr *hdr = fields.payload;
+							IPH_TOS_SET(hdr, (oxm_value[0]<<2)|(IPH_TOS(hdr)&0x3));
+							recalculate_ip_checksum = true;
+							TRACE("Set IP_DSCP %u", oxm_value[0]);
+						}// TODO: IPv6
+						break;
+
+						case OFPXMT_OFB_IP_ECN:
+						if (fields.eth_prot == htons(0x0800))
+						{
+							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 1);
+							struct ip_hdr *hdr = fields.payload;
+							IPH_TOS_SET(hdr, (oxm_value[0]&0x3)|(IPH_TOS(hdr)&0xFC));
+							recalculate_ip_checksum = true;
+							TRACE("Set IP_ECN %u", oxm_value[0]);
+						}// TODO: IPv6
 						break;
 
 						// Set IP protocol
