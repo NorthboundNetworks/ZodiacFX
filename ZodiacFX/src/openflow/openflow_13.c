@@ -1217,7 +1217,7 @@ void flow_delete13(struct ofp_header *msg)
 			continue;
 		}
 
-		if (ptr_fm->flags & OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
+		if (ptr_fm->flags & OFPFF13_SEND_FLOW_REM) flowrem_notif13(q,OFPRR13_DELETE);
 		TRACE("Flow %d removed", q+1);
 		// Remove the flow entry
 		remove_flow13(q);
@@ -1245,7 +1245,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 		{
 			if((memcmp(&flow_match13[q].match, &ptr_fm->match, sizeof(struct ofp13_match)) == 0) && (memcmp(&flow_match13[q].cookie, &ptr_fm->cookie,8) == 0) && (flow_match13[q].priority == ptr_fm->priority) && (flow_match13[q].table_id == ptr_fm->table_id))
 			{
-				if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
+				if (ptr_fm->flags &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(q,OFPRR13_DELETE);
 				TRACE("Delete strict, removing flow %d", q+1);
 				remove_flow13(q);
 				q--;
@@ -1374,5 +1374,44 @@ void of_error13(struct ofp_header *msg, uint16_t type, uint16_t code)
 	memcpy(error_buf, &error, sizeof(struct ofp_error_msg));
 	memcpy(error_buf + sizeof(struct ofp_error_msg), msg, msglen);
 	sendtcp(&error_buf, (sizeof(struct ofp_error_msg) + msglen));
+	return;
+}
+
+/*
+*	OpenFlow FLOW Removed message function
+*
+*	@param flowid - flow number.
+*	@param reason - the reason the flow was removed.
+*
+*/
+void flowrem_notif13(int flowid, uint8_t reason)
+{
+	struct ofp13_flow_removed ofr;
+	double diff;
+	char flow_rem[128];
+
+	ofr.header.type = OFPT13_FLOW_REMOVED;
+	ofr.header.version = OF_Version;
+	ofr.header.length = htons((sizeof(struct ofp13_flow_removed) + ntohs(flow_match13[flowid].match.length)-4));
+	ofr.header.xid = 0;
+	ofr.cookie = flow_match13[flowid].cookie;
+	ofr.reason = reason;
+	ofr.priority = flow_match13[flowid].priority;
+	diff = (totaltime/2) - flow_counters[flowid].duration;
+	ofr.duration_sec = htonl(diff);
+	ofr.duration_nsec = 0;
+	ofr.packet_count = htonll(flow_counters[flowid].hitCount);
+	ofr.byte_count = htonll(flow_counters[flowid].bytes);
+	ofr.idle_timeout = flow_match13[flowid].idle_timeout;
+	ofr.hard_timeout = flow_match13[flowid].hard_timeout;
+	ofr.table_id = flow_match13[flowid].table_id;
+	memcpy(&ofr.match, &flow_match13[flowid].match, sizeof(struct ofp13_match));
+	memcpy(flow_rem, &ofr, sizeof(struct ofp13_flow_removed));
+	if (ntohs(flow_match13[flowid].match.length) > 4) 
+	{
+		memcpy(flow_rem + (sizeof(struct ofp13_flow_removed)-4), ofp13_oxm_match[flowid], ntohs(flow_match13[flowid].match.length)-4);
+	}
+	sendtcp(&flow_rem, htons(ofr.header.length));
+	TRACE("Flow removed notification sent");
 	return;
 }

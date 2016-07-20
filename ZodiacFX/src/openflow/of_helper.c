@@ -1045,7 +1045,7 @@ void flow_timeouts()
 			{
 				if (flow_match[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match[i].idle_timeout))
 				{
-					if (flow_match[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_IDLE_TIMEOUT);
+					if (flow_match[i].flags &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(i,OFPRR10_IDLE_TIMEOUT);
 					// Clear flow counters and actions
 					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
 					memset(&flow_actions[i], 0, sizeof(struct flow_tbl_actions));
@@ -1063,7 +1063,7 @@ void flow_timeouts()
 
 				if (flow_match[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match[i].hard_timeout))
 				{
-					if (flow_match[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
+					if (flow_match[i].flags &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(i,OFPRR10_HARD_TIMEOUT);
 					// Clear flow counters and actions
 					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
 					memset(&flow_actions[i], 0, sizeof(struct flow_tbl_actions));
@@ -1081,14 +1081,14 @@ void flow_timeouts()
 			{
 				if (flow_match13[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match13[i].idle_timeout))
 				{
-					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_IDLE_TIMEOUT);
+					if (ntohs(flow_match13[i].flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_IDLE_TIMEOUT);
 					remove_flow13(i);
 					return;
 				}
 
 				if (flow_match13[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match13[i].hard_timeout))
 				{
-					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
+					if (ntohs(flow_match13[i].flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_HARD_TIMEOUT);
 					remove_flow13(i);
 					return;
 				}
