@@ -1060,7 +1060,7 @@ void flow_delete(struct ofp_header *msg)
 		{
 			if (field_match10(&ptr_fm->match, &flow_match[q].match) == 1)
 			{
-				if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
+				if (ptr_fm->flags &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(q,OFPRR10_DELETE);
 				// Clear flow counters and actions
 				memset(&flow_counters[q], 0, sizeof(struct flows_counter));
 				memset(&flow_actions[q], 0, sizeof(struct flow_tbl_actions));
@@ -1098,7 +1098,7 @@ void flow_delete_strict(struct ofp_header *msg)
 		{
 			if((memcmp(&flow_match[q].match, &ptr_fm->match, sizeof(struct ofp_match)) == 0) && (memcmp(&flow_match[q].cookie, &ptr_fm->cookie,8) == 0))
 			{
-				if (ptr_fm->flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(q,OFPRR_DELETE);
+				if (ptr_fm->flags &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(q,OFPRR10_DELETE);
 				// Clear flow counters and actions
 				memset(&flow_counters[q], 0, sizeof(struct flows_counter));
 				memset(&flow_actions[q], 0, sizeof(struct flow_tbl_actions));
@@ -1140,5 +1140,34 @@ void of10_error(struct ofp_header *msg, uint16_t type, uint16_t code)
 	memcpy(error_buf, &error, sizeof(struct ofp_error_msg));
 	memcpy(error_buf + sizeof(struct ofp_error_msg), msg, msglen);
 	sendtcp(&error_buf, (sizeof(struct ofp_error_msg) + msglen));
+	return;
+}
+
+/*
+*	OpenFlow FLOW Removed message function
+*
+*	@param flowid - flow number.
+*	@param reason - the reason the flow was removed.
+*
+*/
+void flowrem_notif10(int flowid, uint8_t reason)
+{
+	struct ofp_flow_removed ofr;
+	double diff;
+
+	ofr.header.type = OFPT10_FLOW_REMOVED;
+	ofr.header.version = OF_Version;
+	ofr.header.length = htons(sizeof(struct ofp_flow_removed));
+	ofr.header.xid = 0;
+	ofr.cookie = flow_match[flowid].cookie;
+	ofr.reason = reason;
+	ofr.priority = flow_match[flowid].priority;
+	diff = (totaltime/2) - flow_counters[flowid].duration;
+	ofr.duration_sec = htonl(diff);
+	ofr.packet_count = flow_counters[flowid].hitCount;
+	ofr.byte_count = flow_counters[flowid].bytes;
+	ofr.idle_timeout = flow_match[flowid].idle_timeout;
+	ofr.match = flow_match[flowid].match;
+	sendtcp(&ofr, sizeof(struct ofp_flow_removed));
 	return;
 }

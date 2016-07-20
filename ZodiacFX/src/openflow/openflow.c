@@ -381,34 +381,5 @@ void tcp_error(void * arg, err_t err)
 	return;
 }
 
-/*
-*	OpenFlow FLOW Removed message function
-*
-*	@param flowid - flow number.
-*	@param reason - the reason the flow was removed.
-*
-*/
-void flowrem_notif(int flowid, uint8_t reason)
-{
-	struct ofp_flow_removed ofr;
-	double diff;
 
-	ofr.header.type = OFPT10_FLOW_REMOVED;
-	ofr.header.version = OF_Version;
-	ofr.header.length = htons(sizeof(struct ofp_flow_removed));
-	ofr.header.xid = 0;
-	ofr.cookie = flow_match[flowid].cookie;
-	ofr.reason = reason;
-	ofr.priority = flow_match[flowid].priority;
-	diff = (totaltime/2) - flow_counters[flowid].duration;
-	ofr.duration_sec = htonl(diff);
-	ofr.packet_count = flow_counters[flowid].hitCount;
-	ofr.byte_count = flow_counters[flowid].bytes;
-	ofr.idle_timeout = flow_match[flowid].idle_timeout;
-	ofr.match = flow_match[flowid].match;
-	tcp_write(tcp_pcb, &ofr, sizeof(struct ofp_flow_removed), TCP_WRITE_FLAG_COPY);
-	tcp_sent(tcp_pcb, NULL);
-	tcp_output(tcp_pcb);
-	return;
-}
 
