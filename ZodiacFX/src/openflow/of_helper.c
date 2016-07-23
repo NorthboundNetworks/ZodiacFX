@@ -441,6 +441,26 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				}
 				break;
 
+				case OXM_OF_IP_DSCP:
+				priority_match = -1;
+				if (fields->eth_prot == htons(0x0800)){
+					struct ip_hdr *iph = fields->payload;
+					if(IPH_TOS(iph)>>2 == oxm_value[0]){
+						priority_match = 0;
+					}
+				}
+				break;
+
+				case OXM_OF_IP_ECN:
+				priority_match = -1;
+				if (fields->eth_prot == htons(0x0800)){
+					struct ip_hdr *iph = fields->payload;
+					if((IPH_TOS(iph)&03) == oxm_value[0]){
+						priority_match = 0;
+					}
+				}
+				break;
+
 				case OXM_OF_IP_PROTO:
 				if (fields->ip_prot != *oxm_value)
 				{
@@ -536,6 +556,13 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				}
 				oxm_value16 &= *(uint16_t*)(oxm_value+2);
 				if (oxm_value16 != *(uint16_t*)oxm_value)
+				{
+					priority_match = -1;
+				}
+				break;
+
+				case OXM_OF_VLAN_PCP:
+				if (!(fields->isVlanTag && (pBuffer[14]>>5) == oxm_value[0]))
 				{
 					priority_match = -1;
 				}
@@ -1018,7 +1045,7 @@ void flow_timeouts()
 			{
 				if (flow_match[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match[i].idle_timeout))
 				{
-					if (flow_match[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_IDLE_TIMEOUT);
+					if (flow_match[i].flags &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(i,OFPRR10_IDLE_TIMEOUT);
 					// Clear flow counters and actions
 					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
 					memset(&flow_actions[i], 0, sizeof(struct flow_tbl_actions));
@@ -1036,7 +1063,7 @@ void flow_timeouts()
 
 				if (flow_match[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match[i].hard_timeout))
 				{
-					if (flow_match[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
+					if (flow_match[i].flags &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(i,OFPRR10_HARD_TIMEOUT);
 					// Clear flow counters and actions
 					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
 					memset(&flow_actions[i], 0, sizeof(struct flow_tbl_actions));
@@ -1054,14 +1081,14 @@ void flow_timeouts()
 			{
 				if (flow_match13[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match13[i].idle_timeout))
 				{
-					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_IDLE_TIMEOUT);
+					if (ntohs(flow_match13[i].flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_IDLE_TIMEOUT);
 					remove_flow13(i);
 					return;
 				}
 
 				if (flow_match13[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match13[i].hard_timeout))
 				{
-					if (flow_match13[i].flags &  OFPFF_SEND_FLOW_REM) flowrem_notif(i,OFPRR_HARD_TIMEOUT);
+					if (ntohs(flow_match13[i].flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_HARD_TIMEOUT);
 					remove_flow13(i);
 					return;
 				}

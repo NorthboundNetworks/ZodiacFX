@@ -31,7 +31,7 @@
 #define CONFIG_ZODIAC_H_
 
 
-#define VERSION "0.64"		// Firmware version number
+#define VERSION "0.65"		// Firmware version number
 
 #define MAX_OFP_VERSION   0x04
 
@@ -41,7 +41,7 @@
 
 #define MAX_TABLES	10	// Maximum number of tables for OpenFlow 1.3 and higher
 
-#define HB_INTERVAL	3	// Number of seconds between heartbeats
+#define HB_INTERVAL	2	// Number of seconds between heartbeats
 
 #define HB_TIMEOUT	6	// Number of seconds to wait when there is no response from the controller
 

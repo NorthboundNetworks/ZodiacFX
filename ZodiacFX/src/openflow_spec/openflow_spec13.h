@@ -1406,6 +1406,33 @@ struct ofp13_packet_in {
     //uint8_t data[0];      /* Ethernet frame */
 };
 
+/* Why was this flow removed? */
+enum ofp13_flow_removed_reason {
+    OFPRR13_IDLE_TIMEOUT = 0,     /* Flow idle time exceeded idle_timeout. */
+    OFPRR13_HARD_TIMEOUT = 1,     /* Time exceeded hard_timeout. */
+    OFPRR13_DELETE       = 2,     /* Evicted by a DELETE flow mod. */
+    OFPRR13_GROUP_DELETE = 3,     /* Group was removed. */
+};
+
+/* Flow removed (datapath -> controller). */
+struct ofp13_flow_removed {
+    struct ofp_header header;
+    uint64_t cookie;          /* Opaque controller-issued identifier. */
+
+    uint16_t priority;        /* Priority level of flow entry. */
+    uint8_t reason;           /* One of OFPRR_*. */
+    uint8_t table_id;         /* ID of the table */
+
+    uint32_t duration_sec;    /* Time flow was alive in seconds. */
+    uint32_t duration_nsec;   /* Time flow was alive in nanoseconds beyond
+                                 duration_sec. */
+    uint16_t idle_timeout;    /* Idle timeout from original flow mod. */
+    uint16_t hard_timeout;    /* Hard timeout from original flow mod. */
+    uint64_t packet_count;
+    uint64_t byte_count;
+    struct ofp13_match match;   /* Description of fields. Variable size. */
+};
+
 /* Configures the "role" of the sending controller.  The default role is:
  *
  *    - Equal (NX_ROLE_EQUAL), which allows the controller access to all
