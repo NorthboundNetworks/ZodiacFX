@@ -581,36 +581,39 @@ void switch_init(void)
 */
 void task_switch(struct netif *netif)
 {
-	uint32_t ul_rcv_size = 0;
-	uint32_t dev_read;
+	if (gmac_dev_rx_buf_used(&gs_gmac_dev) < gmac_dev_tx_buf_used(&gs_gmac_dev)) {
+		return;
+	}
+
+        uint32_t ul_rcv_size = 0;
+        uint8_t tag = 0;
+        int8_t in_port = 0;
 
 	/* Main packet processing loop */
-	dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_rcv_size);
-	if (dev_read == GMAC_OK)
-	{
-		if (ul_rcv_size > 0)
-		{
-			uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
-			uint8_t tag = *tail_tag + 1;
-			if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[tag-1] == 1)
-			{
-				phys10_port_stats[tag-1].rx_packets++;
-				phys13_port_stats[tag-1].rx_packets++;
-				ul_rcv_size--; // remove the tail first
-				nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
-				return;
-			} else {
-				TRACE("%d byte received from controller", ul_rcv_size);
-				struct pbuf *p;
-				p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);
-				memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));
-				p->len = ul_rcv_size-1;
-				p->tot_len = ul_rcv_size-1;
-				netif->input(p, netif);
-				pbuf_free(p);
-				return;
-			}
-		}
+	uint32_t dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_rcv_size);
+
+	if (dev_read == GMAC_OK && ul_rcv_size > 0) {
+		uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
+		tag = *tail_tag + 1;
+		in_port = tag - 1;
+        } else {
+		return;
 	}
-	return;
+
+	if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[in_port] == 1)
+	{
+		phys10_port_stats[in_port].rx_packets++;
+		phys13_port_stats[in_port].rx_packets++;
+		ul_rcv_size--; // remove the tail first
+		nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
+	} else {
+		TRACE("%d byte received from controller", ul_rcv_size);
+		struct pbuf *p;
+		p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);
+		memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));
+		p->len = ul_rcv_size-1;
+		p->tot_len = ul_rcv_size-1;
+		netif->input(p, netif);
+		pbuf_free(p);
+	}
 }
