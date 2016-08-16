@@ -581,11 +581,7 @@ void switch_init(void)
 */
 void task_switch(struct netif *netif)
 {
-	if (gmac_dev_tx_buf_used(&gs_gmac_dev) >= (GMAC_TX_BUFFERS / 2)) {
-		return;
-	}
-
-	if (gmac_dev_rx_buf_used(&gs_gmac_dev) == 0) {
+	if (gmac_dev_rx_buf_used(&gs_gmac_dev) < gmac_dev_tx_buf_used(&gs_gmac_dev)) {
 		return;
 	}
 
