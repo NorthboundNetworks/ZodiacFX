@@ -58,10 +58,10 @@ extern "C" {
 #include "gmac.h"
 
 /** Number of buffer for RX */
-#define GMAC_RX_BUFFERS  16
+#define GMAC_RX_BUFFERS  24
 
 /** Number of buffer for TX */
-#define GMAC_TX_BUFFERS  16
+#define GMAC_TX_BUFFERS  12
 
 /** MAC PHY operation max retry count */
 #define MAC_PHY_RETRY_MAX 1000000
