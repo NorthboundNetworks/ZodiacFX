@@ -125,9 +125,9 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	uint16_t packet_size = (uint16_t)*ul_size;
 	struct packet_fields fields = {0};
 	packet_fields_parser(p_uc_data, &fields);
-	if (!packet_sane(p_uc_data, packet_size, &fields)) {
-		return;
-	}
+// 	if (!packet_sane(p_uc_data, packet_size, &fields)) {
+// 		return;
+// 	}
 
 	while(1)	// Loop through goto_tables until we get a miss
 	{
