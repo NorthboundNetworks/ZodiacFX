@@ -205,7 +205,11 @@ int main (void)
 	{
 		task_switch(&gs_net_if);
 		task_command(cCommand, cCommand_last);
-		if(masterselect == false) sys_check_timeouts();
-		task_openflow();
+		// Only run the following tasks if set to Master
+		if(masterselect == false)
+		{
+				sys_check_timeouts();
+				task_openflow();	
+		} 
 	}
 }

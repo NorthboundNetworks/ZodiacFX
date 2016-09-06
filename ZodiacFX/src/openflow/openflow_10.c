@@ -49,6 +49,7 @@ extern struct flows_counter flow_counters[MAX_FLOWS];
 extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
 extern struct table_counter table_counters[MAX_TABLES];
 extern int OF_Version;
+extern bool rcv_freq;
 extern uint8_t NativePortMatrix;
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern uint8_t port_status[4];
@@ -342,6 +343,7 @@ void of10_message(struct ofp_header *ofph, int size, int len)
 	switch(ofph->type)
 	{
 		case OFPT10_FEATURES_REQUEST:
+		rcv_freq = true;
 		features_reply10(ofph->xid);
 		break;
 
