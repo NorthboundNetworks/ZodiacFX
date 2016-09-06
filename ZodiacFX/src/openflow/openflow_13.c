@@ -36,6 +36,9 @@
 #include "openflow.h"
 #include "switch.h"
 #include "lwip/tcp.h"
+#include "ipv4/lwip/ip.h"
+#include "lwip/inet_chksum.h"
+
 
 #define ALIGN8(x) (x+7)/8*8
 
@@ -91,12 +94,40 @@ static inline uint64_t (htonll)(uint64_t n)
 	return HTONL(1) == 1 ? n : ((uint64_t) HTONL(n) << 32) | HTONL(n >> 32);
 }
 
+bool packet_sane(uint8_t *p_uc_data, uint16_t packet_size, struct packet_fields *fields)
+{
+        uint16_t ip_size = 0;
+	switch (ntohs(fields->eth_prot))
+	{
+		case 0x0800:
+		{
+			struct ip_hdr *iphdr = (struct ip_hdr*)fields->payload;
+			uint16_t ip_size = htons(IPH_LEN(iphdr));
+			uint16_t ip_size_diff = fields->payload - p_uc_data;
+			if (packet_size != (ip_size + ip_size_diff)) {
+				return false;
+			}
+			uint16_t iphdr_hlen = IPH_HL(iphdr) * 4;
+			if (inet_chksum(iphdr, iphdr_hlen) != 0) {
+				return false;
+			}
+		}
+		break;
+		default:
+		break;
+	}
+	return true;
+}
+
 void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 {
 	uint8_t table_id = 0;
 	uint16_t packet_size = (uint16_t)*ul_size;
 	struct packet_fields fields = {0};
 	packet_fields_parser(p_uc_data, &fields);
+// 	if (!packet_sane(p_uc_data, packet_size, &fields)) {
+// 		return;
+// 	}
 
 	while(1)	// Loop through goto_tables until we get a miss
 	{

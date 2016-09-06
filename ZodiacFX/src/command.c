@@ -62,6 +62,7 @@ extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
 extern bool masterselect;
+extern bool stackenabled;
 extern bool trace = false;
 extern struct tcp_pcb *tcp_pcb;
 extern uint8_t port_status[4];
@@ -479,7 +480,8 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		}
 		if (masterselect == true) printf(" Stacking Select: SLAVE\r\n");
 		if (masterselect == false) printf(" Stacking Select: MASTER\r\n");
-		printf(" Stacking Status: Unavailable\r\n");
+		if (stackenabled == true) printf(" Stacking Status: Enabled\r\n");
+		if (stackenabled == false) printf(" Stacking Select: Disabled\r\n");
 		printf("\r\n-------------------------------------------------------------------------\r\n\n");
 		return;
 	}
@@ -1454,7 +1456,7 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 
 	if (strcmp(command, "spi")==0)
 	{
-		stack_write(atoi(param1));
+		//stack_write(atoi(param1));
 		return;
 	}
 

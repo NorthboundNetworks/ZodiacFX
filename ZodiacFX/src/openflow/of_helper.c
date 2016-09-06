@@ -350,12 +350,6 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	uint8_t oxm_ipv4[4];
 
 	if (!fields->parsed) {
-		if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
-		{
-			// Not sure exactly why this happens but it causes a lot of issues
-			return -2;
-		}
-
 		packet_fields_parser(pBuffer, fields);
 	}
 
@@ -853,13 +847,13 @@ int field_match13(uint8_t *oxm_a, int len_a, uint8_t *oxm_b, int len_b)
 	}
 	uint8_t *ahdr = oxm_a;
 	while (ahdr < oxm_a + len_a){
-		uint32_t afield = *(uint32_t*)(ahdr);
+		uint32_t afield = ntohl(*(uint32_t*)(ahdr));
 		uint8_t *bhdr = oxm_b;
-		uint32_t bfield = *(uint32_t*)(bhdr);
+		uint32_t bfield = ntohl(*(uint32_t*)(bhdr));
 		while (afield != bfield && bhdr < oxm_b + len_b)
 		{
 			bhdr += 4 + OXM_LENGTH(bfield);
-			bfield = *(uint32_t*)(bhdr);
+			bfield = ntohl(*(uint32_t*)(bhdr));
 		}
 		if (afield != bfield)
 		{
@@ -965,6 +959,7 @@ int field_match13(uint8_t *oxm_a, int len_a, uint8_t *oxm_b, int len_b)
                                 return 0;
                         }
 		} else if (memcmp(ahdr+4, bhdr+4, OXM_LENGTH(bfield)) != 0){
+			uint32_t test = OXM_LENGTH(bfield);
 			return 0;
 		}
 		ahdr += 4 + OXM_LENGTH(afield);
