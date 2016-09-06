@@ -51,6 +51,7 @@ struct netif gs_net_if;
 struct zodiac_config Zodiac_Config;
 int charcount, charcount_last;
 bool masterselect;
+bool stackenabled;
 int portmap[4];
 int32_t ul_temp;
 uint8_t NativePortMatrix;
@@ -204,7 +205,11 @@ int main (void)
 	{
 		task_switch(&gs_net_if);
 		task_command(cCommand, cCommand_last);
-		sys_check_timeouts();
-		task_openflow();
+		// Only run the following tasks if set to Master
+		if(masterselect == false)
+		{
+				sys_check_timeouts();
+				task_openflow();	
+		} 
 	}
 }
