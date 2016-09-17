@@ -730,6 +730,16 @@ void task_switch(struct netif *netif)
 	uint32_t dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_rcv_size);
 	if (dev_read == GMAC_OK)
 	{
+		// Check that the frame is not corrupt
+		uint16_t eth_prot;
+		memcpy(&eth_prot, gs_uc_eth_buffer + 12, 2);
+		eth_prot = ntohs(eth_prot);
+		if (eth_prot != 0x0800 && eth_prot != 0x0806 && eth_prot != 0x86DD && eth_prot != 0x0842 && eth_prot != 0x8100)
+		{
+			TRACE("Invalid EtherType: %X, dropping packet!", eth_prot);
+			return;
+		}
+		
 		if(masterselect == false)	// Only process packets if board is set to MASTER
 		{
 			if (ul_rcv_size > 0)
@@ -738,12 +748,13 @@ void task_switch(struct netif *netif)
 				uint8_t tag = *tail_tag + 1;
 				if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[tag-1] == 1)
 				{
+					stack_process((uint8_t *) gs_uc_eth_buffer, ul_rcv_size);
 					phys10_port_stats[tag-1].rx_packets++;
 					phys13_port_stats[tag-1].rx_packets++;
 					ul_rcv_size--; // remove the tail first
 					nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
 					return;
-					} else {
+				} else {
 					TRACE("%d byte received from controller", ul_rcv_size);
 					struct pbuf *p;
 					p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);
@@ -765,53 +776,4 @@ void task_switch(struct netif *netif)
 	}
 	return;
 
-
-
-
-
-
-
-
-/*
-	uint32_t dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_rcv_size);
-
-	if (ul_rcv_size > 0) {
-		uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
-		tag = *tail_tag + 1;
-		in_port = tag - 1;
-        } else {
-		return;
-	}
-
-	if(masterselect == false)	// Only process packets if board is set to MASTER
-	{
-	
-		if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[in_port] == 1)
-		{
-			if(!ioport_get_pin_level(SPI_IRQ1)) stack_process((uint8_t *) gs_uc_eth_buffer, ul_rcv_size);
-			phys10_port_stats[in_port].rx_packets++;
-			phys13_port_stats[in_port].rx_packets++;
-			ul_rcv_size--; // remove the tail first
-			nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
-			return;
-		} else {
-			TRACE("%d byte received from controller", ul_rcv_size);
-			struct pbuf *p;
-			p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);
-			memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));
-			p->len = ul_rcv_size-1;
-			p->tot_len = ul_rcv_size-1;
-			netif->input(p, netif);
-			pbuf_free(p);
-			return;
-		}
-		
-	} else
-	{	
-		TRACE("Set Slave to true!");
-		spi_slave_send = true;
-		ioport_set_pin_level(SPI_IRQ1, true);
-		return;
-	}
-*/	
 }
