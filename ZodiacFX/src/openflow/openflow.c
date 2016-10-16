@@ -143,6 +143,12 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 				return ERR_OK;	//Not an OpenFlow packet
 			}
 			plen = htons(ofph->length);
+			
+			if (ofph->version > 6 || ofph->type > 30) //	Invalid OpenFlow message
+			{
+				TRACE("Invalid OpenFlow command, ignoring!");
+				return ERR_OK;
+			}
 			size = size + plen;
 			TRACE("Processing %d byte OpenFlow message %u (%d)", plen, htonl(ofph->xid), size);
 
@@ -321,6 +327,7 @@ void task_openflow(void)
 			{
 				tcp_con_state = -1;
 				if(Zodiac_Config.failstate == 0) clear_flows();		// Clear the flow if in secure mode
+				TRACE("Closing connection due to failed handshake!");
 				tcp_close(tcp_pcb);
 			} else {
 				echo_request();
@@ -331,6 +338,7 @@ void task_openflow(void)
 		{
 			tcp_con_state = -1;
 			if(Zodiac_Config.failstate == 0) clear_flows();		// Clear the flow if in secure mode
+			TRACE("Closing connection due to no heartbeat!");
 			tcp_close(tcp_pcb);
 		}
 
