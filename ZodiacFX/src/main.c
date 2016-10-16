@@ -208,8 +208,8 @@ int main (void)
 		// Only run the following tasks if set to Master
 		if(masterselect == false)
 		{
-				sys_check_timeouts();
-				task_openflow();	
+			sys_check_timeouts();
+			task_openflow();	
 		} 
 	}
 }

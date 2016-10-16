@@ -62,7 +62,7 @@ extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
 extern bool masterselect;
-extern bool stackenabled;
+extern bool stackenabled = false;
 extern bool trace = false;
 extern struct tcp_pcb *tcp_pcb;
 extern uint8_t port_status[4];
