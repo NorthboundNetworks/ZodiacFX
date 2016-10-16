@@ -77,7 +77,8 @@ static uint32_t gs_ul_spi_clock = 500000;
 /* Delay between consecutive transfers. */
 #define SPI_DLYBCT 0x10
 
-#define SPI_PREAMBLE		0xAAAAAAAB
+#define SPI_SLAVE_PREAMBLE		0xAAAAAAAB
+#define SPI_MASTER_PREAMBLE		0xBBBBBBBC
 #define SPI_STATE_PREAMBLE	0
 #define SPI_STATE_COMMAND	1
 #define SPI_STATE_DATA		3
@@ -85,10 +86,12 @@ static uint32_t gs_ul_spi_clock = 500000;
 uint8_t stats_rr = 0;
 
 uint32_t *spi_cmd_buffer;
+uint32_t spi_slv_preamble;
 uint8_t spi_state = 0;
 uint16_t spi_data_count = 0;
 uint16_t spi_command, spi_command_size;
 bool spi_slave_send; 
+uint16_t spi_slave_send_size;
 
 // Internal functions
 int readtxbytes(int port);
@@ -119,12 +122,12 @@ void spi_init(void)
 }
 
 
-void stack_process(uint8_t *p_uc_data, uint16_t ul_size)
+void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size)
 {
 	uint32_t cmd_buffer;
 	
 	// Send the preamble mark the beginning of a transfer
-	cmd_buffer = ntohl(SPI_PREAMBLE);
+	cmd_buffer = ntohl(SPI_SLAVE_PREAMBLE);
 	stack_mst_write(&cmd_buffer, sizeof(cmd_buffer));
 	
 	// Send a 2 byte command code and 2 byte data code
@@ -134,6 +137,22 @@ void stack_process(uint8_t *p_uc_data, uint16_t ul_size)
 	// Send packet
 	stack_mst_write(p_uc_data, ul_size);
 	return;
+}
+
+void MasterStackRcv(void)
+{
+	uint32_t cmd_buffer;
+	
+	TRACE("Master received slave IRQ!");
+	// Send the preamble mark the beginning of a transfer
+	cmd_buffer = ntohl(SPI_MASTER_PREAMBLE);
+	stack_mst_write(&cmd_buffer, sizeof(cmd_buffer));
+
+	// Send 4 bytes to receive slave packet size
+	cmd_buffer = 0xFFFFFFFF;
+	stack_mst_write(&cmd_buffer, sizeof(cmd_buffer));
+	TRACE("Rcv Size = %04X", cmd_buffer);
+	while(ioport_get_pin_level(SPI_IRQ1));
 }
 
 /*
@@ -149,15 +168,14 @@ void stack_mst_write(uint8_t *rx_data, uint16_t ul_size)
 	p_buffer = rx_data;
 		
 	for (int i = 0; i < ul_size; i++) {
-		for(int x = 0;x<5000;x++);
+		for(int x = 0;x<10000;x++);
 		spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 0);
-		TRACE("%d , %02X", i, p_buffer[i]);
+		TRACE("SPI Write - %d , %02X", i, p_buffer[i]);
 		/* Wait transfer done. */
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
-		spi_read(SPI_MASTER_BASE, &rx_data, &uc_pcs);
-		
+		//spi_read(SPI_MASTER_BASE, p_buffer[i], &uc_pcs);
+		TRACE("SPI Read - %d , %02X", i, data);
 	}
-	TRACE("\r\n");
 	return;
 }
 
@@ -198,6 +216,7 @@ void spi_slave_initialize(void)
 	spi_set_bits_per_transfer(SPI_SLAVE_BASE, SPI_CHIP_SEL, SPI_CSR_BITS_8_BIT);
 	spi_enable_interrupt(SPI_SLAVE_BASE, SPI_IER_RDRF);
 	spi_enable(SPI_SLAVE_BASE);
+	ioport_set_pin_level(SPI_IRQ1, false);
 }
 
 /*
@@ -285,7 +304,7 @@ void SPI_Handler(void)
 			{
 				spi_state = SPI_STATE_COMMAND;
 				spi_data_count = 0;
-				TRACE("Preamble received!");
+				TRACE("Master send preamble received!");
 				return;
 			}
 			// Command bytes
@@ -321,19 +340,87 @@ void SPI_Handler(void)
 	
 	} else
 	{
-		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
-		TRACE("Slave read %X (%d)", data, spi_data_count);
-		spi_data_count++;
-		if (spi_data_count > 2)
+		if (spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF)
 		{
-			ioport_set_pin_level(SPI_IRQ1, false);
-			spi_slave_send = false;
-			TRACE("Set Slave to false!");
-			spi_data_count = 0;	
-		}
+			spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
+			TRACE("%d - %02X (%d)", spi_data_count, data, spi_state);
 
+			//	Start of Preamble
+			if (spi_state == SPI_STATE_PREAMBLE && data == 0xBB)
+			{
+				switch (spi_data_count)
+				{
+					case 0:
+					spi_data_count = 1;
+					spi_write(SPI_SLAVE_BASE, 0xFF, 0, 0);
+					break;
+					
+					case 1:
+					spi_data_count = 2;
+					spi_write(SPI_SLAVE_BASE, 0xFF, 0, 0);
+					break;
+					
+					case 2:
+					spi_data_count = 3;
+					spi_write(SPI_SLAVE_BASE, 0xFF, 0, 0);
+					break;
+				}
+				return;
+			}
+			
+			//	End of Preamble
+			if (spi_state == SPI_STATE_PREAMBLE && data == 0xBC && spi_data_count == 3)
+			{
+				spi_state = SPI_STATE_COMMAND;
+				spi_write(SPI_SLAVE_BASE, data, 0, 0);
+				spi_data_count = 0;
+				TRACE("Slave send reamble received!");
+				return;
+			}
+			// Command bytes
+			if (spi_state == SPI_STATE_COMMAND)
+			{
+				switch(spi_data_count)
+				{
+					case 0:
+						spi_command = data;
+						spi_write(SPI_SLAVE_BASE, 0xFF, 0, 0);
+						spi_data_count++;
+						break;
+					
+					case 1:
+						spi_command = data<<8;
+						spi_write(SPI_SLAVE_BASE, spi_slave_send_size >> 8, 0, 0); // Size
+						spi_data_count++;
+						break;
+					
+					case 2:
+						spi_command_size = data<<8;
+						spi_write(SPI_SLAVE_BASE, spi_slave_send_size, 0, 0); // Size
+						spi_data_count++;
+						break;
+					case 3:
+						spi_command_size += data;
+						spi_state = SPI_STATE_DATA;
+						spi_write(SPI_SLAVE_BASE, 0xFF, 0, 0);
+						spi_data_count = 0;
+						//TRACE("Master fill received! %d - %d", spi_command, spi_command_size);
+						TRACE("Packet Size = 0x%X (%d)", spi_slave_send_size, spi_slave_send_size);
+						break;
+				}
+			}
+			
+			if (spi_state == SPI_STATE_DATA)
+			{
+				ioport_set_pin_level(SPI_IRQ1, false);
+				spi_slave_send = false;
+				TRACE("Set Slave to false!");
+				spi_state = SPI_STATE_PREAMBLE;
+				return;
+			}
+		}
+	return;		
 	}
-	
 }
 
 /*
@@ -715,16 +802,7 @@ void task_switch(struct netif *netif)
 	int8_t in_port = 0;
 			
 	// Check if the slave device has a packet to send us
-	if(ioport_get_pin_level(SPI_IRQ1) && stackenabled == true)
-	{
-		TRACE("SPI Slave IRQ!");
-		uint32_t cmd_buffer;
-			
-		// Send the preamble mark the beginning of a transfer
-		cmd_buffer = 0xA1A2A3A4;
-		stack_mst_write(&cmd_buffer, sizeof(cmd_buffer));
-		TRACE("Slave response = %X", cmd_buffer);
-	}	
+	if(masterselect == false && ioport_get_pin_level(SPI_IRQ1) && stackenabled == true) MasterStackRcv();
 
 	/* Main packet processing loop */
 	uint32_t dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_rcv_size);
@@ -748,7 +826,7 @@ void task_switch(struct netif *netif)
 				uint8_t tag = *tail_tag + 1;
 				if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[tag-1] == 1)
 				{
-					stack_process((uint8_t *) gs_uc_eth_buffer, ul_rcv_size);
+					//MasterStackSend((uint8_t *) gs_uc_eth_buffer, ul_rcv_size);
 					phys10_port_stats[tag-1].rx_packets++;
 					phys13_port_stats[tag-1].rx_packets++;
 					ul_rcv_size--; // remove the tail first
@@ -770,6 +848,7 @@ void task_switch(struct netif *netif)
 		{
 			TRACE("Set Slave to true!");
 			spi_slave_send = true;
+			spi_slave_send_size = ul_rcv_size;
 			ioport_set_pin_level(SPI_IRQ1, true);
 			return;
 		}

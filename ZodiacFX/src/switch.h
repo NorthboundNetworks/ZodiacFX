@@ -44,6 +44,7 @@ void update_port_status(void);
 void disableOF(void);
 void enableOF(void);
 void stacking_init(bool master);
-void stack_process(uint8_t *p_uc_data, uint16_t ul_size);
+void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size);
+void MasterStackRcv(void);
 
 #endif /* SWITCH_H_ */
