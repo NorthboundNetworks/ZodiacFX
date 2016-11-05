@@ -415,6 +415,16 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
+	// Restart switch	
+	if (strcmp(command, "restart")==0)
+	{
+		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
+		for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
+		udc_detach();	// Detach the USB device before restart
+		rstc_start_software_reset(RSTC);	// Software reset
+		while (1);
+	}
+
 	// Unknown Command
 	printf("Unknown command\r\n");
 	return;
@@ -441,7 +451,6 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	{
 		printhelp();
 		return;
-
 	}
 
 	// Load config
@@ -456,6 +465,16 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
+	// Restart switch
+	if (strcmp(command, "restart")==0)
+	{
+		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
+		for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
+		udc_detach();	// Detach the USB device before restart
+		rstc_start_software_reset(RSTC);	// Software reset
+		while (1);
+	}
+	
 	// Display Config
 	if (strcmp(command, "show")==0 && strcmp(param1, "config")==0){
 		printf("\r\n-------------------------------------------------------------------------\r\n");
@@ -1473,7 +1492,7 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		printf("Starting trace...\r\n");
 		return;
 	}
-
+	
 	// Unknown Command response
 	printf("Unknown command\r\n");
 	return;
@@ -1514,9 +1533,11 @@ void printhelp(void)
 	printf(" show ports\r\n");
 	printf(" show status\r\n");
 	printf(" show version\r\n");
+	printf(" restart\r\n");
 	printf("\r\n");
 	printf("Config:\r\n");
 	printf(" save\r\n");
+	printf(" restart\r\n");
 	printf(" show config\r\n");
 	printf(" show vlans\r\n");
 	printf(" set name <name>\r\n");
