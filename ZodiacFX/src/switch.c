@@ -812,7 +812,7 @@ void task_switch(struct netif *netif)
 		uint16_t eth_prot;
 		memcpy(&eth_prot, gs_uc_eth_buffer + 12, 2);
 		eth_prot = ntohs(eth_prot);
-		if (eth_prot != 0x0800 && eth_prot != 0x0806 && eth_prot != 0x86DD && eth_prot != 0x0842 && eth_prot != 0x8100)
+		if (eth_prot != 0x0800 && eth_prot != 0x0806 && eth_prot != 0x86DD && eth_prot != 0x0842 && eth_prot != 0x8100 && eth_prot != 0x88E7 && eth_prot != 0x8847 && eth_prot != 0x88CC)
 		{
 			TRACE("Invalid EtherType: %X, dropping packet!", eth_prot);
 			return;

@@ -40,7 +40,6 @@
 #include "lwip/err.h"
 
 #include "command.h"
-#include "telnet.h"
 #include "eeprom.h"
 #include "switch.h"
 #include "openflow/openflow.h"
