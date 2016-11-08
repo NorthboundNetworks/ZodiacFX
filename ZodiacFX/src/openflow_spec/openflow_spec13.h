@@ -815,6 +815,34 @@ struct ofp13_flow_stats {
     //struct ofp_instruction instructions[0]; /* Instruction set. */
 };
 
+/* Body for ofp_multipart_request of type OFPMP_AGGREGATE. */
+struct ofp13_aggregate_stats_request {
+    uint8_t table_id;         /* ID of table to read (from ofp_table_stats)
+                                 OFPTT_ALL for all tables. */
+    uint8_t pad[3];           /* Align to 32 bits. */
+    uint32_t out_port;        /* Require matching entries to include this
+                                 as an output port.  A value of OFPP_ANY
+                                 indicates no restriction. */
+    uint32_t out_group;       /* Require matching entries to include this
+                                 as an output group.  A value of OFPG_ANY
+                                 indicates no restriction. */
+    uint8_t pad2[4];          /* Align to 64 bits. */
+    uint64_t cookie;          /* Require matching entries to contain this
+                                 cookie value */
+    uint64_t cookie_mask;     /* Mask used to restrict the cookie bits that
+                                 must match. A value of 0 indicates
+                                 no restriction. */
+    struct ofp_match match;   /* Fields to match. Variable size. */
+};
+
+/* Body of reply to OFPMP_AGGREGATE request. */
+struct ofp13_aggregate_stats_reply {
+    uint64_t packet_count;    /* Number of packets in flows. */
+    uint64_t byte_count;      /* Number of bytes in flows. */
+    uint32_t flow_count;      /* Number of flows. */
+    uint8_t pad[4];           /* Align to 64 bits. */
+};
+
 /* Components of a OXM TLV header. */
 #define OXM_HEADER__(CLASS, FIELD, HASMASK, LENGTH) \
     (((CLASS) << 16) | ((FIELD) << 9) | ((HASMASK) << 8) | (LENGTH))

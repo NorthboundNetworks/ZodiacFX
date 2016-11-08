@@ -75,6 +75,7 @@ void flow_add13(struct ofp_header *msg);
 void flow_delete13(struct ofp_header *msg);
 void flow_delete_strict13(struct ofp_header *msg);
 int multi_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
+int multi_aggregate_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *req);
@@ -538,6 +539,16 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 			multi_pos += multi_desc_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 
+		if ( ntohs(multi_req->type) == 	OFPMP13_FLOW )
+		{
+			multi_pos += multi_flow_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+		
+		if ( ntohs(multi_req->type) == OFPMP13_AGGREGATE )
+		{
+			multi_pos += multi_aggregate_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+		
 		if ( ntohs(multi_req->type) == OFPMP13_PORT_STATS )
 		{
 			multi_pos += multi_portstats_reply13(&shared_buffer[multi_pos], multi_req);
@@ -556,11 +567,6 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 		if ( ntohs(multi_req->type) == OFPMP13_TABLE )
 		{
 			multi_pos += multi_table_reply13(&shared_buffer[multi_pos], multi_req);
-		}
-
-		if ( ntohs(multi_req->type) == 	OFPMP13_FLOW )
-		{
-			multi_pos += multi_flow_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 
 		break;
@@ -693,6 +699,55 @@ int multi_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	reply->flags = 0;
 	reply->type = htons(OFPMP13_DESC);
 	memcpy(reply->body, &zodiac_desc, sizeof(zodiac_desc));
+	return len;
+}
+
+/*
+*	OpenFlow Multi-part FLOW reply message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
+{
+	char statsbuffer[2048];
+	struct ofp13_multipart_reply *reply;
+	reply = (struct ofp13_multipart_reply *) buffer;
+	reply->header.version = OF_Version;
+	reply->header.type = OFPT13_MULTIPART_REPLY;
+	reply->header.xid = msg->header.xid;
+	reply->flags = 0;
+	reply->type = htons(OFPMP13_FLOW);
+	int len = flow_stats_msg13(&statsbuffer, 0, iLastFlow);
+	memcpy(reply->body, &statsbuffer, len);
+	len += 	sizeof(struct ofp13_multipart_reply);
+	reply->header.length = htons(len);
+
+	return len;
+}
+
+/*
+*	OpenFlow Multi-part AGGREGATE reply message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+int multi_aggregate_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
+{
+	struct ofp13_multipart_reply *reply;
+	struct ofp13_aggregate_stats_reply aggregate_reply;
+	uint16_t len = sizeof(struct ofp13_multipart_reply) + sizeof(struct ofp13_aggregate_stats_reply);
+	reply = (struct ofp13_multipart_reply *) buffer;
+	reply->header.version = OF_Version;
+	reply->header.type = OFPT13_MULTIPART_REPLY;
+	reply->header.xid = msg->header.xid;
+	reply->flags = 0;
+	reply->type = htons(OFPMP13_AGGREGATE);
+	aggregate_reply.packet_count = htonll(111);
+	aggregate_reply.byte_count = htonll(222);
+	aggregate_reply.flow_count = htonl(iLastFlow);
+	memcpy(reply->body, &aggregate_reply, sizeof(aggregate_reply));
+	reply->header.length = htons(len);
 	return len;
 }
 
@@ -906,30 +961,6 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 }
 
 /*
-*	OpenFlow Multi-part FLOW reply message function
-*
-*	@param *msg - pointer to the OpenFlow message.
-*
-*/
-int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
-{
-	char statsbuffer[2048];
-	struct ofp13_multipart_reply *reply;
-	reply = (struct ofp13_multipart_reply *) buffer;
-	reply->header.version = OF_Version;
-	reply->header.type = OFPT13_MULTIPART_REPLY;
-	reply->header.xid = msg->header.xid;
-	reply->flags = 0;
-	reply->type = htons(OFPMP13_FLOW);
-	int len = flow_stats_msg13(&statsbuffer, 0, iLastFlow);
-	memcpy(reply->body, &statsbuffer, len);
-	len += 	sizeof(struct ofp13_multipart_reply);
-	reply->header.length = htons(len);
-
-	return len;
-}
-
-/*
 *	OpenFlow Multi-part PORT Stats reply message function
 *
 *	@param *msg - pointer to the OpenFlow message.
@@ -1016,11 +1047,6 @@ void flow_mod13(struct ofp_header *msg)
 {
 	struct ofp13_flow_mod * ptr_fm;
 	ptr_fm = (struct ofp13_flow_mod *) msg;
-// 	if (ptr_fm->match.type != 0x100)
-// 	{
-// 		of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_UNKNOWN);
-// 		return;
-// 	}
 
 	switch(ptr_fm->command)
 	{
