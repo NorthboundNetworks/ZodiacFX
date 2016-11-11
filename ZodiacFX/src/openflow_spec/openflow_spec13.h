@@ -411,6 +411,29 @@ enum ofp13_error_type {
 	OFPET13_EXPERIMENTER = 0xffff      /* Experimenter error messages. */
 };
 
+/* ofp_error_msg 'code' values for OFPET_BAD_REQUEST.  'data' contains at least
+ * the first 64 bytes of the failed request. */
+enum ofp_bad_request_code {
+    OFPBRC13_BAD_VERSION      = 0,  /* ofp_header.version not supported. */
+    OFPBRC13_BAD_TYPE         = 1,  /* ofp_header.type not supported. */
+    OFPBRC13_BAD_MULTIPART    = 2,  /* ofp_multipart_request.type not supported. */
+    OFPBRC13_BAD_EXPERIMENTER = 3,  /* Experimenter id not supported
+                                   * (in ofp_experimenter_header or
+                                   * ofp_multipart_request or
+                                   * ofp_multipart_reply). */
+    OFPBRC13_BAD_EXP_TYPE     = 4,  /* Experimenter type not supported. */
+    OFPBRC13_EPERM            = 5,  /* Permissions error. */
+    OFPBRC13_BAD_LEN          = 6,  /* Wrong request length for type. */
+    OFPBRC13_BUFFER_EMPTY     = 7,  /* Specified buffer has already been used. */
+    OFPBRC13_BUFFER_UNKNOWN   = 8,  /* Specified buffer does not exist. */
+    OFPBRC13_BAD_TABLE_ID     = 9,  /* Specified table-id invalid or does not
+                                   * exist. */
+    OFPBRC13_IS_SLAVE         = 10, /* Denied because controller is slave. */
+    OFPBRC13_BAD_PORT         = 11, /* Invalid port. */
+    OFPBRC13_BAD_PACKET       = 12, /* Invalid packet in packet-out. */
+    OFPBRC13_MULTIPART_BUFFER_OVERFLOW    = 13, /* ofp_multipart_request overflowed the assigned buffer. */
+};
+
 /* ofp_error_msg 'code' values for OFPET_FLOW_MOD_FAILED.  'data' contains
  * at least the first 64 bytes of the failed request. */
 enum ofp13_flow_mod_failed_code {

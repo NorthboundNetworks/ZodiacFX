@@ -532,6 +532,11 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 		flow_mod13(ofph);
 		break;
 
+		case OFPT13_GROUP_MOD:
+		of_error13(ofph, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
+		break;
+
+
 		case OFPT13_MULTIPART_REQUEST:
 		multi_req  = (struct ofp13_multipart_request *) ofph;
 		if ( ntohs(multi_req->type) == OFPMP13_DESC )
@@ -559,9 +564,11 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 			multi_pos += multi_portdesc_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 
+		// Floodlight v1.2 crashes when it gets this reply, removed for the moment.
 		if ( htons(multi_req->type) == OFPMP13_TABLE_FEATURES )
 		{
-			multi_pos += multi_tablefeat_reply13(&shared_buffer[multi_pos], multi_req);
+			//multi_pos += multi_tablefeat_reply13(&shared_buffer[multi_pos], multi_req);
+			of_error13(ofph, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
 		}
 
 		if ( ntohs(multi_req->type) == OFPMP13_TABLE )
@@ -682,7 +689,7 @@ void role_reply13(struct ofp_header *msg)
 */
 int multi_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
-	static struct ofp13_desc zodiac_desc = {
+	const struct ofp13_desc zodiac_desc = {
 		.mfr_desc = "Northbound Networks",
 		.hw_desc  = "Zodiac-FX Rev.A",
 		.sw_desc  = VERSION,
@@ -733,7 +740,18 @@ int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 *
 */
 int multi_aggregate_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
-{
+{ 
+	// Add up the required return values
+	uint64_t total_packets = 0;
+	uint64_t total_bytes = 0;
+	for(int i=0; i<iLastFlow; i++)
+	{
+		if (flow_counters[i].active == true)	// Need to add filters, currently includes all flows
+		{
+			total_bytes += flow_counters[i].bytes;
+			total_packets += flow_counters[i].hitCount;
+		}
+	}	
 	struct ofp13_multipart_reply *reply;
 	struct ofp13_aggregate_stats_reply aggregate_reply;
 	uint16_t len = sizeof(struct ofp13_multipart_reply) + sizeof(struct ofp13_aggregate_stats_reply);
@@ -743,8 +761,8 @@ int multi_aggregate_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 	reply->header.xid = msg->header.xid;
 	reply->flags = 0;
 	reply->type = htons(OFPMP13_AGGREGATE);
-	aggregate_reply.packet_count = htonll(111);
-	aggregate_reply.byte_count = htonll(222);
+	aggregate_reply.packet_count = htonll(total_packets);
+	aggregate_reply.byte_count = htonll(total_bytes);
 	aggregate_reply.flow_count = htonl(iLastFlow);
 	memcpy(reply->body, &aggregate_reply, sizeof(aggregate_reply));
 	reply->header.length = htons(len);
