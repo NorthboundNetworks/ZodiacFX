@@ -45,7 +45,7 @@ extern struct tcp_conn tcp_conn;
 extern struct zodiac_config Zodiac_Config;
 extern int OF_Version;
 uint8_t gmacbuffer[GMAC_FRAME_LENTGH_MAX];
-uint8_t spibuffer[GMAC_FRAME_LENTGH_MAX];
+uint8_t spibuffer[1];
 struct ofp10_port_stats phys10_port_stats[4];
 struct ofp13_port_stats phys13_port_stats[4];
 uint8_t port_status[4];

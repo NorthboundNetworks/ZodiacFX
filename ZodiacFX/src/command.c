@@ -1483,6 +1483,8 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 	{
 		printf("mem total: %d\r\n", membag_get_total());
 		printf("mem free: %d\r\n", membag_get_total_free());
+		printf("Smallest available block: %d\r\n", membag_get_smallest_free_block_size());
+		printf("Largest available block: %d\r\n", membag_get_largest_free_block_size());		
 		return;
 	}
 

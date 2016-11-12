@@ -150,6 +150,11 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 				return ERR_OK;
 			}
 			size = size + plen;
+			if (size > len) // corrupt OpenFlow command
+			{
+				break;
+				printf("Corrupt OpenFlow Message!!!");	
+			}
 			TRACE("Processing %d byte OpenFlow message %u (%d)", plen, htonl(ofph->xid), size);
 
 			switch(ofph->type)

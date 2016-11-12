@@ -1165,8 +1165,6 @@ void flow_add13(struct ofp_header *msg)
 			}
 		}
 	}
-	TRACE("New flow added at %d into table %d : priority %d : cookie 0x%" PRIx64, iLastFlow+1, ptr_fm->table_id, ntohs(ptr_fm->priority), htonll(ptr_fm->cookie));
-
 	memcpy(&flow_match13[iLastFlow], ptr_fm, sizeof(struct ofp13_flow_mod));
 	if (ntohs(ptr_fm->match.length) > 4)
 	{
@@ -1177,6 +1175,7 @@ void flow_add13(struct ofp_header *msg)
 			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 			return;
 		}
+		TRACE("Allocating %d bytes at %p for match field in flow %d\r\n", ntohs(flow_match13[iLastFlow].match.length)-4, ofp13_oxm_match[iLastFlow], iLastFlow+1);
 		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, ntohs(flow_match13[iLastFlow].match.length)-4);
 	} else {
 		ofp13_oxm_match[iLastFlow] = NULL;
@@ -1193,6 +1192,7 @@ void flow_add13(struct ofp_header *msg)
 			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 			return;
 		}
+		TRACE("Allocating %d bytes at %p for instruction field in flow %d\r\n", instruction_size, ofp13_oxm_inst[iLastFlow], iLastFlow+1);
 		uint8_t *inst_ptr = (uint8_t *)ptr_fm + mod_size;
 		memcpy(ofp13_oxm_inst[iLastFlow], inst_ptr, instruction_size);
 	} else {
@@ -1203,6 +1203,7 @@ void flow_add13(struct ofp_header *msg)
 	flow_counters[iLastFlow].lastmatch = (totaltime/2);
 	flow_counters[iLastFlow].active = true;
 	iLastFlow++;
+	TRACE("New flow added at %d into table %d : priority %d : cookie 0x%" PRIx64, iLastFlow+1, ptr_fm->table_id, ntohs(ptr_fm->priority), htonll(ptr_fm->cookie));
 	return;
 }
 
