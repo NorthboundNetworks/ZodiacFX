@@ -75,6 +75,7 @@ void flow_add13(struct ofp_header *msg);
 void flow_delete13(struct ofp_header *msg);
 void flow_delete_strict13(struct ofp_header *msg);
 int multi_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
+int multi_aggregate_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *req);
@@ -531,6 +532,11 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 		flow_mod13(ofph);
 		break;
 
+		case OFPT13_GROUP_MOD:
+		of_error13(ofph, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
+		break;
+
+
 		case OFPT13_MULTIPART_REQUEST:
 		multi_req  = (struct ofp13_multipart_request *) ofph;
 		if ( ntohs(multi_req->type) == OFPMP13_DESC )
@@ -538,6 +544,16 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 			multi_pos += multi_desc_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 
+		if ( ntohs(multi_req->type) == 	OFPMP13_FLOW )
+		{
+			multi_pos += multi_flow_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+		
+		if ( ntohs(multi_req->type) == OFPMP13_AGGREGATE )
+		{
+			multi_pos += multi_aggregate_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+		
 		if ( ntohs(multi_req->type) == OFPMP13_PORT_STATS )
 		{
 			multi_pos += multi_portstats_reply13(&shared_buffer[multi_pos], multi_req);
@@ -548,19 +564,16 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 			multi_pos += multi_portdesc_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 
+		// Floodlight v1.2 crashes when it gets this reply, removed for the moment.
 		if ( htons(multi_req->type) == OFPMP13_TABLE_FEATURES )
 		{
-			multi_pos += multi_tablefeat_reply13(&shared_buffer[multi_pos], multi_req);
+			//multi_pos += multi_tablefeat_reply13(&shared_buffer[multi_pos], multi_req);
+			of_error13(ofph, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
 		}
 
 		if ( ntohs(multi_req->type) == OFPMP13_TABLE )
 		{
 			multi_pos += multi_table_reply13(&shared_buffer[multi_pos], multi_req);
-		}
-
-		if ( ntohs(multi_req->type) == 	OFPMP13_FLOW )
-		{
-			multi_pos += multi_flow_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 
 		break;
@@ -676,7 +689,7 @@ void role_reply13(struct ofp_header *msg)
 */
 int multi_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
-	static struct ofp13_desc zodiac_desc = {
+	const struct ofp13_desc zodiac_desc = {
 		.mfr_desc = "Northbound Networks",
 		.hw_desc  = "Zodiac-FX Rev.A",
 		.sw_desc  = VERSION,
@@ -693,6 +706,66 @@ int multi_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	reply->flags = 0;
 	reply->type = htons(OFPMP13_DESC);
 	memcpy(reply->body, &zodiac_desc, sizeof(zodiac_desc));
+	return len;
+}
+
+/*
+*	OpenFlow Multi-part FLOW reply message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
+{
+	char statsbuffer[2048];
+	struct ofp13_multipart_reply *reply;
+	reply = (struct ofp13_multipart_reply *) buffer;
+	reply->header.version = OF_Version;
+	reply->header.type = OFPT13_MULTIPART_REPLY;
+	reply->header.xid = msg->header.xid;
+	reply->flags = 0;
+	reply->type = htons(OFPMP13_FLOW);
+	int len = flow_stats_msg13(&statsbuffer, 0, iLastFlow);
+	memcpy(reply->body, &statsbuffer, len);
+	len += 	sizeof(struct ofp13_multipart_reply);
+	reply->header.length = htons(len);
+
+	return len;
+}
+
+/*
+*	OpenFlow Multi-part AGGREGATE reply message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+int multi_aggregate_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
+{ 
+	// Add up the required return values
+	uint64_t total_packets = 0;
+	uint64_t total_bytes = 0;
+	for(int i=0; i<iLastFlow; i++)
+	{
+		if (flow_counters[i].active == true)	// Need to add filters, currently includes all flows
+		{
+			total_bytes += flow_counters[i].bytes;
+			total_packets += flow_counters[i].hitCount;
+		}
+	}	
+	struct ofp13_multipart_reply *reply;
+	struct ofp13_aggregate_stats_reply aggregate_reply;
+	uint16_t len = sizeof(struct ofp13_multipart_reply) + sizeof(struct ofp13_aggregate_stats_reply);
+	reply = (struct ofp13_multipart_reply *) buffer;
+	reply->header.version = OF_Version;
+	reply->header.type = OFPT13_MULTIPART_REPLY;
+	reply->header.xid = msg->header.xid;
+	reply->flags = 0;
+	reply->type = htons(OFPMP13_AGGREGATE);
+	aggregate_reply.packet_count = htonll(total_packets);
+	aggregate_reply.byte_count = htonll(total_bytes);
+	aggregate_reply.flow_count = htonl(iLastFlow);
+	memcpy(reply->body, &aggregate_reply, sizeof(aggregate_reply));
+	reply->header.length = htons(len);
 	return len;
 }
 
@@ -906,30 +979,6 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 }
 
 /*
-*	OpenFlow Multi-part FLOW reply message function
-*
-*	@param *msg - pointer to the OpenFlow message.
-*
-*/
-int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
-{
-	char statsbuffer[2048];
-	struct ofp13_multipart_reply *reply;
-	reply = (struct ofp13_multipart_reply *) buffer;
-	reply->header.version = OF_Version;
-	reply->header.type = OFPT13_MULTIPART_REPLY;
-	reply->header.xid = msg->header.xid;
-	reply->flags = 0;
-	reply->type = htons(OFPMP13_FLOW);
-	int len = flow_stats_msg13(&statsbuffer, 0, iLastFlow);
-	memcpy(reply->body, &statsbuffer, len);
-	len += 	sizeof(struct ofp13_multipart_reply);
-	reply->header.length = htons(len);
-
-	return len;
-}
-
-/*
 *	OpenFlow Multi-part PORT Stats reply message function
 *
 *	@param *msg - pointer to the OpenFlow message.
@@ -1016,11 +1065,6 @@ void flow_mod13(struct ofp_header *msg)
 {
 	struct ofp13_flow_mod * ptr_fm;
 	ptr_fm = (struct ofp13_flow_mod *) msg;
-// 	if (ptr_fm->match.type != 0x100)
-// 	{
-// 		of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_UNKNOWN);
-// 		return;
-// 	}
 
 	switch(ptr_fm->command)
 	{
@@ -1121,8 +1165,6 @@ void flow_add13(struct ofp_header *msg)
 			}
 		}
 	}
-	TRACE("New flow added at %d into table %d : priority %d : cookie 0x%" PRIx64, iLastFlow+1, ptr_fm->table_id, ntohs(ptr_fm->priority), htonll(ptr_fm->cookie));
-
 	memcpy(&flow_match13[iLastFlow], ptr_fm, sizeof(struct ofp13_flow_mod));
 	if (ntohs(ptr_fm->match.length) > 4)
 	{
@@ -1133,6 +1175,7 @@ void flow_add13(struct ofp_header *msg)
 			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 			return;
 		}
+		TRACE("Allocating %d bytes at %p for match field in flow %d\r\n", ntohs(flow_match13[iLastFlow].match.length)-4, ofp13_oxm_match[iLastFlow], iLastFlow+1);
 		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, ntohs(flow_match13[iLastFlow].match.length)-4);
 	} else {
 		ofp13_oxm_match[iLastFlow] = NULL;
@@ -1149,6 +1192,7 @@ void flow_add13(struct ofp_header *msg)
 			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 			return;
 		}
+		TRACE("Allocating %d bytes at %p for instruction field in flow %d\r\n", instruction_size, ofp13_oxm_inst[iLastFlow], iLastFlow+1);
 		uint8_t *inst_ptr = (uint8_t *)ptr_fm + mod_size;
 		memcpy(ofp13_oxm_inst[iLastFlow], inst_ptr, instruction_size);
 	} else {
@@ -1159,6 +1203,7 @@ void flow_add13(struct ofp_header *msg)
 	flow_counters[iLastFlow].lastmatch = (totaltime/2);
 	flow_counters[iLastFlow].active = true;
 	iLastFlow++;
+	TRACE("New flow added at %d into table %d : priority %d : cookie 0x%" PRIx64, iLastFlow+1, ptr_fm->table_id, ntohs(ptr_fm->priority), htonll(ptr_fm->cookie));
 	return;
 }
 

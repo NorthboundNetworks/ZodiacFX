@@ -31,11 +31,11 @@
 #define CONFIG_ZODIAC_H_
 
 
-#define VERSION "0.67"		// Firmware version number
+#define VERSION "0.68"		// Firmware version number
 
 #define MAX_OFP_VERSION   0x04
 
-#define MAX_FLOWS	128		// Maximum number of flows
+#define MAX_FLOWS	192		// Maximum number of flows
 
 #define MAX_VLANS	4	// Maximum number of VLANS, default is 1 per port (4)
 
