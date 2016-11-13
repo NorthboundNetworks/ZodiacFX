@@ -643,6 +643,12 @@
     <Compile Include="src\ASF\common\utils\membag\membag.c">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\http.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\http.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\openflow\of_helper.c">
       <SubType>compile</SubType>
     </Compile>
