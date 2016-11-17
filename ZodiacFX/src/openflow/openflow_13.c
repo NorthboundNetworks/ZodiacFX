@@ -49,11 +49,11 @@ extern int OF_Version;
 extern bool rcv_freq;
 extern int iLastFlow;
 extern int totaltime;
-extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
-extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
-extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
-extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
-extern struct flows_counter flow_counters[MAX_FLOWS];
+extern struct ofp13_flow_mod flow_match13[MAX_FLOWS_13];
+extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
+extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
+extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
+extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
 extern uint8_t port_status[4];
@@ -896,7 +896,7 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 	tbl_feats.metadata_match = 0;
 	tbl_feats.metadata_write = 0;
 	tbl_feats.config = 0;
-	tbl_feats.max_entries = htonl(MAX_FLOWS);
+	tbl_feats.max_entries = htonl(MAX_FLOWS_13);
 	int len = sizeof(struct ofp13_multipart_reply) + sizeof(struct ofp13_table_features) + prop_size;
 	reply->header.length = htons(len);
 	tbl_feats.length = htons(sizeof(struct ofp13_table_features) + prop_size);
@@ -1100,7 +1100,7 @@ void flow_mod13(struct ofp_header *msg)
 void flow_add13(struct ofp_header *msg)
 {
 	// Return an error if tables are full
-	if (iLastFlow > (MAX_FLOWS-1))
+	if (iLastFlow > (MAX_FLOWS_13-1))
 	{
 		of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 		return;

@@ -48,13 +48,13 @@ extern struct ofp13_port_stats phys13_port_stats[4];
 
 // Local Variables
 struct ofp_switch_config Switch_config;
-struct ofp_flow_mod flow_match[MAX_FLOWS];
-struct ofp13_flow_mod flow_match13[MAX_FLOWS];
-uint8_t *ofp13_oxm_match[MAX_FLOWS];
-uint8_t *ofp13_oxm_inst[MAX_FLOWS];
-uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
-struct flows_counter flow_counters[MAX_FLOWS];
-struct flow_tbl_actions flow_actions[MAX_FLOWS];
+struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
+struct ofp13_flow_mod flow_match13[MAX_FLOWS_13];		// Convert to pointers
+uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
+uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
+uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
+struct flows_counter flow_counters[MAX_FLOWS_13];		// Convert to pointers
+struct flow_tbl_actions *flow_actions10[MAX_FLOWS_10];
 struct table_counter table_counters[MAX_TABLES];
 int iLastFlow = 0;
 uint8_t shared_buffer[SHARED_BUFFER_LEN];
@@ -92,6 +92,14 @@ static inline uint64_t (htonll)(uint64_t n)
 	return HTONL(1) == 1 ? n : ((uint64_t) HTONL(n) << 32) | HTONL(n >> 32);
 }
 
+/*
+*	Main OpenFlow table lookup Function
+*
+*	@param p_uc_data - pointer to the packet buffer.
+*	@param ul_size - Size of the packet.
+*	@param port	- In Port.
+*
+*/
 void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 {
 	if( tcp_pcb != tcp_pcb_check)	// Check if the connect pointer is still valid

@@ -50,13 +50,13 @@ extern struct zodiac_config Zodiac_Config;
 extern bool debug_output;
 
 extern int charcount, charcount_last;
-extern struct ofp_flow_mod flow_match[MAX_FLOWS];
-extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
-extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
-extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
-extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
-extern struct flows_counter flow_counters[MAX_FLOWS];
-extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
+extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
+extern struct ofp13_flow_mod flow_match13[MAX_FLOWS_13];
+extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
+extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
+extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
+extern struct flows_counter flow_counters[MAX_FLOWS_13];
+extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_13];
 extern int iLastFlow;
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
@@ -910,38 +910,38 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				{
 					printf("\r\nFlow %d\r\n",i+1);
 					printf(" Match:\r\n");
-					printf("  Incoming Port: %d\t\t\tEthernet Type: 0x%.4X\r\n",ntohs(flow_match[i].match.in_port), ntohs(flow_match[i].match.dl_type));
-					printf("  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t\tDestination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",flow_match[i].match.dl_src[0], flow_match[i].match.dl_src[1], flow_match[i].match.dl_src[2], flow_match[i].match.dl_src[3], flow_match[i].match.dl_src[4], flow_match[i].match.dl_src[5] \
-					, flow_match[i].match.dl_dst[0], flow_match[i].match.dl_dst[1], flow_match[i].match.dl_dst[2], flow_match[i].match.dl_dst[3], flow_match[i].match.dl_dst[4], flow_match[i].match.dl_dst[5]);
-					if (ntohs(flow_match[i].match.dl_vlan) == 0xffff)
+					printf("  Incoming Port: %d\t\t\tEthernet Type: 0x%.4X\r\n",ntohs(flow_match10[i]->match.in_port), ntohs(flow_match10[i]->match.dl_type));
+					printf("  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t\tDestination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",flow_match10[i]->match.dl_src[0], flow_match10[i]->match.dl_src[1], flow_match10[i]->match.dl_src[2], flow_match10[i]->match.dl_src[3], flow_match10[i]->match.dl_src[4], flow_match10[i]->match.dl_src[5] \
+					, flow_match10[i]->match.dl_dst[0], flow_match10[i]->match.dl_dst[1], flow_match10[i]->match.dl_dst[2], flow_match10[i]->match.dl_dst[3], flow_match10[i]->match.dl_dst[4], flow_match10[i]->match.dl_dst[5]);
+					if (ntohs(flow_match10[i]->match.dl_vlan) == 0xffff)
 					{
 						printf("  VLAN ID: N/A\t\t\t\tVLAN Priority: N/A\r\n");
 					} else {
-						printf("  VLAN ID: %d\t\t\t\tVLAN Priority: 0x%x\r\n",ntohs(flow_match[i].match.dl_vlan), flow_match[i].match.dl_vlan_pcp);
+						printf("  VLAN ID: %d\t\t\t\tVLAN Priority: 0x%x\r\n",ntohs(flow_match10[i]->match.dl_vlan), flow_match10[i]->match.dl_vlan_pcp);
 					}
-					if ((ntohs(flow_match[i].match.dl_type) == 0x0800) || (ntohs(flow_match[i].match.dl_type) == 0x8100)) printf("  IP Protocol: %d\t\t\tIP ToS Bits: 0x%.2X\r\n",flow_match[i].match.nw_proto, flow_match[i].match.nw_tos);
-					if (flow_match[i].match.nw_proto == 7 || flow_match[i].match.nw_proto == 16)
+					if ((ntohs(flow_match10[i]->match.dl_type) == 0x0800) || (ntohs(flow_match10[i]->match.dl_type) == 0x8100)) printf("  IP Protocol: %d\t\t\tIP ToS Bits: 0x%.2X\r\n",flow_match10[i]->match.nw_proto, flow_match10[i]->match.nw_tos);
+					if (flow_match10[i]->match.nw_proto == 7 || flow_match10[i]->match.nw_proto == 16)
 					{
-						printf("  TCP Source Address: %d.%d.%d.%d\r\n",ip4_addr1(&flow_match[i].match.nw_src), ip4_addr2(&flow_match[i].match.nw_src), ip4_addr3(&flow_match[i].match.nw_src), ip4_addr4(&flow_match[i].match.nw_src));
-						printf("  TCP Destination Address: %d.%d.%d.%d\r\n", ip4_addr1(&flow_match[i].match.nw_dst), ip4_addr2(&flow_match[i].match.nw_dst), ip4_addr3(&flow_match[i].match.nw_dst), ip4_addr4(&flow_match[i].match.nw_dst));
-						printf("  TCP/UDP Source Port: %d\t\tTCP/UDP Destination Port: %d\r\n",ntohs(flow_match[i].match.tp_src), ntohs(flow_match[i].match.tp_dst));
+						printf("  TCP Source Address: %d.%d.%d.%d\r\n",ip4_addr1(&flow_match10[i]->match.nw_src), ip4_addr2(&flow_match10[i]->match.nw_src), ip4_addr3(&flow_match10[i]->match.nw_src), ip4_addr4(&flow_match10[i]->match.nw_src));
+						printf("  TCP Destination Address: %d.%d.%d.%d\r\n", ip4_addr1(&flow_match10[i]->match.nw_dst), ip4_addr2(&flow_match10[i]->match.nw_dst), ip4_addr3(&flow_match10[i]->match.nw_dst), ip4_addr4(&flow_match10[i]->match.nw_dst));
+						printf("  TCP/UDP Source Port: %d\t\tTCP/UDP Destination Port: %d\r\n",ntohs(flow_match10[i]->match.tp_src), ntohs(flow_match10[i]->match.tp_dst));
 					}
-					if (flow_match[i].match.nw_proto == 1)
+					if (flow_match10[i]->match.nw_proto == 1)
 					{
-						printf("  ICMP Type: %d\t\t\t\tICMP Code: %d\r\n",ntohs(flow_match[i].match.tp_src), ntohs(flow_match[i].match.tp_dst));
+						printf("  ICMP Type: %d\t\t\t\tICMP Code: %d\r\n",ntohs(flow_match10[i]->match.tp_src), ntohs(flow_match10[i]->match.tp_dst));
 					}
-					printf("  Wildcards: 0x%.8x\t\t\tCookie: 0x%" PRIx64 "\r\n",ntohl(flow_match[i].match.wildcards), htonll(flow_match[i].cookie));
+					printf("  Wildcards: 0x%.8x\t\t\tCookie: 0x%" PRIx64 "\r\n",ntohl(flow_match10[i]->match.wildcards), htonll(flow_match10[i]->cookie));
 					printf("\r Attributes:\r\n");
-					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match[i].priority), (totaltime/2) - flow_counters[i].duration);
-					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match[i].hard_timeout), ntohs(flow_match[i].idle_timeout));
+					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match10[i]->priority), (totaltime/2) - flow_counters[i].duration);
+					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match10[i]->hard_timeout), ntohs(flow_match10[i]->idle_timeout));
 					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
 					printf("\r\n Actions:\r\n");
 					for(int q=0;q<4;q++)
 					{
-						if(q == 0) act_hdr = flow_actions[i].action1;
-						if(q == 1) act_hdr = flow_actions[i].action2;
-						if(q == 2) act_hdr = flow_actions[i].action3;
-						if(q == 3) act_hdr = flow_actions[i].action4;
+						if(q == 0) act_hdr = flow_actions10[i]->action1;
+						if(q == 1) act_hdr = flow_actions10[i]->action2;
+						if(q == 2) act_hdr = flow_actions10[i]->action3;
+						if(q == 3) act_hdr = flow_actions10[i]->action4;
 
 						if(act_hdr->len == 0 && q == 0) printf("   DROP\r\n"); // No actions = DROP
 
