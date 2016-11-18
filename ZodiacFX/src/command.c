@@ -408,7 +408,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		// Force OpenFlow version
 		reset_config.of_version = 0;			// Force version disabled
 
-		memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existng MAC address so it is not reset
+		memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existing MAC address so it is not reset
 		memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
 		saveConfig();
 		printf("Setup complete, MAC Address = %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
@@ -419,7 +419,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 	if (strcmp(command, "restart")==0)
 	{
 		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
-		for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
+		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
 		udc_detach();	// Detach the USB device before restart
 		rstc_start_software_reset(RSTC);	// Software reset
 		while (1);
