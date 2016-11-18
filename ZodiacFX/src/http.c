@@ -35,6 +35,12 @@
 #include "lwip/err.h"
 #include "timers.h"
 
+#include "config_zodiac.h"
+
+// External Variables
+extern int totaltime;
+extern int32_t ul_temp;
+
 // Local Variables
 struct tcp_pcb *http_pcb;
 char http_buffer[512];
@@ -90,12 +96,26 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		for(int i=0;i<len;i++) http_buffer[i] = pc[i];
 		pbuf_free(p);
 		
-		// Test response
+				int hr = (totaltime/2)/3600;
+				int t = (totaltime/2)%3600;
+				int min = t/60;
+				int sec = t%60;
+		
+		// Format HTTP response
 		sprintf(output_buffer,"HTTP/1.1 200 OK\r\n");
 		strcat(output_buffer,"Connection: close\r\n");
-		strcat(output_buffer,"Content-Type: text/html; charset=UTF-8\r\n");
-		strcat(output_buffer,"<HTML><HEAD><TITLE>Zodiac FX</TITLE></HEAD>\n");
-		strcat(output_buffer,"<BODY><H1>Zodiac FX</H1></BODY></HTML>\n");
+		strcat(output_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+		// Append web page
+		strcat(output_buffer,"<!DOCTYPE html><html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\"><title>Zodiac FX</title><style type=\"text/css\">body {overflow: hidden;height: 100%; max-height: 100%; font-family:Sans-serif;line-height: 1.5em;font-size: 15px;}header {position: absolute;top: 0;left: 0;width: 100%;height: 70px; overflow: hidden;color: white;background: black;}h1, h2 {margin-top:15px;margin-bottom:10px;}#sidebar {position: absolute; top: 70px; left: 0; bottom: 0;width: 200px;overflow: auto;background: #F6F6F6; }#logo {padding-left: 20px;padding-top: 10px;}main {position: fixed;top: 100px;left: 230px; right: 0;bottom: 0;overflow: auto;}.innertube {margin: 20px;}sidebar ul {list-style-type: none;margin: 10px;padding: 0;}sidebar ul a {color: black;text-decoration: none;}</style></head><body><header><div id=\"logo\"><h1>Zodiac FX</h1></div></header><main><div class=\"innertube\">");
+		// Insert data onto page
+						sprintf(output_buffer + strlen(output_buffer),"<h1>Device Status</h1>");
+						sprintf(output_buffer + strlen(output_buffer)," <p><br>Firmware Version: %s<br>",VERSION);
+						sprintf(output_buffer + strlen(output_buffer)," CPU Temp: %d C<br>", (int)ul_temp);
+						sprintf(output_buffer + strlen(output_buffer)," Uptime: %02d:%02d:%02d", hr, min, sec);
+		
+		strcat(output_buffer,"</p></div></main><sidebar id=\"sidebar\"><div class=\"innertube\"><h2>Base</h2><ul><li><a href=\"#\">Show Status</a></li><li><a href=\"#\">Show Ports</a></li><li><a href=\"#\">Show Version</a></li><li><a href=\"#\">Help</a></li></ul><h2>Config</h2><ul><li><a href=\"#\">Save</a></li><li><a href=\"#\">Show Config</a></li><li><a href=\"#\">Show VLANs</a></li><li><a href=\"#\">Set Name</a></li><li><a href=\"#\">Set MAC Address</a></li><li><a href=\"#\">Set IP Address</a></li><li><a href=\"#\">Set Netmask</a></li><li><a href=\"#\">Set Gateway</a></li><li><a href=\"#\">Set OF-Controller</a></li><li><a href=\"#\">Set OF-Port</a></li><li><a href=\"#\">Set OF-Version</a></li><li><a href=\"#\">Add VLAN</a></li><li><a href=\"#\">Delete VLAN</a></li><li><a href=\"#\">Set VLAN-Type</a></li><li><a href=\"#\">Add VLAN-Port</a></li><li><a href=\"#\">Delete VLAN-Port</a></li><li><a href=\"#\">Factory Reset</a></li></ul><h2>OpenFlow</h2><ul><li><a href=\"#\">Show Status</a></li><li><a href=\"#\">Show Flows</a></li><li><a href=\"#\">Enable</a></li><li><a href=\"#\">Disable</a></li></ul><h2>Debug</h2><ul><li><a href=\"#\">Read from Register</a></li><li><a href=\"#\">Write to Register</a></li></ul></div></sidebar></body></html>");
+		
+		// Send HTTP response
 		http_send(&output_buffer, pcb);
 		
 	} else {
