@@ -36,6 +36,7 @@
 #include "conf_eth.h"
 #include "eeprom.h"
 #include "switch.h"
+#include "flash.h"
 #include "openflow/openflow.h"
 #include "openflow/of_helper.h"
 #include "lwip/def.h"
@@ -69,7 +70,6 @@ extern uint8_t port_status[4];
 extern int totaltime;
 extern int32_t ul_temp;
 extern int OF_Version;
-extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 
 
 // Local Variables
@@ -87,7 +87,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3);
 void command_debug(char *command, char *param1, char *param2, char *param3);
 void printintro(void);
 void printhelp(void);
-void xmodem_xfer(void);
+
 
 /*
 *	Converts a 64bit value from host to network format
@@ -118,65 +118,6 @@ void saveConfig(void)
 {
 	eeprom_write();
 	return;
-}
-
-/*
-*	XModem transfer
-*
-*/
-xmodem_xfer(void)
-{
-	char ch;
-	int timeout_clock = 0;
-	int byte_count = 1;
-	int block_count = 1;
-	uint8_t xmodem_crc = 0;
-	
-	while(1)
-	{
-		while(udi_cdc_is_rx_ready()){
-			ch = udi_cdc_getc();
-			timeout_clock = 0;	// reset timeout clock
-			
-			// Check for EOT
-			if (block_count == 1 && ch == 4)
-			{
-				printf("%c",6);	// Send final <ACK>
-				// Call firmware flash function
-				while(1);
-			}
-			
-			// Check for end of a block
-			if (block_count == 132)	// End of block or end of transmission
-			{
-				if (xmodem_crc == ch)	// Check CRC
-				{
-					printf("%c",6);		// CRC OK the send a <ACK>
-					block_count = 0;	// Start a new block	
-				} else {
-					printf("%c",21);	// CRC incorrect the send a <NACK>
-					block_count = 0;	// Start a new block
-					byte_count -= 128;					
-				}
-				xmodem_crc = 0;		// Reset CRC
-			}
-
-			// Don't store the first 3 bytes <SOH>, <###>, <255-###>
-			if (block_count > 3)
-			{
-				shared_buffer[byte_count-1] = ch;
-				byte_count++;
-				xmodem_crc += ch;
-			}
-			block_count++;
-		}
-		timeout_clock++;
-		if (timeout_clock > 1000000)	// Timeout, send <NAK>
-		{
-			printf("%c",21);
-			timeout_clock = 0;
-		}
-	}
 }
 
 /*
@@ -338,7 +279,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 	if (strcmp(command, "update") == 0)
 	{
 		printf("Please begin firmware upload\r\n");
-		xmodem_xfer();
+		firmware_update();
 		return;
 
 	}
