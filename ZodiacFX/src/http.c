@@ -34,6 +34,7 @@
 #include "lwip/tcp.h"
 #include "lwip/err.h"
 #include "timers.h"
+#include "openflow/openflow.h"
 
 #include "config_zodiac.h"
 
@@ -44,7 +45,7 @@ extern int32_t ul_temp;
 // Local Variables
 struct tcp_pcb *http_pcb;
 char http_buffer[512];
-char output_buffer[256];
+extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 	
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
@@ -102,21 +103,29 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				int sec = t%60;
 		
 		// Format HTTP response
-		sprintf(output_buffer,"HTTP/1.1 200 OK\r\n");
-		strcat(output_buffer,"Connection: close\r\n");
-		strcat(output_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+		strcat(shared_buffer,"Connection: close\r\n");
+		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 		// Append web page
+<<<<<<< HEAD
 		strcat(output_buffer,"<!DOCTYPE html><html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\"><title>Zodiac FX</title><style type=\"text/css\">body {overflow: hidden;height: 100%; max-height: 100%; font-family:Sans-serif;line-height: 1.5em;font-size: 15px;}header {position: absolute;top: 0;left: 0;width: 100%;height: 70px; overflow: hidden;color: white;background: black;}h1, h2 {margin-top:15px;margin-bottom:10px;}main {position: fixed;top: 70px;left: 230px; right: 0;bottom: 0;margin: 20px;overflow: auto;}/* Branding/logo padding */#logo {padding-left: 20px;padding-top: 10px;}/* Sidebar class style */.sidebar {position: absolute; top: 70px; left: 0; bottom: 0;width: 180px;padding: 20px;overflow: auto;background: #F6F6F6; }/* List style in sidebar */.sidebar ul {list-style-type: none;margin: 10px;padding: 0;}/* Link style in sidebar list */.sidebar ul a {color: black;text-decoration: none;}/* Selected link style in sidebar list */.sidebar ul a:active {font-weight: bold;}</style></head><body><header><h1 id=\"logo\">Zodiac FX</h1></header><main>");
+=======
+		strcat(shared_buffer,"<!DOCTYPE html><html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\"><title>Zodiac FX</title><style type=\"text/css\">body {overflow: hidden;height: 100%; max-height: 100%; font-family:Sans-serif;line-height: 1.5em;font-size: 15px;}header {position: absolute;top: 0;left: 0;width: 100%;height: 70px; overflow: hidden;color: white;background: black;}h1, h2 {margin-top:15px;margin-bottom:10px;}#sidebar {position: absolute; top: 70px; left: 0; bottom: 0;width: 200px;overflow: auto;background: #F6F6F6; }#logo {padding-left: 20px;padding-top: 10px;}main {position: fixed;top: 100px;left: 230px; right: 0;bottom: 0;overflow: auto;}.innertube {margin: 20px;}sidebar ul {list-style-type: none;margin: 10px;padding: 0;}sidebar ul a {color: black;text-decoration: none;}</style></head><body><header><div id=\"logo\"><h1>Zodiac FX</h1></div></header><main><div class=\"innertube\">");
+>>>>>>> refs/remotes/pzanna/Dev_069
 		// Insert data onto page
-						sprintf(output_buffer + strlen(output_buffer),"<h1>Device Status</h1>");
-						sprintf(output_buffer + strlen(output_buffer)," <p><br>Firmware Version: %s<br>",VERSION);
-						sprintf(output_buffer + strlen(output_buffer)," CPU Temp: %d C<br>", (int)ul_temp);
-						sprintf(output_buffer + strlen(output_buffer)," Uptime: %02d:%02d:%02d", hr, min, sec);
+						sprintf(shared_buffer + strlen(shared_buffer),"<h1>Device Status</h1>");
+						sprintf(shared_buffer + strlen(shared_buffer)," <p><br>Firmware Version: %s<br>",VERSION);
+						sprintf(shared_buffer + strlen(shared_buffer)," CPU Temp: %d C<br>", (int)ul_temp);
+						sprintf(shared_buffer + strlen(shared_buffer)," Uptime: %02d:%02d:%02d", hr, min, sec);
 		
+<<<<<<< HEAD
 		strcat(output_buffer,"</main><div class=\"sidebar\"><h2>Base</h2><ul><li><a href=\"#\">Show Status</a></li><li><a href=\"#\">Show Ports</a></li><li><a href=\"#\">Show Version</a></li><li><a href=\"#\">Help</a></li></ul><h2>Config</h2><ul><li><a href=\"#\">Save</a></li><li><a href=\"#\">Show Config</a></li><li><a href=\"#\">Show VLANs</a></li><li><a href=\"#\">Set Name</a></li><li><a href=\"#\">Set MAC Address</a></li><li><a href=\"#\">Set IP Address</a></li><li><a href=\"#\">Set Netmask</a></li><li><a href=\"#\">Set Gateway</a></li><li><a href=\"#\">Set OF-Controller</a></li><li><a href=\"#\">Set OF-Port</a></li><li><a href=\"#\">Set OF-Version</a></li><li><a href=\"#\">Add VLAN</a></li><li><a href=\"#\">Delete VLAN</a></li><li><a href=\"#\">Set VLAN-Type</a></li><li><a href=\"#\">Add VLAN-Port</a></li><li><a href=\"#\">Delete VLAN-Port</a></li><li><a href=\"#\">Factory Reset</a></li></ul><h2>OpenFlow</h2><ul><li><a href=\"#\">Show Status</a></li><li><a href=\"#\">Show Flows</a></li><li><a href=\"#\">Enable</a></li><li><a href=\"#\">Disable</a></li></ul><h2>Debug</h2><ul><li><a href=\"#\">Read from Register</a></li><li><a href=\"#\">Write to Register</a></li></ul></div></body></html>");
+=======
+		strcat(shared_buffer,"</p></div></main><sidebar id=\"sidebar\"><div class=\"innertube\"><h2>Base</h2><ul><li><a href=\"#\">Show Status</a></li><li><a href=\"#\">Show Ports</a></li><li><a href=\"#\">Show Version</a></li><li><a href=\"#\">Help</a></li></ul><h2>Config</h2><ul><li><a href=\"#\">Save</a></li><li><a href=\"#\">Show Config</a></li><li><a href=\"#\">Show VLANs</a></li><li><a href=\"#\">Set Name</a></li><li><a href=\"#\">Set MAC Address</a></li><li><a href=\"#\">Set IP Address</a></li><li><a href=\"#\">Set Netmask</a></li><li><a href=\"#\">Set Gateway</a></li><li><a href=\"#\">Set OF-Controller</a></li><li><a href=\"#\">Set OF-Port</a></li><li><a href=\"#\">Set OF-Version</a></li><li><a href=\"#\">Add VLAN</a></li><li><a href=\"#\">Delete VLAN</a></li><li><a href=\"#\">Set VLAN-Type</a></li><li><a href=\"#\">Add VLAN-Port</a></li><li><a href=\"#\">Delete VLAN-Port</a></li><li><a href=\"#\">Factory Reset</a></li></ul><h2>OpenFlow</h2><ul><li><a href=\"#\">Show Status</a></li><li><a href=\"#\">Show Flows</a></li><li><a href=\"#\">Enable</a></li><li><a href=\"#\">Disable</a></li></ul><h2>Debug</h2><ul><li><a href=\"#\">Read from Register</a></li><li><a href=\"#\">Write to Register</a></li></ul></div></sidebar></body></html>");
+>>>>>>> refs/remotes/pzanna/Dev_069
 		
 		// Send HTTP response
-		http_send(&output_buffer, pcb);
+		http_send(&shared_buffer, pcb);
 		
 	} else {
 		pbuf_free(p);

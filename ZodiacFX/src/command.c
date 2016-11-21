@@ -36,6 +36,7 @@
 #include "conf_eth.h"
 #include "eeprom.h"
 #include "switch.h"
+#include "flash.h"
 #include "openflow/openflow.h"
 #include "openflow/of_helper.h"
 #include "lwip/def.h"
@@ -274,6 +275,15 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
+	// Display help
+	if (strcmp(command, "update") == 0)
+	{
+		printf("Please begin firmware upload\r\n");
+		firmware_update();
+		return;
+
+	}
+	
 	// Display help
 	if (strcmp(command, "help") == 0)
 	{

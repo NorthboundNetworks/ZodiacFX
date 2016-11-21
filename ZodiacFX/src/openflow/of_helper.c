@@ -153,8 +153,6 @@ int flowmatch10(uint8_t *pBuffer, int port, struct packet_fields *fields)
 	int i;
 	uint8_t *eth_dst = pBuffer;
 	uint8_t *eth_src = pBuffer + 6;
-	uint16_t tcp_src;
-	uint16_t tcp_dst;
 	uint8_t icmp_type;
 	uint8_t icmp_code;
 	bool port_match, eth_src_match, eth_dst_match, eth_prot_match;
@@ -175,31 +173,15 @@ int flowmatch10(uint8_t *pBuffer, int port, struct packet_fields *fields)
 	ntohs(fields->eth_prot))
 
 	// IP packets
-	if (ntohs(fields->eth_prot) == 0x0800)
+	if (ntohs(fields->eth_prot) == 0x0800 && fields->ip_prot == 1)		// ICMP
 	{
-		// TCP / UDP
-		if (fields->ip_prot == 6 || fields->ip_prot == 17)
+		if (fields->isVlanTag == true)	// Add 4 bytes to the offset
 		{
-			if (fields->isVlanTag == true)	// Add 4 bytes to the offset
-			{
-				memcpy(&tcp_src, pBuffer + 38, 2);
-				memcpy(&tcp_dst, pBuffer + 40, 2);
-			} else {
-				memcpy(&tcp_src, pBuffer + 34, 2);
-				memcpy(&tcp_dst, pBuffer + 36, 2);
-			}
-		}
-		// ICMP
-		if (fields->ip_prot == 1)
-		{
-			if (fields->isVlanTag == true)	// Add 4 bytes to the offset
-			{
-				memcpy(&icmp_type, pBuffer + 38, 1);
-				memcpy(&icmp_code, pBuffer + 49, 1);
-			} else {
-				memcpy(&icmp_type, pBuffer + 34, 1);
-				memcpy(&icmp_code, pBuffer + 35, 1);
-			}
+			memcpy(&icmp_type, pBuffer + 38, 1);
+			memcpy(&icmp_code, pBuffer + 49, 1);
+		} else {
+			memcpy(&icmp_type, pBuffer + 34, 1);
+			memcpy(&icmp_code, pBuffer + 35, 1);
 		}
 	}
 
@@ -231,8 +213,8 @@ int flowmatch10(uint8_t *pBuffer, int port, struct packet_fields *fields)
 		// If it is TCP or UDP we match on source and destination ports
 		if (ntohs(fields->eth_prot) == 0x0800 && (fields->ip_prot == 6 || fields->ip_prot == 17))
 		{
-			tcp_src_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_TP_SRC) || tcp_src == flow_match10[i]->match.tp_src || flow_match10[i]->match.tp_src == 0;
-			tcp_dst_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_TP_DST) || tcp_dst == flow_match10[i]->match.tp_dst || flow_match10[i]->match.tp_dst == 0;
+			tcp_src_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_TP_SRC) || fields->tp_src == flow_match10[i]->match.tp_src || flow_match10[i]->match.tp_src == 0;
+			tcp_dst_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_TP_DST) || fields->tp_dst == flow_match10[i]->match.tp_dst || flow_match10[i]->match.tp_dst == 0;
 		}
 		// If it is ICMP the TCP source and destination ports become type and code values
 		if (ntohs(fields->eth_prot) == 0x0800 && fields->ip_prot == 1)
@@ -262,7 +244,13 @@ int flowmatch10(uint8_t *pBuffer, int port, struct packet_fields *fields)
 	return matched_flow;
 }
 
-
+/*
+*	Populate the packet header fields.
+*
+*	@param *pBuffer - pointer to the buffer that contains the packet to be macthed.
+*	@param *fields - pointer the struct to store the field values.
+*
+*/
 void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
 	static const uint8_t vlan1[2] = { 0x81, 0x00 };
 	static const uint8_t vlan2[2] = { 0x88, 0xa8 };
