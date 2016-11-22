@@ -35,6 +35,7 @@
 #include "lwip/err.h"
 #include "timers.h"
 #include "openflow/openflow.h"
+#include "trace.h"
 
 #include "config_zodiac.h"
 
@@ -44,9 +45,10 @@ extern int32_t ul_temp;
 
 // Local Variables
 struct tcp_pcb *http_pcb;
-char http_buffer[512];
+char http_buffer[512];		// Buffer for HTTP message storage
+char http_msg[64];
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
-	
+
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
 void http_send(char *buffer, struct tcp_pcb *pcb);
@@ -85,8 +87,12 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 {
 	int len;
+	int i = 0;
+  	int hr = (totaltime/2)/3600;
+	int t = (totaltime/2)%3600;
+	int min = t/60;
 	char *pc;
-
+	memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 	
 	if (err == ERR_OK && p != NULL)
 	{
@@ -94,30 +100,276 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		pc = (char*)p->payload;
 		len = p->tot_len;
 
-		for(int i=0;i<len;i++) http_buffer[i] = pc[i];
+		for(i;i<len;i++) http_buffer[i] = pc[i];
 		pbuf_free(p);
 		
-				int hr = (totaltime/2)/3600;
-				int t = (totaltime/2)%3600;
-				int min = t/60;
-				int sec = t%60;
-		
-		// Format HTTP response
-		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-		strcat(shared_buffer,"Connection: close\r\n");
-		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
-		// Append web page
-		strcat(shared_buffer,"<!DOCTYPE html><html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\"><title>Zodiac FX</title><style type=\"text/css\">body {overflow: hidden;height: 100%; max-height: 100%; font-family:Sans-serif;line-height: 1.5em;font-size: 15px;}header {position: absolute;top: 0;left: 0;width: 100%;height: 70px; overflow: hidden;color: white;background: black;}h1, h2 {margin-top:15px;margin-bottom:10px;}#sidebar {position: absolute; top: 70px; left: 0; bottom: 0;width: 200px;overflow: auto;background: #F6F6F6; }#logo {padding-left: 20px;padding-top: 10px;}main {position: fixed;top: 100px;left: 230px; right: 0;bottom: 0;overflow: auto;}.innertube {margin: 20px;}sidebar ul {list-style-type: none;margin: 10px;padding: 0;}sidebar ul a {color: black;text-decoration: none;}</style></head><body><header><div id=\"logo\"><h1>Zodiac FX</h1></div></header><main><div class=\"innertube\">");
-		// Insert data onto page
-						sprintf(shared_buffer + strlen(shared_buffer),"<h1>Device Status</h1>");
-						sprintf(shared_buffer + strlen(shared_buffer)," <p><br>Firmware Version: %s<br>",VERSION);
-						sprintf(shared_buffer + strlen(shared_buffer)," CPU Temp: %d C<br>", (int)ul_temp);
-						sprintf(shared_buffer + strlen(shared_buffer)," Uptime: %02d:%02d:%02d", hr, min, sec);
-		
-		strcat(shared_buffer,"</p></div></main><sidebar id=\"sidebar\"><div class=\"innertube\"><h2>Base</h2><ul><li><a href=\"#\">Show Status</a></li><li><a href=\"#\">Show Ports</a></li><li><a href=\"#\">Show Version</a></li><li><a href=\"#\">Help</a></li></ul><h2>Config</h2><ul><li><a href=\"#\">Save</a></li><li><a href=\"#\">Show Config</a></li><li><a href=\"#\">Show VLANs</a></li><li><a href=\"#\">Set Name</a></li><li><a href=\"#\">Set MAC Address</a></li><li><a href=\"#\">Set IP Address</a></li><li><a href=\"#\">Set Netmask</a></li><li><a href=\"#\">Set Gateway</a></li><li><a href=\"#\">Set OF-Controller</a></li><li><a href=\"#\">Set OF-Port</a></li><li><a href=\"#\">Set OF-Version</a></li><li><a href=\"#\">Add VLAN</a></li><li><a href=\"#\">Delete VLAN</a></li><li><a href=\"#\">Set VLAN-Type</a></li><li><a href=\"#\">Add VLAN-Port</a></li><li><a href=\"#\">Delete VLAN-Port</a></li><li><a href=\"#\">Factory Reset</a></li></ul><h2>OpenFlow</h2><ul><li><a href=\"#\">Show Status</a></li><li><a href=\"#\">Show Flows</a></li><li><a href=\"#\">Enable</a></li><li><a href=\"#\">Disable</a></li></ul><h2>Debug</h2><ul><li><a href=\"#\">Read from Register</a></li><li><a href=\"#\">Write to Register</a></li></ul></div></sidebar></body></html>");
-		
+		// Check HTTP method
+		i = 0;
+		while(i < 63 && (http_buffer[i] != ' '))
+		{
+			http_msg[i] = http_buffer[i];
+			i++;
+		}
+	
+		if(strcmp(http_msg,"GET") == 0)
+		{
+			TRACE("http.c: GET method received")
+			
+			memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+			
+			// Specified resource directly follows GET
+			i = 0;
+			while(i < 63 && (http_buffer[i+5] != ' '))
+			{
+				http_msg[i] = http_buffer[i+5];	// Offset http_buffer to isolate resource
+				i++;
+			}
+			
+			// Check resource
+			if(http_msg[0] == '\0')
+			{
+				TRACE("http.c: request for html frames")
+				// Format HTTP response
+				sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+				strcat(shared_buffer,"Connection: close\r\n");
+				strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+				// Send frames
+				strcat(shared_buffer, "\
+						<!DOCTYPE html>\
+						<html>\
+							<head>\
+								<title>Zodiac FX</title>\
+							</head>\
+							<frameset rows=\"75,*\">\
+								<frame src=\"header.htm\" name=\"titleframe\" noresize scrolling=\"no\" frameborder=\"1\">\
+								<frameset cols=\"160, *\">\
+									<frameset rows=\"*,0\">\
+									<frame src=\"menu.htm\" name=\"sidebar\" noresize scrolling=\"no\" frameborder=\"1\">\
+									</frameset>\
+									<frame src=\"home.htm\" name=\"page\" scrolling=\"auto\" frameborder=\"1\">\
+								</frameset>\
+								<noframes>\
+									<body>\
+									<p>Browser version not supported.\
+									</body>\
+								</noframes>\
+							</frameset>\
+						</html>\
+							");
+			}
+			else if(strcmp(http_msg,"header.htm") == 0)
+			{    
+				TRACE("http.c: request for header.htm")
+				// Send header
+				sprintf(shared_buffer,"\
+						<!DOCTYPE html>\
+						<META http-equiv=\"refresh\" content=\"61\">\
+						<html>\
+							<head>\
+							<style>\
+								header {\
+									font-family:Sans-serif;\
+									position: absolute;\
+									top: 0;\
+									left: 0;\
+									width: 100%%;\
+									height: 100%%;\
+									overflow: hidden;\
+									color: white;\
+									background: black;\
+								}\
+								\
+								h1 {\
+									margin-top:20px;\
+									padding-left: 20px;\
+								}\
+                				p {\
+									font-family:Sans-serif;\
+									color: white;\
+									position: fixed;\
+									right: 150px;\
+									top: -5px;\
+								}\
+							</style>\
+							</head>\
+							<body>\
+								<header>\
+									<h1>Zodiac FX</h1>\
+								</header>\
+                				<p>\
+									Firmware Version: %s<br>\
+									CPU Temp: %d C<br>\
+									Uptime: %02d:%02d\
+								</p>\
+							</body>\
+						</html>\
+							", VERSION, (int)ul_temp, hr, min);
+			}
+			else if(strcmp(http_msg,"menu.htm") == 0)
+			{
+				TRACE("http.c: request for menu.htm")
+				// Send menu
+				sprintf(shared_buffer,"\
+					<!DOCTYPE html>\
+					<html>\
+					<head>\
+					<style>\
+					body {\
+						font-family:Sans-serif;\
+						line-height: 1.9em;\
+						font-size: 20px;\
+						font-weight: bold;\
+						background: #F6F6F6;\
+					}\
+					body ul {\
+						list-style-type: none;\
+						margin: 10px;\
+						padding: 0;\
+					}\
+					body ul a {\
+						color: black;\
+						text-decoration: none;\
+					}\
+					body ul a:active {\
+						font-weight: 700;\
+					}\
+					</style>\
+					</head>\
+					<body>\
+					<ul>\
+					<li><a href=\"home.htm\" target=\"page\">Home</a></li>\
+					<li><a href=\"config.htm\" target=\"page\">Config</a></li>\
+					<li><a href=\"openflow.htm\" target=\"page\">OpenFlow</a></li>\
+					<li><a href=\"about.htm\" target=\"page\">About</a></li>\
+					</ul>\
+					</body>\
+					</html>\
+							");
+			}
+			else if(strcmp(http_msg,"home.htm") == 0)
+			{
+				TRACE("http.c: request for home.htm")
+				// Send body
+				sprintf(shared_buffer,"\
+					<!DOCTYPE html>\
+					<html>\
+						<head>\
+							<style>\
+								body {\
+									overflow: auto;\
+									font-family:Sans-serif;\
+									font-size: 18px;\
+									margin-left: 20px;\
+								}\
+							</style>\
+						</head>\
+						<body>\
+							<p>\
+							Home Page<br>Placedholder text.\
+							</p>\
+						</body>\
+					</html>\
+							");
+			}
+      		else if(strcmp(http_msg,"config.htm") == 0)
+			{
+				TRACE("http.c: request for config.htm")
+				// Send body
+				sprintf(shared_buffer,"\
+					<!DOCTYPE html>\
+					<html>\
+						<head>\
+							<style>\
+								body {\
+									overflow: auto;\
+									font-family:Sans-serif;\
+									font-size: 18px;\
+									margin-left: 20px;\
+								}\
+							</style>\
+						</head>\
+						<body>\
+							<p>\
+							Config Page<br>Placedholder text.\
+							</p>\
+						</body>\
+					</html>\
+							");
+			}
+      		else if(strcmp(http_msg,"openflow.htm") == 0)
+			{
+				TRACE("http.c: request for openflow.htm")
+				// Send body
+				sprintf(shared_buffer,"\
+					<!DOCTYPE html>\
+					<html>\
+						<head>\
+							<style>\
+								body {\
+									overflow: auto;\
+									font-family:Sans-serif;\
+									font-size: 18px;\
+									margin-left: 20px;\
+								}\
+							</style>\
+						</head>\
+						<body>\
+							<p>\
+							OpenFlow Page<br>Placedholder text.\
+							</p>\
+						</body>\
+					</html>\
+							");
+			}
+            else if(strcmp(http_msg,"about.htm") == 0)
+			{
+				TRACE("http.c: request for home.htm")
+				// Send body
+				sprintf(shared_buffer,"\
+					<!DOCTYPE html>\
+					<html>\
+						<head>\
+							<style>\
+								body {\
+									overflow: auto;\
+									font-family:Sans-serif;\
+									font-size: 18px;\
+									margin-left: 20px;\
+								}\
+							</style>\
+						</head>\
+						<body>\
+							<p>\
+							About Page<br>Placedholder text.\
+							</p>\
+						</body>\
+					</html>\
+							");
+			}
+			else
+			{
+				TRACE("http.c: page doesn't exist");
+			}
+		}
+		else if(strcmp(http_msg,"POST") == 0)
+		{
+			TRACE("http.c: POST method received")
+		}
+		else
+		{
+			TRACE("http.c: unknown HTTP method received")
+		}
+
 		// Send HTTP response
-		http_send(&shared_buffer, pcb);
+		if(strlen(shared_buffer) < SHARED_BUFFER_LEN)
+		{
+			http_send(&shared_buffer, pcb);
+			TRACE("http.c: HTTP sent successfully")
+		}
+		else
+		{
+			TRACE("http.c: output buffer overflow")
+		}
 		
 	} else {
 		pbuf_free(p);
