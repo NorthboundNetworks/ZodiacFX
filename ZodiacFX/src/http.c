@@ -45,9 +45,10 @@ extern int32_t ul_temp;
 
 // Local Variables
 struct tcp_pcb *http_pcb;
-char http_buffer[512];
+char http_buffer[512];		// Buffer for HTTP message storage
+char http_msg[64];
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
-	
+
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
 void http_send(char *buffer, struct tcp_pcb *pcb);
@@ -86,8 +87,9 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 {
 	int len;
+	int i = 0;
 	char *pc;
-
+	memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 	
 	if (err == ERR_OK && p != NULL)
 	{
@@ -95,29 +97,95 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		pc = (char*)p->payload;
 		len = p->tot_len;
 
-		for(int i=0;i<len;i++) http_buffer[i] = pc[i];
+		for(i;i<len;i++) http_buffer[i] = pc[i];
 		pbuf_free(p);
 		
-				int hr = (totaltime/2)/3600;
-				int t = (totaltime/2)%3600;
-				int min = t/60;
-				int sec = t%60;
+		// Check HTTP method
+		i = 0;
+		while(i < 63 && (http_buffer[i] != ' '))
+		{
+			http_msg[i] = http_buffer[i];
+			i++;
+		}
+	
+		if(strcmp(http_msg,"GET") == 0)
+		{
+			TRACE("http.c: GET method received")
+			
+			memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+			
+			// Specified resource directly follows GET
+			i = 0;
+			while(i < 63 && (http_buffer[i+5] != ' '))
+			{
+				http_msg[i] = http_buffer[i+5];	// Offset http_buffer to isolate resource
+				i++;
+			}
+			
+			// Check resource
+			if(http_msg[0] == '\0')
+			{
+				// Format HTTP response
+				sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+				strcat(shared_buffer,"Connection: close\r\n");
+				strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+				// Send frames
+				strcat(shared_buffer, "<html><head><title>Zodiac FX</title></head>\
+						<frameset rows=\"100,*\"><frame src=\"header.htm\" name=\"topframe\" noresize scrolling=\"no\" marginwidth=\"0\" marginheight=\"0\" framespacing=\"0\" frameborder=\"1\"><frameset cols=\"180, *\">\
+						<frameset rows=\"*,80\" framespacing=\"0\" border=\"0\"><frame src=\"menu.htm\" name=\"contents\" noresize frameborder=\"1\" marginwidth=\"0\" marginheight=\"0\" scrolling=\"auto\"></frameset>\
+						<frame src=\"body.htm\" name=\"formframe\" frameborder=\"1\" marginwidth=\"0\" marginheight=\"0\" scrolling=\"auto\"></frameset><noframes><body><p>Browser version not supported.\
+						</body></noframes></frameset></html>");
+			}
+			else if(strcmp(http_msg,"header.htm") == 0)
+			{
+				// Format HTTP response
+				sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+				strcat(shared_buffer,"Connection: close\r\n");
+				strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+				// Send header
+				sprintf(shared_buffer,"<html><head><style>header {font-family:Sans-serif;position: absolute;top: 0;left: 0;width: 100%;height: 100%;overflow: hidden;color: white;background: black;}\
+						h1{margin-top:30px;padding-left: 40px;}</style></head><body><header><h1>Zodiac FX</h1></header></body></html>");
+			}
+			else if(strcmp(http_msg,"menu.htm") == 0)
+			{
+				// Format HTTP response
+				sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+				strcat(shared_buffer,"Connection: close\r\n");
+				strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+				// Send header
+				sprintf(shared_buffer,"<body><main><h1>Menu</h1><li>list</li><li>list</li></main></body>");
+			}
+			else if(strcmp(http_msg,"body.htm") == 0)
+			{
+				// Format HTTP response
+				sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+				strcat(shared_buffer,"Connection: close\r\n");
+				strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+				// Send header
+				sprintf(shared_buffer,"<body><main><h1>Web Interface</h1><p>This file serves as an interface guide for the Zodiac FX web interface.</p></main></body>");
+			}
+		}
+		else if(strcmp(http_msg,"POST") == 0)
+		{
+			TRACE("http.c: POST method received")
+		}
+		else
+		{
+			TRACE("http.c: Unknown HTTP method received")
+		}
+			
 		
-		// Format HTTP response
-		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-		strcat(shared_buffer,"Connection: close\r\n");
-		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
-		// Append web page
-		strcat(shared_buffer,"<!DOCTYPE html><html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\"><title>Zodiac FX</title><style type=\"text/css\">body {overflow: hidden;height: 100%; max-height: 100%; font-family:Sans-serif;line-height: 1.5em;font-size: 15px;}header {position: absolute;top: 0;left: 0;width: 100%;height: 70px; overflow: hidden;color: white;background: black;}h1, h2 {margin-top:15px;margin-bottom:10px;}#sidebar {position: absolute; top: 70px; left: 0; bottom: 0;width: 200px;overflow: auto;background: #F6F6F6; }#logo {padding-left: 20px;padding-top: 10px;}main {position: fixed;top: 100px;left: 230px; right: 0;bottom: 0;overflow: auto;}.innertube {margin: 20px;}sidebar ul {list-style-type: none;margin: 10px;padding: 0;}sidebar ul a {color: black;text-decoration: none;}</style></head><body><header><div id=\"logo\"><h1>Zodiac FX</h1></div></header><main><div class=\"innertube\">");
-
+				//int hr = (totaltime/2)/3600;
+				//int t = (totaltime/2)%3600;
+				//int min = t/60;
+				//int sec = t%60;
+				
 		// Insert data onto page
-						sprintf(shared_buffer + strlen(shared_buffer),"<h1>Device Status</h1>");
-						sprintf(shared_buffer + strlen(shared_buffer)," <p><br>Firmware Version: %s<br>",VERSION);
-						sprintf(shared_buffer + strlen(shared_buffer)," CPU Temp: %d C<br>", (int)ul_temp);
-						sprintf(shared_buffer + strlen(shared_buffer)," Uptime: %02d:%02d:%02d", hr, min, sec);
-		
-		strcat(shared_buffer,"</p></div></main><sidebar id=\"sidebar\"><div class=\"innertube\"><h2>Base</h2><ul><li><a href=\"#\">Show Status</a></li><li><a href=\"#\">Show Ports</a></li><li><a href=\"#\">Show Version</a></li><li><a href=\"#\">Help</a></li></ul><h2>Config</h2><ul><li><a href=\"#\">Save</a></li><li><a href=\"#\">Show Config</a></li><li><a href=\"#\">Show VLANs</a></li><li><a href=\"#\">Set Name</a></li><li><a href=\"#\">Set MAC Address</a></li><li><a href=\"#\">Set IP Address</a></li><li><a href=\"#\">Set Netmask</a></li><li><a href=\"#\">Set Gateway</a></li><li><a href=\"#\">Set OF-Controller</a></li><li><a href=\"#\">Set OF-Port</a></li><li><a href=\"#\">Set OF-Version</a></li><li><a href=\"#\">Add VLAN</a></li><li><a href=\"#\">Delete VLAN</a></li><li><a href=\"#\">Set VLAN-Type</a></li><li><a href=\"#\">Add VLAN-Port</a></li><li><a href=\"#\">Delete VLAN-Port</a></li><li><a href=\"#\">Factory Reset</a></li></ul><h2>OpenFlow</h2><ul><li><a href=\"#\">Show Status</a></li><li><a href=\"#\">Show Flows</a></li><li><a href=\"#\">Enable</a></li><li><a href=\"#\">Disable</a></li></ul><h2>Debug</h2><ul><li><a href=\"#\">Read from Register</a></li><li><a href=\"#\">Write to Register</a></li></ul></div></sidebar></body></html>");
-		
+						//sprintf(shared_buffer + strlen(shared_buffer),"<h1>Device Status</h1>");
+						//sprintf(shared_buffer + strlen(shared_buffer)," <p><br>Firmware Version: %s<br>",VERSION);
+						//sprintf(shared_buffer + strlen(shared_buffer)," CPU Temp: %d C<br>", (int)ul_temp);
+						//sprintf(shared_buffer + strlen(shared_buffer)," Uptime: %02d:%02d:%02d", hr, min, sec);
+
 		// Send HTTP response
 		http_send(&shared_buffer, pcb);
 		
