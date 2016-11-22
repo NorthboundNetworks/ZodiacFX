@@ -273,7 +273,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			}
       		else if(strcmp(http_msg,"config.htm") == 0)
 			{
-				TRACE("http.c: request for home.htm")
+				TRACE("http.c: request for config.htm")
 				// Send body
 				sprintf(shared_buffer,"\
 					<!DOCTYPE html>\
@@ -298,7 +298,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			}
       		else if(strcmp(http_msg,"openflow.htm") == 0)
 			{
-				TRACE("http.c: request for home.htm")
+				TRACE("http.c: request for openflow.htm")
 				// Send body
 				sprintf(shared_buffer,"\
 					<!DOCTYPE html>\
