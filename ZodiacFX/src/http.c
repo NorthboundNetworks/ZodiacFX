@@ -134,216 +134,217 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				strcat(shared_buffer,"Connection: close\r\n");
 				strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 				// Send frames
-				strcat(shared_buffer, \
-						"<!DOCTYPE html>"\
-						"<html>"\
-							"<head>"\
-								"<title>Zodiac FX</title>"\
-							"</head>"\
-							"<frameset rows=\"75,*\">"\
-								"<frame src=\"header.htm\" name=\"titleframe\" noresize scrolling=\"no\" frameborder=\"1\">"\
-								"<frameset cols=\"160, *\">"\
-									"<frameset rows=\"*,0\">"\
-									"<frame src=\"menu.htm\" name=\"sidebar\" noresize scrolling=\"no\" frameborder=\"1\">"\
-									"</frameset>"\
-									"<frame src=\"home.htm\" name=\"page\" scrolling=\"auto\" frameborder=\"1\">"\
-								"</frameset>"\
-								"<noframes>"\
-									"<body>"\
-									"<p>Browser version not supported."\
-									"</body>"\
-								"</noframes>"\
-							"</frameset>"\
-						"</html>"\
-							);
+				strcat(shared_buffer, "\
+						<!DOCTYPE html>\
+						<html>\
+							<head>\
+								<title>Zodiac FX</title>\
+							</head>\
+							<frameset rows=\"75,*\">\
+								<frame src=\"header.htm\" name=\"titleframe\" noresize scrolling=\"no\" frameborder=\"1\">\
+								<frameset cols=\"160, *\">\
+									<frameset rows=\"*,0\">\
+									<frame src=\"menu.htm\" name=\"sidebar\" noresize scrolling=\"no\" frameborder=\"1\">\
+									</frameset>\
+									<frame src=\"home.htm\" name=\"page\" scrolling=\"auto\" frameborder=\"1\">\
+								</frameset>\
+								<noframes>\
+									<body>\
+									<p>Browser version not supported.\
+									</body>\
+								</noframes>\
+							</frameset>\
+						</html>\
+							");
 			}
 			else if(strcmp(http_msg,"header.htm") == 0)
 			{    
 				TRACE("http.c: request for header.htm")
 				// Send header
-				sprintf(shared_buffer,\
-						"<!DOCTYPE html>"\
-						"<META http-equiv=\"refresh\" content=\"61\">"\
-						"<html>"\
-							"<head>"\
-							"<style>"\
-								"header {"\
-									"font-family:Sans-serif;"\
-									"position: absolute;"\
-									"top: 0;"\
-									"left: 0;"\
-									"width: 100%%;"\
-									"height: 100%%;"\
-									"overflow: hidden;"\
-									"color: white;"\
-									"background: black;"\
-								"}"\
-								"h1 {"\
-									"margin-top:20px;"\
-									"padding-left: 20px;"\
-								"}"\
-                				"p {"\
-									"font-family:Sans-serif;"\
-									"color: white;"\
-									"position: fixed;"\
-									"right: 150px;"\
-									"top: -5px;"\
-								"}"\
-							"</style>"\
-							"</head>"\
-							"<body>"\
-								"<header>"\
-									"<h1>Zodiac FX</h1>"\
-								"</header>"\
-                				"<p>"\
-									"Firmware Version: %s<br>"\
-									"CPU Temp: %d C<br>"\
-									"Uptime: %02d:%02d"\
-								"</p>"\
-							"</body>"\
-						"</html>"\
-							, VERSION, (int)ul_temp, hr, min);
+				sprintf(shared_buffer,"\
+						<!DOCTYPE html>\
+						<META http-equiv=\"refresh\" content=\"61\">\
+						<html>\
+							<head>\
+							<style>\
+								header {\
+									font-family:Sans-serif;\
+									position: absolute;\
+									top: 0;\
+									left: 0;\
+									width: 100%%;\
+									height: 100%%;\
+									overflow: hidden;\
+									color: white;\
+									background: black;\
+								}\
+								\
+								h1 {\
+									margin-top:20px;\
+									padding-left: 20px;\
+								}\
+                				p {\
+									font-family:Sans-serif;\
+									color: white;\
+									position: fixed;\
+									right: 150px;\
+									top: -5px;\
+								}\
+							</style>\
+							</head>\
+							<body>\
+								<header>\
+									<h1>Zodiac FX</h1>\
+								</header>\
+                				<p>\
+									Firmware Version: %s<br>\
+									CPU Temp: %d C<br>\
+									Uptime: %02d:%02d\
+								</p>\
+							</body>\
+						</html>\
+							", VERSION, (int)ul_temp, hr, min);
 			}
 			else if(strcmp(http_msg,"menu.htm") == 0)
 			{
 				TRACE("http.c: request for menu.htm")
 				// Send menu
-				sprintf(shared_buffer,\
-					"<!DOCTYPE html>"\
-					"<html>"\
-					"<head>"\
-					"<style>"\
-					"body {"\
-						"font-family:Sans-serif;"\
-						"line-height: 1.9em;"\
-						"font-size: 20px;"\
-						"font-weight: bold;"\
-						"background: #F6F6F6;"\
-					"}"\
-					"body ul {"\
-						"list-style-type: none;"\
-						"margin: 10px;"\
-						"padding: 0;"\
-					"}"\
-					"body ul a {"\
-						"color: black;"\
-						"text-decoration: none;"\
-					"}"\
-					"body ul a:active {"\
-						"font-weight: 700;"\
-					"}"\
-					"</style>"\
-					"</head>"\
-					"<body>"\
-					"<ul>"\
-					"<li><a href=\"home.htm\" target=\"page\">Home</a></li>"\
-					"<li><a href=\"config.htm\" target=\"page\">Config</a></li>"\
-					"<li><a href=\"openflow.htm\" target=\"page\">OpenFlow</a></li>"\
-					"<li><a href=\"about.htm\" target=\"page\">About</a></li>"\
-					"</ul>"\
-					"</body>"\
-					"</html>"\
-							);
+				sprintf(shared_buffer,"\
+					<!DOCTYPE html>\
+					<html>\
+					<head>\
+					<style>\
+					body {\
+						font-family:Sans-serif;\
+						line-height: 1.9em;\
+						font-size: 20px;\
+						font-weight: bold;\
+						background: #F6F6F6;\
+					}\
+					body ul {\
+						list-style-type: none;\
+						margin: 10px;\
+						padding: 0;\
+					}\
+					body ul a {\
+						color: black;\
+						text-decoration: none;\
+					}\
+					body ul a:active {\
+						font-weight: 700;\
+					}\
+					</style>\
+					</head>\
+					<body>\
+					<ul>\
+					<li><a href=\"home.htm\" target=\"page\">Home</a></li>\
+					<li><a href=\"config.htm\" target=\"page\">Config</a></li>\
+					<li><a href=\"openflow.htm\" target=\"page\">OpenFlow</a></li>\
+					<li><a href=\"about.htm\" target=\"page\">About</a></li>\
+					</ul>\
+					</body>\
+					</html>\
+							");
 			}
 			else if(strcmp(http_msg,"home.htm") == 0)
 			{
 				TRACE("http.c: request for home.htm")
 				// Send body
-				sprintf(shared_buffer,\
-					"<!DOCTYPE html>"\
-					"<html>"\
-						"<head>"\
-							"<style>"\
-								"body {"\
-									"overflow: auto;"\
-									"font-family:Sans-serif;"\
-									"font-size: 18px;"\
-									"margin-left: 20px;"\
-								"}"\
-							"</style>"\
-						"</head>"\
-						"<body>"\
-							"<p>"\
-							"Home Page<br>Placedholder text."\
-							"</p>"\
-						"</body>"\
-					"</html>"\
-							);
+				sprintf(shared_buffer,"\
+					<!DOCTYPE html>\
+					<html>\
+						<head>\
+							<style>\
+								body {\
+									overflow: auto;\
+									font-family:Sans-serif;\
+									font-size: 18px;\
+									margin-left: 20px;\
+								}\
+							</style>\
+						</head>\
+						<body>\
+							<p>\
+							Home Page<br>Placedholder text.\
+							</p>\
+						</body>\
+					</html>\
+							");
 			}
       		else if(strcmp(http_msg,"config.htm") == 0)
 			{
 				TRACE("http.c: request for config.htm")
 				// Send body
-				sprintf(shared_buffer,""\
-					"<!DOCTYPE html>"\
-					"<html>"\
-						"<head>"\
-							"<style>"\
-								"body {"\
-									"overflow: auto;"\
-									"font-family:Sans-serif;"\
-									"font-size: 18px;"\
-									"margin-left: 20px;"\
-								"}"\
-							"</style>"\
-						"</head>"\
-						"<body>"\
-							"<p>"\
-							"Config Page<br>Placedholder text."\
-							"</p>"\
-						"</body>"\
-					"</html>"\
-							);
+				sprintf(shared_buffer,"\
+					<!DOCTYPE html>\
+					<html>\
+						<head>\
+							<style>\
+								body {\
+									overflow: auto;\
+									font-family:Sans-serif;\
+									font-size: 18px;\
+									margin-left: 20px;\
+								}\
+							</style>\
+						</head>\
+						<body>\
+							<p>\
+							Config Page<br>Placedholder text.\
+							</p>\
+						</body>\
+					</html>\
+							");
 			}
       		else if(strcmp(http_msg,"openflow.htm") == 0)
 			{
 				TRACE("http.c: request for openflow.htm")
 				// Send body
-				sprintf(shared_buffer,\
-					"<!DOCTYPE html>"\
-					"<html>"\
-						"<head>"\
-							"<style>"\
-								"body {"\
-									"overflow: auto;"\
-									"font-family:Sans-serif;"\
-									"font-size: 18px;"\
-									"margin-left: 20px;"\
-								"}"\
-							"</style>"\
-						"</head>"\
-						"<body>"\
-							"<p>"\
-							"OpenFlow Page<br>Placedholder text."\
-							"</p>"\
-						"</body>"\
-					"</html>"\
-							);
+				sprintf(shared_buffer,"\
+					<!DOCTYPE html>\
+					<html>\
+						<head>\
+							<style>\
+								body {\
+									overflow: auto;\
+									font-family:Sans-serif;\
+									font-size: 18px;\
+									margin-left: 20px;\
+								}\
+							</style>\
+						</head>\
+						<body>\
+							<p>\
+							OpenFlow Page<br>Placedholder text.\
+							</p>\
+						</body>\
+					</html>\
+							");
 			}
             else if(strcmp(http_msg,"about.htm") == 0)
 			{
 				TRACE("http.c: request for home.htm")
 				// Send body
-				sprintf(shared_buffer,\
-					"<!DOCTYPE html>"\
-					"<html>"\
-						"<head>"\
-							"<style>"\
-								"body {"\
-									"overflow: auto;"\
-									"font-family:Sans-serif;"\
-									"font-size: 18px;"\
-									"margin-left: 20px;"\
-								"}"\
-							"</style>"\
-						"</head>"\
-						"<body>"\
-							"<p>"\
-							"About Page<br>Placedholder text."\
-							"</p>"\
-						"</body>"\
-					"</html>"\
-							);
+				sprintf(shared_buffer,"\
+					<!DOCTYPE html>\
+					<html>\
+						<head>\
+							<style>\
+								body {\
+									overflow: auto;\
+									font-family:Sans-serif;\
+									font-size: 18px;\
+									margin-left: 20px;\
+								}\
+							</style>\
+						</head>\
+						<body>\
+							<p>\
+							About Page<br>Placedholder text.\
+							</p>\
+						</body>\
+					</html>\
+							");
 			}
 			else
 			{
