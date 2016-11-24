@@ -99,6 +99,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 	int len;
 	int i = 0;
 	char *http_payload;
+	char *pdat;
 	memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 	
 	if (err == ERR_OK && p != NULL)
@@ -243,6 +244,145 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			
 			if(strcmp(http_msg,"save_config") == 0)
 			{
+				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+				
+				// Device Name
+				pdat = strstr(http_payload, "w_deviceName");	// Search for element
+				if(pdat != NULL)	// Check that element exists
+				{
+					pdat += (strlen("w_deviceName")+1);	// Data format: w_deviceName=(name)
+					
+					i = 0;
+					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+					{
+						http_msg[i] = pdat[i];	// Store value of element
+						i++;
+					}
+					if(pdat[i+1] == 'w')
+					{
+						//uint8_t namelen = strlen(pdat);
+						//if (namelen > 15 ) namelen = 15; // Make sure name is less then 16 characters
+						//sprintf(Zodiac_Config.device_name, pdat, namelen);
+						//TRACE("Device name set to '%s'\r\n",Zodiac_Config.device_name);
+					}
+					else
+					{
+						TRACE("http.c: \"&\" cannot be used in device name");
+					}
+				}
+				else
+				{
+					TRACE("http.c: no device name found");
+				}
+				
+				memset(&http_msg, 0, sizeof(http_msg));
+								
+				// MAC Address
+				pdat = strstr(http_payload, "w_macAddress");
+				if(pdat != NULL)	// Check that element exists
+				{
+					pdat += (strlen("w_macAddress")+1);	// Data format: w_deviceName=(name)
+					
+					i = 0;
+					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+					{
+						http_msg[i] = pdat[i];	// Store value of element
+						i++;
+					}
+					if(pdat[i+1] == 'w')
+					{
+						
+					}
+					else
+					{
+						TRACE("http.c: \"&\" cannot be used in form");
+					}
+				}
+				else
+				{
+					TRACE("http.c: no MAC address found");
+				}
+				
+				memset(&http_msg, 0, sizeof(http_msg));
+								
+				// IP Address
+				pdat = strstr(http_payload, "w_ipAddress");
+				if(pdat != NULL)	// Check that element exists
+				{
+					pdat += (strlen("w_ipAddress")+1);	// Data format: w_deviceName=(name)
+									
+					i = 0;
+					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+					{
+						http_msg[i] = pdat[i];	// Store value of element
+						i++;
+					}
+					if(pdat[i+1] == 'w')
+					{
+										
+					}
+					else
+					{
+						TRACE("http.c: \"&\" cannot be used in form");
+					}
+				}
+				else
+				{
+					TRACE("http.c: no IP address found");
+				}
+		
+				memset(&http_msg, 0, sizeof(http_msg));
+								
+				// Netmask
+				pdat = strstr(http_payload, "w_netmask");
+				if(pdat != NULL)	// Check that element exists
+				{
+					pdat += (strlen("w_netmask")+1);	// Data format: w_deviceName=(name)
+									
+					i = 0;
+					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+					{
+						http_msg[i] = pdat[i];	// Store value of element
+						i++;
+					}
+					if(pdat[i+1] == 'w')
+					{
+										
+					}
+					else
+					{
+						TRACE("http.c: \"&\" cannot be used in form");
+					}
+				}
+				else
+				{
+					TRACE("http.c: no netmask found");
+				}
+				
+				memset(&http_msg, 0, sizeof(http_msg));
+							
+				// Gateway	
+				pdat = strstr(http_payload, "w_gateway");
+				if(pdat != NULL)	// Check that element exists
+				{
+					pdat += (strlen("w_gateway")+1);	// Data format: w_deviceName=(name)
+									
+					i = 0;
+					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+					{
+						http_msg[i] = pdat[i];	// Store value of element
+						i++;
+					}
+				}
+				else
+				{
+					TRACE("http.c: no gateway address found");
+				}
+				
+				
+				// SAVE TO EEPROM!
+				// .
+				// .
 				
 			}
 			else
@@ -507,7 +647,7 @@ uint8_t interfaceCreate_Config(void)
 				"<p>"\
 					"<h1>Configuration</h1>"\
 				"</p>"\
-				"<form action=\"save_config\" method=\"post\">"\
+				"<form action=\"save_config\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes. Press the restart button on the top right for your changes to take effect.');\">"\
 					"<fieldset>"\
 					"<legend>Connection:</legend>"\
 						"Name:<br>"\
@@ -517,9 +657,10 @@ uint8_t interfaceCreate_Config(void)
 						"IP Address:<br>"\
 						"<input type=\"text\" name=\"w_ipAddress\" value=\"%d.%d.%d.%d\"><br><br>"\
 						"Netmask:<br>"\
-						"<input type=\"text\" name=\"w_netMask\" value=\"%d.%d.%d.%d\"><br><br>"\
+						"<input type=\"text\" name=\"w_netmask\" value=\"%d.%d.%d.%d\"><br><br>"\
 						"Gateway:<br>"\
 						"<input type=\"text\" name=\"w_gateway\" value=\"%d.%d.%d.%d\"><br><br>"\
+						"<input type=\"submit\" value=\"Save\">"\
 						"<input type=\"reset\" value=\"Cancel\">"\
 					"</fieldset>"\
 				"</form>"\
