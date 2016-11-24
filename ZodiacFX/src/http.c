@@ -110,11 +110,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			http_msg[i] = http_buffer[i];
 			i++;
 		}
+		TRACE("http.c: %s method received", http_msg)
 	
 		if(strcmp(http_msg,"GET") == 0)
-		{
-			TRACE("http.c: GET method received")
-			
+		{			
 			memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 			
 			// Specified resource directly follows GET
@@ -125,10 +124,18 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				i++;
 			}
 			
+			if(http_msg[0] == '\0')
+			{			
+				TRACE("http.c: resource request for page frames");
+			}
+			else
+			{
+				TRACE("http.c: resource request for %s", http_msg);
+			}
+			
 			// Check resource
 			if(http_msg[0] == '\0')
 			{
-				TRACE("http.c: request for html frames")
 				// Format HTTP response
 				sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
 				strcat(shared_buffer,"Connection: close\r\n");
@@ -156,12 +163,14 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 							"</frameset>"\
 						"</html>"\
 							);
+				TRACE("http.c: html written to buffer");
+				http_send(&shared_buffer, pcb);
+				TRACE("http.c: HTTP sent successfully - %d bytes", strlen(shared_buffer));
 			}
 			else if(strcmp(http_msg,"header.htm") == 0)
-			{    
-				TRACE("http.c: request for header.htm")
+			{
 				// Send header
-				sprintf(shared_buffer,\
+				if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 						"<!DOCTYPE html>"\
 						"<META http-equiv=\"refresh\" content=\"61\">"\
 						"<html>"\
@@ -202,13 +211,21 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 								"</p>"\
 							"</body>"\
 						"</html>"\
-							, VERSION, (int)ul_temp, hr, min);
+							, VERSION, (int)ul_temp, hr, min) < SHARED_BUFFER_LEN)
+				{
+					TRACE("http.c: html written to buffer");
+					http_send(&shared_buffer, pcb);
+					TRACE("http.c: HTTP sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+				}
 			}
 			else if(strcmp(http_msg,"menu.htm") == 0)
 			{
-				TRACE("http.c: request for menu.htm")
 				// Send menu
-				sprintf(shared_buffer,\
+				if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 					"<!DOCTYPE html>"\
 					"<html>"\
 					"<head>"\
@@ -243,13 +260,21 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					"</ul>"\
 					"</body>"\
 					"</html>"\
-							);
+							) < SHARED_BUFFER_LEN)
+				{
+					TRACE("http.c: html written to buffer");
+					http_send(&shared_buffer, pcb);
+					TRACE("http.c: HTTP sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+				}
 			}
 			else if(strcmp(http_msg,"home.htm") == 0)
 			{
-				TRACE("http.c: request for home.htm")
 				// Send body
-				sprintf(shared_buffer,\
+				if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 					"<!DOCTYPE html>"\
 					"<html>"\
 						"<head>"\
@@ -268,13 +293,21 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 							"</p>"\
 						"</body>"\
 					"</html>"\
-							);
+							) < SHARED_BUFFER_LEN)
+				{
+					TRACE("http.c: html written to buffer");
+					http_send(&shared_buffer, pcb);
+					TRACE("http.c: HTTP sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+				}
 			}
       		else if(strcmp(http_msg,"config.htm") == 0)
 			{
-				TRACE("http.c: request for config.htm")
 				// Send body
-				sprintf(shared_buffer,""\
+				if( snprintf(shared_buffer, SHARED_BUFFER_LEN,""\
 					"<!DOCTYPE html>"\
 					"<html>"\
 						"<head>"\
@@ -293,13 +326,21 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 							"</p>"\
 						"</body>"\
 					"</html>"\
-							);
+							) < SHARED_BUFFER_LEN)
+				{
+					TRACE("http.c: html written to buffer");
+					http_send(&shared_buffer, pcb);
+					TRACE("http.c: HTTP sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+				}
 			}
       		else if(strcmp(http_msg,"openflow.htm") == 0)
 			{
-				TRACE("http.c: request for openflow.htm")
 				// Send body
-				sprintf(shared_buffer,\
+				if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 					"<!DOCTYPE html>"\
 					"<html>"\
 						"<head>"\
@@ -318,13 +359,21 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 							"</p>"\
 						"</body>"\
 					"</html>"\
-							);
+							) < SHARED_BUFFER_LEN)
+				{
+					TRACE("http.c: html written to buffer");
+					http_send(&shared_buffer, pcb);
+					TRACE("http.c: HTTP sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+				}
 			}
             else if(strcmp(http_msg,"about.htm") == 0)
 			{
-				TRACE("http.c: request for home.htm")
 				// Send body
-				sprintf(shared_buffer,\
+				if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 					"<!DOCTYPE html>"\
 					"<html>"\
 						"<head>"\
@@ -343,33 +392,33 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 							"</p>"\
 						"</body>"\
 					"</html>"\
-							);
+							) < SHARED_BUFFER_LEN)
+				{
+					TRACE("http.c: html written to buffer");
+					http_send(&shared_buffer, pcb);
+					TRACE("http.c: HTTP sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+					TRACE("http.c: no page served");
+				}
 			}
 			else
 			{
 				TRACE("http.c: page doesn't exist");
+				TRACE("http.c: no page served");
 			}
 		}
 		else if(strcmp(http_msg,"POST") == 0)
 		{
-			TRACE("http.c: POST method received")
+			// handle POST messages
 		}
 		else
 		{
-			TRACE("http.c: unknown HTTP method received")
+			TRACE("http.c: WARNING: unknown HTTP method received")
 		}
-
-		// Send HTTP response
-		if(strlen(shared_buffer) < SHARED_BUFFER_LEN)
-		{
-			http_send(&shared_buffer, pcb);
-			TRACE("http.c: HTTP sent successfully")
-		}
-		else
-		{
-			TRACE("http.c: output buffer overflow")
-		}
-		
+				
 	} else {
 		pbuf_free(p);
 	}
