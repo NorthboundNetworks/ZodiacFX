@@ -48,7 +48,6 @@ extern struct zodiac_config Zodiac_Config;
 
 // Local Variables
 struct tcp_pcb *http_pcb;
-char http_buffer[512];		// Buffer for HTTP message storage
 char http_msg[64];			// Buffer for HTTP message filtering
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 
@@ -99,23 +98,20 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 {
 	int len;
 	int i = 0;
-	char *pc;
+	char *http_payload;
 	memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 	
 	if (err == ERR_OK && p != NULL)
 	{
 		tcp_recved(pcb, p->tot_len);
-		pc = (char*)p->payload;
+		http_payload = (char*)p->payload;
 		len = p->tot_len;
-
-		for(i;i<len;i++) http_buffer[i] = pc[i];
-		pbuf_free(p);
 		
 		// Check HTTP method
 		i = 0;
-		while(i < 63 && (http_buffer[i] != ' '))
+		while(i < 63 && (http_payload[i] != ' '))
 		{
-			http_msg[i] = http_buffer[i];
+			http_msg[i] = http_payload[i];
 			i++;
 		}
 		TRACE("http.c: %s method received", http_msg)
@@ -126,9 +122,9 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			
 			// Specified resource directly follows GET
 			i = 0;
-			while(i < 63 && (http_buffer[i+5] != ' '))
+			while(i < 63 && (http_payload[i+5] != ' '))
 			{
-				http_msg[i] = http_buffer[i+5];	// Offset http_buffer to isolate resource
+				http_msg[i] = http_payload[i+5];	// Offset http_payload to isolate resource
 				i++;
 			}
 			
@@ -238,9 +234,9 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 
 			// Specified resource directly follows POST
 			i = 0;
-			while(i < 63 && (http_buffer[i+6] != ' '))
+			while(i < 63 && (http_payload[i+6] != ' '))
 			{
-				http_msg[i] = http_buffer[i+6];	// Offset http_buffer to isolate resource
+				http_msg[i] = http_payload[i+6];	// Offset http_payload to isolate resource
 				i++;
 			}
 						
@@ -251,9 +247,9 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			TRACE("http.c: WARNING: unknown HTTP method received")
 		}
 				
-	} else {
-		pbuf_free(p);
 	}
+
+	pbuf_free(p);
 
 	if (err == ERR_OK && p == NULL)
 	{
