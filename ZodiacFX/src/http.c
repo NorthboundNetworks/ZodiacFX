@@ -37,12 +37,14 @@
 #include "timers.h"
 #include "openflow/openflow.h"
 #include "trace.h"
+#include "command.h"
 
 #include "config_zodiac.h"
 
 // External Variables
 extern int totaltime;
 extern int32_t ul_temp;
+extern struct zodiac_config Zodiac_Config;
 
 // Local Variables
 struct tcp_pcb *http_pcb;
@@ -232,7 +234,17 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		}
 		else if(strcmp(http_msg,"POST") == 0)
 		{
-			// handle POST messages
+			memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+
+			// Specified resource directly follows POST
+			i = 0;
+			while(i < 63 && (http_buffer[i+6] != ' '))
+			{
+				http_msg[i] = http_buffer[i+6];	// Offset http_buffer to isolate resource
+				i++;
+			}
+						
+			TRACE("http.c: resource request for %s", http_msg);
 		}
 		else
 		{
@@ -473,7 +485,7 @@ uint8_t interfaceCreate_Home(void)
 */
 uint8_t interfaceCreate_Config(void)
 {
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,""\
+	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -481,6 +493,7 @@ uint8_t interfaceCreate_Config(void)
 					"body {"\
 						"overflow: auto;"\
 						"font-family:Sans-serif;"\
+						"line-height: 1.2em;"\
 						"font-size: 18px;"\
 						"margin-left: 20px;"\
 					"}"\
@@ -488,11 +501,32 @@ uint8_t interfaceCreate_Config(void)
 			"</head>"\
 			"<body>"\
 				"<p>"\
-				"Config Page<br>Placedholder text."\
+					"<h1>Configuration</h1>"\
 				"</p>"\
+				"<form action=\"save\" method=\"post\">"\
+					"<fieldset>"\
+					"<legend>Connection:</legend>"\
+						"Name:<br>"\
+						"<input type=\"text\" name=\"w_deviceName\" value=\"%s\"><br><br>"\
+						"MAC Address:<br>"\
+						"<input type=\"text\" name=\"w_macAddress\" value=\"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X\"><br><br>"\
+						"IP Address:<br>"\
+						"<input type=\"text\" name=\"w_ipAddress\" value=\"%d.%d.%d.%d\"><br><br>"\
+						"Netmask:<br>"\
+						"<input type=\"text\" name=\"w_netMask\" value=\"%d.%d.%d.%d\"><br><br>"\
+						"Gateway:<br>"\
+						"<input type=\"text\" name=\"w_gateway\" value=\"%d.%d.%d.%d\"><br><br>"\
+/*					"<input type=\"submit\" value=\"Save\">"\	*/
+					"</fieldset>"\
+				"</form>"\
 			"</body>"\
 		"</html>"\
-				) < SHARED_BUFFER_LEN)
+				, Zodiac_Config.device_name\
+				, Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]\
+				, Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1], Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]\
+				, Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]\
+				, Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]\
+		) < SHARED_BUFFER_LEN)
 	{
 		TRACE("http.c: html written to buffer");
 		return 1;
