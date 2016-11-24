@@ -224,8 +224,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			}
 			else
 			{
-				TRACE("http.c: page doesn't exist");
-				TRACE("http.c: no page served");
+				TRACE("http.c: resource doesn't exist:\"%s\"", http_msg);
 			}
 		}
 		else if(strcmp(http_msg,"POST") == 0)
@@ -240,7 +239,16 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				i++;
 			}
 						
-			TRACE("http.c: resource request for %s", http_msg);
+			TRACE("http.c: request for %s", http_msg);
+			
+			if(strcmp(http_msg,"save_config") == 0)
+			{
+				
+			}
+			else
+			{
+				TRACE("http.c: unknown request: \"%s\"", http_msg);
+			}
 		}
 		else
 		{
@@ -499,7 +507,7 @@ uint8_t interfaceCreate_Config(void)
 				"<p>"\
 					"<h1>Configuration</h1>"\
 				"</p>"\
-				"<form action=\"save\" method=\"post\">"\
+				"<form action=\"save_config\" method=\"post\">"\
 					"<fieldset>"\
 					"<legend>Connection:</legend>"\
 						"Name:<br>"\
@@ -512,7 +520,7 @@ uint8_t interfaceCreate_Config(void)
 						"<input type=\"text\" name=\"w_netMask\" value=\"%d.%d.%d.%d\"><br><br>"\
 						"Gateway:<br>"\
 						"<input type=\"text\" name=\"w_gateway\" value=\"%d.%d.%d.%d\"><br><br>"\
-/*					"<input type=\"submit\" value=\"Save\">"\	*/
+						"<input type=\"reset\" value=\"Cancel\">"\
 					"</fieldset>"\
 				"</form>"\
 			"</body>"\
