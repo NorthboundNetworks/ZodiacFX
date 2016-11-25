@@ -260,10 +260,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					}
 					if(pdat[i+1] == 'w')
 					{
-						//uint8_t namelen = strlen(pdat);
-						//if (namelen > 15 ) namelen = 15; // Make sure name is less then 16 characters
-						//sprintf(Zodiac_Config.device_name, pdat, namelen);
-						//TRACE("Device name set to '%s'\r\n",Zodiac_Config.device_name);
+						uint8_t namelen = strlen(http_msg);
+						if (namelen > 15 ) namelen = 15; // Make sure name is less then 16 characters
+						sprintf(Zodiac_Config.device_name, http_msg, namelen);
+						TRACE("http.c: device name set to '%s'",Zodiac_Config.device_name);
 					}
 					else
 					{
@@ -291,7 +291,40 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					}
 					if(pdat[i+1] == 'w')
 					{
+						uint8_t mac1,mac2,mac3,mac4,mac5,mac6;
+						char decArr[18] = "";
+						int j, k;
 						
+						if (strlen(http_msg) != 27 )	// Accounting for ":" as "%3A"
+						{
+							TRACE("http.c: incorrect MAC address format");
+							return;
+						}
+						
+						// Decode http string
+						j = 0; k = 0;
+						while(j < strlen(http_msg) && k < 18)
+						{
+							if(http_msg[j] == '%' && http_msg[j+1] == '3' && http_msg[j+2] == 'A')
+							{
+								decArr[k] = ':';
+								j+=3; k++;
+							}
+							else
+							{
+								decArr[k] = http_msg[j];
+								j++; k++;
+							}
+						}
+						
+						sscanf(decArr, "%x:%x:%x:%x:%x:%x", &mac1, &mac2, &mac3, &mac4, &mac5, &mac6);
+						Zodiac_Config.MAC_address[0] = mac1;
+						Zodiac_Config.MAC_address[1] = mac2;
+						Zodiac_Config.MAC_address[2] = mac3;
+						Zodiac_Config.MAC_address[3] = mac4;
+						Zodiac_Config.MAC_address[4] = mac5;
+						Zodiac_Config.MAC_address[5] = mac6;
+						TRACE("http.c: MAC address set to %.2X:%.2X:%.2X:%.2X:%.2X:%.2X",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
 					}
 					else
 					{
@@ -319,7 +352,18 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					}
 					if(pdat[i+1] == 'w')
 					{
-										
+						int ip1,ip2,ip3,ip4;
+						if (strlen(http_msg) > 15 )
+						{
+							TRACE("http.c: incorrect IP format");
+							return;
+						}
+						sscanf(http_msg, "%d.%d.%d.%d", &ip1, &ip2,&ip3,&ip4);
+						Zodiac_Config.IP_address[0] = ip1;
+						Zodiac_Config.IP_address[1] = ip2;
+						Zodiac_Config.IP_address[2] = ip3;
+						Zodiac_Config.IP_address[3] = ip4;
+						TRACE("http.c: IP address set to %d.%d.%d.%d" , Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1], Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]);
 					}
 					else
 					{
@@ -347,7 +391,18 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					}
 					if(pdat[i+1] == 'w')
 					{
-										
+						uint8_t nm1,nm2,nm3,nm4;
+						if (strlen(http_msg) > 15 )
+						{
+							TRACE("http.c: incorrect netmask format");
+							return;
+						}
+						sscanf(http_msg, "%d.%d.%d.%d", &nm1, &nm2,&nm3,&nm4);
+						Zodiac_Config.netmask[0] = nm1;
+						Zodiac_Config.netmask[1] = nm2;
+						Zodiac_Config.netmask[2] = nm3;
+						Zodiac_Config.netmask[3] = nm4;
+						TRACE("http.c: netmask set to %d.%d.%d.%d" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);				
 					}
 					else
 					{
@@ -373,6 +428,21 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						http_msg[i] = pdat[i];	// Store value of element
 						i++;
 					}
+					
+					// No next 'w' character check as this is the last element
+					
+					uint8_t gw1,gw2,gw3,gw4;
+					if (strlen(http_msg) > 15 )
+					{
+						TRACE("http.c: incorrect gateway format");
+						return;
+					}
+					sscanf(http_msg, "%d.%d.%d.%d", &gw1, &gw2,&gw3,&gw4);
+					Zodiac_Config.gateway_address[0] = gw1;
+					Zodiac_Config.gateway_address[1] = gw2;
+					Zodiac_Config.gateway_address[2] = gw3;
+					Zodiac_Config.gateway_address[3] = gw4;
+					TRACE("http.c: gateway set to %d.%d.%d.%d" , Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
 				}
 				else
 				{
