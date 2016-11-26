@@ -70,7 +70,7 @@ extern uint8_t port_status[4];
 extern int totaltime;
 extern int32_t ul_temp;
 extern int OF_Version;
-
+extern uint32_t uid_buf[4];
 
 // Local Variables
 bool showintro = true;
@@ -356,6 +356,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 
 		printf("\r\n-------------------------------------------------------------------------\r\n");
 		printf("Device Status\r\n");
+		printf(" CPU UID: %d-%d-%d-%d\r\n", uid_buf[0], uid_buf[1], uid_buf[2], uid_buf[3]);
 		printf(" Firmware Version: %s\r\n",VERSION);
 		printf(" CPU Temp: %d C\r\n", (int)ul_temp);
 		printf(" Uptime: %02d:%02d:%02d", hr, min, sec);
@@ -692,7 +693,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	// Set MAC Address
 	if (strcmp(command, "set")==0 && strcmp(param1, "mac-address")==0)
 	{
-		uint8_t mac1,mac2,mac3,mac4,mac5,mac6;
+		int mac1,mac2,mac3,mac4,mac5,mac6;
 		if (strlen(param2) != 17 )
 		{
 			printf("incorrect format\r\n");
@@ -730,7 +731,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	// Set Netmask Address
 	if (strcmp(command, "set")==0 && strcmp(param1, "netmask")==0)
 	{
-		uint8_t nm1,nm2,nm3,nm4;
+		int nm1,nm2,nm3,nm4;
 		if (strlen(param2) > 15 )
 		{
 			printf("incorrect format\r\n");
@@ -748,7 +749,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	// Set Gateway Address
 	if (strcmp(command, "set")==0 && strcmp(param1, "gateway")==0)
 	{
-		uint8_t gw1,gw2,gw3,gw4;
+		int gw1,gw2,gw3,gw4;
 		if (strlen(param2) > 15 )
 		{
 			printf("incorrect format\r\n");
@@ -766,7 +767,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	// Set OpenFlow Controller IP Address
 	if (strcmp(command, "set")==0 && strcmp(param1, "of-controller")==0)
 	{
-		uint8_t oc1,oc2,oc3,oc4;
+		int oc1,oc2,oc3,oc4;
 		if (strlen(param2) > 15 )
 		{
 			printf("incorrect format\r\n");

@@ -32,5 +32,6 @@
 #define FLASH_H_
 
 void firmware_update(void);
+void get_serial(uint32_t *uid_buf);
 
 #endif /* FLASH_H_ */

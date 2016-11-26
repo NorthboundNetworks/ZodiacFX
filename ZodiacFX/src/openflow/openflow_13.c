@@ -649,6 +649,8 @@ void role_reply13(struct ofp_header *msg)
 	struct ofp13_role_request role_request;
 	memcpy(&role_request, msg, sizeof(struct ofp13_role_request));
 	role_request.header.type = OFPT13_ROLE_REPLY;
+	role_request.generation_id = -1;
+	role_request.role = htonl(OFPCR_ROLE_EQUAL);
 	sendtcp(&role_request, sizeof(struct ofp13_role_request));
 	return;
 }

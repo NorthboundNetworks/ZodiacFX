@@ -291,7 +291,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					}
 					if(pdat[i+1] == 'w')
 					{
-						uint8_t mac1,mac2,mac3,mac4,mac5,mac6;
+						int mac1,mac2,mac3,mac4,mac5,mac6;
 						char decArr[18] = "";
 						int j, k;
 						
