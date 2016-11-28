@@ -38,6 +38,7 @@
 #include "openflow/openflow.h"
 #include "trace.h"
 #include "command.h"
+#include "eeprom.h"
 
 #include "config_zodiac.h"
 
@@ -391,7 +392,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					}
 					if(pdat[i+1] == 'w')
 					{
-						uint8_t nm1,nm2,nm3,nm4;
+						int nm1,nm2,nm3,nm4;
 						if (strlen(http_msg) > 15 )
 						{
 							TRACE("http.c: incorrect netmask format");
@@ -431,7 +432,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					
 					// No next 'w' character check as this is the last element
 					
-					uint8_t gw1,gw2,gw3,gw4;
+					int gw1,gw2,gw3,gw4;
 					if (strlen(http_msg) > 15 )
 					{
 						TRACE("http.c: incorrect gateway format");
@@ -449,11 +450,20 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					TRACE("http.c: no gateway address found");
 				}
 				
+				// Save configuration to EEPROM
+				eeprom_write();
+				TRACE("http.c: config written to EEPROM");
 				
-				// SAVE TO EEPROM!
-				// .
-				// .
-				
+				// Send update config page
+				if(interfaceCreate_Config())
+				{
+					http_send(&shared_buffer, pcb);
+					TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+				}
 			}
 			else
 			{
