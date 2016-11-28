@@ -43,6 +43,7 @@
 #include "eeprom.h"
 #include "switch.h"
 #include "http.h"
+#include "flash.h"
 #include "openflow/openflow.h"
 #include "ksz8795clx/ethernet_phy.h"
 
@@ -55,6 +56,7 @@ bool stackenabled;
 int portmap[4];
 int32_t ul_temp;
 uint8_t NativePortMatrix;
+uint32_t uid_buf[4];
 
 /** Reference voltage for AFEC,in mv. */
 #define VOLT_REF        (3300)
@@ -62,7 +64,7 @@ uint8_t NativePortMatrix;
 #define MAX_DIGITAL     (4095UL)
 
 /*
-*	Coverts the temp sensor volatge to temp
+*	Coverts the temp sensor voltage to temp
 *
 */
 static void afec_temp_sensor_end_conversion(void)
@@ -126,6 +128,7 @@ int main (void)
 
 	sysclk_init();
 	board_init();
+	get_serial(&uid_buf);
 
 	// Set up the GPIO pin for the Mater Select jumper
 	ioport_init();

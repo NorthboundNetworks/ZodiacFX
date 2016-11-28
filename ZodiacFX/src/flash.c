@@ -41,6 +41,16 @@ void flash_write_page(uint8_t *flash_page);
 
 
 /*
+*	Get the unique serial number from the CPU
+*
+*/
+void get_serial(uint32_t *uid_buf)
+{
+	uint32_t uid_ok = flash_read_unique_id(uid_buf, 4);
+	return;
+}
+
+/*
 *	Firmware update function
 *
 */
