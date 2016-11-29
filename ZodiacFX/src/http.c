@@ -478,7 +478,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					//
 					
 			}
-			else if(strcmp(http_msg,"restart") == 0)
+			else if(strcmp(http_msg,"btn_restart") == 0)
 			{
 				TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
 				for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
@@ -682,8 +682,8 @@ uint8_t interfaceCreate_Header(void)
 						"<h1>Zodiac FX</h1>"\
 					"</header>"\
 					"<div class=\"wrapper\">"\
-						"<form action=\"restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart. This may take up to 30 seconds');\">"\
-							"<button name=\"btn\" value=\"restart\">Restart</button>"\
+						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart. This may take up to 30 seconds');\">"\
+							"<button name=\"btn\" value=\"btn_restart\">Restart</button>"\
 						"</form>"\
 					"</div>"\
                 	"<div class=\"info\">"\
