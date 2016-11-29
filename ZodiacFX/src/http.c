@@ -64,6 +64,8 @@ uint8_t interfaceCreate_Config(void);
 uint8_t interfaceCreate_OpenFlow(void);
 uint8_t interfaceCreate_About(void);
 
+bool reset_required;
+
 /*
 *	HTTP initialization function
 *
@@ -454,7 +456,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				eeprom_write();
 				TRACE("http.c: config written to EEPROM");
 				
-				// Send update config page
+				// Set update required flag
+				reset_required = true;
+				
+				// Send updated config page
 				if(interfaceCreate_Config())
 				{
 					http_send(&shared_buffer, pcb);
@@ -464,6 +469,22 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				{
 					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 				}
+								
+				// Send updated header page (with restart button)
+				
+					// ***** Placeholder until frame refresh targeting is implemented
+					//
+					//
+					//
+					
+			}
+			else if(strcmp(http_msg,"restart") == 0)
+			{
+				TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
+				for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+				udc_detach();	// Detach the USB device before restart
+				rstc_start_software_reset(RSTC);	// Software reset
+				while (1);
 			}
 			else
 			{
@@ -543,7 +564,8 @@ uint8_t interfaceCreate_Frames(void)
 	}
 	else
 	{
-		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		// This should never occur, as the page is of a known size.
+		TRACE("http.c: ERROR: frame page buffer overflow");
 		return 0;
 	}
 }
@@ -554,11 +576,69 @@ uint8_t interfaceCreate_Frames(void)
 */
 uint8_t interfaceCreate_Header(void)
 {
+	reset_required = true;	// ***** Placeholder until frame refresh targeting is implemented
+	
 	int hr = (totaltime/2)/3600;
 	int t = (totaltime/2)%3600;
 	int min = t/60;
 
 	// Send header
+	if(reset_required == false)
+	{
+		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+				"<!DOCTYPE html>"\
+				"<META http-equiv=\"refresh\" content=\"61\">"\
+				"<html>"\
+					"<head>"\
+					"<style>"\
+						"header {"\
+							"font-family:Sans-serif;"\
+							"position: absolute;"\
+							"top: 0;"\
+							"left: 0;"\
+							"width: 100%%;"\
+							"height: 100%%;"\
+							"overflow: hidden;"\
+							"color: white;"\
+							"background: black;"\
+						"}"\
+						"h1 {"\
+							"margin-top:20px;"\
+							"padding-left: 20px;"\
+						"}"\
+                		".info {"\
+							"font-family:Sans-serif;"\
+							"color: white;"\
+							"position: fixed;"\
+							"right: 150px;"\
+							"top: 10px;"\
+						"}"\
+					"</style>"\
+					"</head>"\
+					"<body>"\
+						"<header>"\
+							"<h1>Zodiac FX</h1>"\
+						"</header>"\
+                		"<div class=\"info\">"\
+							"Firmware Version: %s<br>"\
+							"CPU Temp: %d C<br>"\
+							"Uptime: %02d:%02d"\
+						"</div>"\
+					"</body>"\
+				"</html>"\
+					, VERSION, (int)ul_temp, hr, min) < SHARED_BUFFER_LEN)
+		{
+			TRACE("http.c: html written to buffer");
+			return 1;
+		}
+		else
+		{
+			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+			return 0;
+		}
+	}
+	else if(reset_required == true)
+	{
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 			"<!DOCTYPE html>"\
 			"<META http-equiv=\"refresh\" content=\"61\">"\
@@ -580,12 +660,20 @@ uint8_t interfaceCreate_Header(void)
 						"margin-top:20px;"\
 						"padding-left: 20px;"\
 					"}"\
-                	"p {"\
+					".wrapper {"\
+						"text-align: right;"\
+					"}"\
+					"button {"\
+						"position: relative;"\
+						"top: 20px;"\
+						"right: 20px;"\
+					"}"\
+                	".info {"\
 						"font-family:Sans-serif;"\
 						"color: white;"\
 						"position: fixed;"\
 						"right: 150px;"\
-						"top: -5px;"\
+						"top: 10px;"\
 					"}"\
 				"</style>"\
 				"</head>"\
@@ -593,11 +681,16 @@ uint8_t interfaceCreate_Header(void)
 					"<header>"\
 						"<h1>Zodiac FX</h1>"\
 					"</header>"\
-                	"<p>"\
+					"<div class=\"wrapper\">"\
+						"<form action=\"restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart. This may take up to 30 seconds');\">"\
+							"<button name=\"btn\" value=\"restart\">Restart</button>"\
+						"</form>"\
+					"</div>"\
+                	"<div class=\"info\">"\
 						"Firmware Version: %s<br>"\
 						"CPU Temp: %d C<br>"\
 						"Uptime: %02d:%02d"\
-					"</p>"\
+					"</div>"\
 				"</body>"\
 			"</html>"\
 				, VERSION, (int)ul_temp, hr, min) < SHARED_BUFFER_LEN)
@@ -610,6 +703,7 @@ uint8_t interfaceCreate_Header(void)
 		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
 		return 0;
 	}
+}
 }
 
 /*
