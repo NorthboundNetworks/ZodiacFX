@@ -55,7 +55,7 @@ extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
-void http_send(char *buffer, struct tcp_pcb *pcb);
+void http_send(char *buffer, struct tcp_pcb *pcb, bool out);
 
 uint8_t interfaceCreate_Frames(void);
 uint8_t interfaceCreate_Header(void);
@@ -148,7 +148,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			{
 				if(interfaceCreate_Frames())
 				{
-					http_send(&shared_buffer, pcb);
+					http_send(&shared_buffer, pcb, 1);
 					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
 				}
 				else
@@ -160,7 +160,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			{
 				if(interfaceCreate_Header())
 				{
-					http_send(&shared_buffer, pcb);
+					http_send(&shared_buffer, pcb, 1);
 					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
 				}
 				else
@@ -172,7 +172,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			{
 				if(interfaceCreate_Menu())
 				{
-					http_send(&shared_buffer, pcb);
+					http_send(&shared_buffer, pcb, 1);
 					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
 				}
 				else
@@ -184,7 +184,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			{
 				if(interfaceCreate_Home())
 				{
-					http_send(&shared_buffer, pcb);
+					http_send(&shared_buffer, pcb, 1);
 					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
 				}
 				else
@@ -196,7 +196,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			{
 				if(interfaceCreate_Config())
 				{
-					http_send(&shared_buffer, pcb);
+					http_send(&shared_buffer, pcb, 1);
 					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
 				}
 				else
@@ -211,8 +211,17 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				{
 					if(interfaceCreate_VLANs(i))
 					{
-						http_send(&shared_buffer, pcb);
-						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+						if(i < 3)
+						{
+							// Only write to buffer - don't send
+							http_send(&shared_buffer, pcb, 0);
+						}
+						else
+						{
+							// Call TCP output & close the connection
+							http_send(&shared_buffer, pcb, 1);
+							TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+						}
 					}
 					else
 					{
@@ -224,7 +233,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			{
 				if(interfaceCreate_OpenFlow())
 				{
-					http_send(&shared_buffer, pcb);
+					http_send(&shared_buffer, pcb, 1);
 					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
 				}
 				else
@@ -236,7 +245,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			{
 				if(interfaceCreate_About())
 				{
-					http_send(&shared_buffer, pcb);
+					http_send(&shared_buffer, pcb, 1);
 					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
 				}
 				else
@@ -480,7 +489,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				// Send updated config page
 				if(interfaceCreate_Config())
 				{
-					http_send(&shared_buffer, pcb);
+					http_send(&shared_buffer, pcb, 1);
 					TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
 				}
 				else
@@ -529,14 +538,25 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 /*
 *	HTTP Send function
 *
+*	Parameter:
+*		out - specify whether TCP packet should be sent
 */
-void http_send(char *buffer, struct tcp_pcb *pcb)
+void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 {
 	int len = strlen(buffer);
 	//tcp_sent(pcb,NULL);
-	err_t err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY);
-	if (err == ERR_OK) tcp_output(pcb);
-	tcp_close(pcb);
+	if(out == true)
+	{
+		err_t err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY);
+		if (err == ERR_OK) tcp_output(pcb);
+		tcp_close(pcb);
+	}
+	else
+	{
+		err_t err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_MORE);
+		if (err == ERR_OK) tcp_output(pcb);
+	}
+
 	return;
 }
 
@@ -887,11 +907,11 @@ uint8_t interfaceCreate_VLANs(uint8_t step)
 	
 	if(port_status[step] == 1)
 	{
-		snprintf(portStatusch[step], 5, "UP");			
+		snprintf(portStatusch, 5, "UP");			
 	}
 	else
 	{
-		snprintf(portStatusch[step], 5, "DOWN");
+		snprintf(portStatusch, 5, "DOWN");
 	}
 	
 	if(step == 0)
@@ -952,7 +972,7 @@ uint8_t interfaceCreate_VLANs(uint8_t step)
 						"VLAN Name:<br>"\
 						"<input type=\"text\" name=\"w_vlanName\" value=\"%s\"><br><br>"\
 						"VLAN ID:<br>"\
-						"<input type=\"text\" name=\"w_vlanID\" value=\"%s\"><br><br>"\
+						"<input type=\"text\" name=\"w_vlanID\" value=\"%d\"><br><br>"\
 						"<input type=\"submit\" value=\"Save\">"\
 						"<input type=\"reset\" value=\"Cancel\">"\
 					"</fieldset>"\
@@ -1010,7 +1030,7 @@ uint8_t interfaceCreate_VLANs(uint8_t step)
 			return 0;
 		}
 	}
-	else if(step == 1)
+	else if(step == 2)
 	{
 		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 			"<div id=p3>"\
@@ -1048,7 +1068,7 @@ uint8_t interfaceCreate_VLANs(uint8_t step)
 			return 0;
 		}
 	}
-	else if(step == 1)
+	else if(step == 3)
 	{
 		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 				"<div id=p4>"\
