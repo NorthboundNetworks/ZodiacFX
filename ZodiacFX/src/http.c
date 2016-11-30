@@ -554,7 +554,10 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 	else
 	{
 		err_t err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_MORE);
-		if (err == ERR_OK) tcp_output(pcb);
+		if (err != ERR_OK)
+		{
+			TRACE("http.c: tcp_write error");
+		}
 	}
 
 	return;
