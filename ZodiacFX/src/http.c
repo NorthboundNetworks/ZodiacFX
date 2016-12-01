@@ -35,18 +35,19 @@
 #include "lwip/tcp.h"
 #include "lwip/err.h"
 #include "timers.h"
-#include "openflow/openflow.h"
-#include "trace.h"
 #include "command.h"
-#include "eeprom.h"
-
+#include "trace.h"
 #include "config_zodiac.h"
+#include "openflow/openflow.h"
+#include "eeprom.h"
+#include "flash.h"
 
 // External Variables
 extern int totaltime;
 extern int32_t ul_temp;
 extern struct zodiac_config Zodiac_Config;
 extern uint8_t port_status[4];
+extern uint32_t uid_buf[4];	// Unique identifier
 
 // Local Variables
 struct tcp_pcb *http_pcb;
@@ -580,6 +581,55 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			}
 			else if(strcmp(http_msg,"btn_default") == 0)
 			{
+				TRACE("http.c: restoring factory settings");
+				
+				struct zodiac_config reset_config =
+				{
+					"Zodiac_FX",		// Name
+					0,0,0,0,0,0,		// MAC Address
+					10,0,1,99,			// IP Address
+					255,255,255,0,		// Netmask
+					10,0,1,1,			// Gateway Address
+					10,0,1,8,			// IP Address of the SDN Controller
+					6633,				// TCP port of SDN Controller
+					1					// OpenFlow enabled
+				};
+				memset(&reset_config.vlan_list, 0, sizeof(struct virtlan)* MAX_VLANS); // Clear vlan array
+
+				// Config VLAN 100
+				sprintf(&reset_config.vlan_list[0].cVlanName, "Openflow");	// Vlan name
+				reset_config.vlan_list[0].portmap[0] = 1;		// Assign port 1 to this vlan
+				reset_config.vlan_list[0].portmap[1] = 1;		// Assign port 2 to this vlan
+				reset_config.vlan_list[0].portmap[2] = 1;		// Assign port 3 to this vlan
+				reset_config.vlan_list[0].uActive = 1;		// Vlan is active
+				reset_config.vlan_list[0].uVlanID = 100;	// Vlan ID is 100
+				reset_config.vlan_list[0].uVlanType = 1;	// Set as an Openflow Vlan
+				reset_config.vlan_list[0].uTagged = 0;		// Set as untagged
+
+				// Config VLAN 200
+				sprintf(&reset_config.vlan_list[1].cVlanName, "Controller");
+				reset_config.vlan_list[1].portmap[3] = 1;		// Assign port 4 to this vlan
+				reset_config.vlan_list[1].uActive = 1;		// Vlan is active
+				reset_config.vlan_list[1].uVlanID = 200;	// Vlan ID is 200
+				reset_config.vlan_list[1].uVlanType = 2;	// Set as an Native Vlan
+				reset_config.vlan_list[1].uTagged = 0;		// Set as untagged
+
+				// Set ports
+				reset_config.of_port[0] = 1;		// Port 1 is an OpenFlow port
+				reset_config.of_port[1] = 1;		// Port 2 is an Openflow port
+				reset_config.of_port[2] = 1;		// Port 3 is an OpenFlow port
+				reset_config.of_port[3] = 2;		// Port 4 is an Native port
+
+				// Failstate
+				reset_config.failstate = 0;			// Failstate Secure
+
+				// Force OpenFlow version
+				reset_config.of_version = 0;			// Force version disabled
+
+				memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existing MAC address so it is not reset
+				memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
+				eeprom_write();
+				
 				TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
 				for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
 				udc_detach();	// Detach the USB device before restart
@@ -909,7 +959,7 @@ uint8_t interfaceCreate_Home(void)
 			"<body>"\
 				"<h2>Status</h2>"\
 				"<p>"\
-					"Serial Number: %%s<br>"\
+					"CPU UID: %d-%d-%d-%d<br>"\
 					"Firmware Version: %s<br>"\
 					"CPU Temp: %d C<br>"\
 					"Uptime: %02d:%02d"\
@@ -919,6 +969,7 @@ uint8_t interfaceCreate_Home(void)
 				"</form>"\
 			"</body>"\
 		"</html>"\
+				, uid_buf[0], uid_buf[1], uid_buf[2], uid_buf[3]\
 				, VERSION, (int)ul_temp, hr, min) < SHARED_BUFFER_LEN)
 	{
 		TRACE("http.c: html written to buffer");
