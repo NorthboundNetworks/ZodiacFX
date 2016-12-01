@@ -61,9 +61,14 @@ uint8_t interfaceCreate_Frames(void);
 uint8_t interfaceCreate_Header(void);
 uint8_t interfaceCreate_Menu(void);
 uint8_t interfaceCreate_Home(void);
-uint8_t interfaceCreate_Config(void);
-uint8_t interfaceCreate_VLANs(uint8_t step);
-uint8_t interfaceCreate_OpenFlow(void);
+uint8_t interfaceCreate_Display_Home(void);
+uint8_t interfaceCreate_Display_Ports(uint8_t step);
+uint8_t interfaceCreate_Display_OpenFlow(void);
+uint8_t interfaceCreate_Display_Flows(void);
+uint8_t interfaceCreate_Config_Home(void);
+uint8_t interfaceCreate_Config_Network(void);
+uint8_t interfaceCreate_Config_VLANs(void);
+uint8_t interfaceCreate_Config_OpenFlow(void);
 uint8_t interfaceCreate_About(void);
 
 bool reset_required;
@@ -192,9 +197,9 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
 				}
 			}
-      		else if(strcmp(http_msg,"config.htm") == 0)
+      		else if(strcmp(http_msg,"d_home.htm") == 0)
 			{
-				if(interfaceCreate_Config())
+				if(interfaceCreate_Display_Home())
 				{
 					http_send(&shared_buffer, pcb, 1);
 					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
@@ -204,12 +209,12 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
 				}
 			}
-			else if(strcmp(http_msg,"vlans.htm") == 0)
+			else if(strcmp(http_msg,"d_ports.htm") == 0)
 			{
 				i = 0;
 				for(i;i<4;i++)
 				{
-					if(interfaceCreate_VLANs(i))
+					if(interfaceCreate_Display_Ports(i))
 					{
 						if(i < 3)
 						{
@@ -229,9 +234,9 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					}
 				}
 			}
-      		else if(strcmp(http_msg,"openflow.htm") == 0)
+      		else if(strcmp(http_msg,"d_of.htm") == 0)
 			{
-				if(interfaceCreate_OpenFlow())
+				if(interfaceCreate_Display_OpenFlow())
 				{
 					http_send(&shared_buffer, pcb, 1);
 					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
@@ -241,7 +246,67 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
 				}
 			}
-            else if(strcmp(http_msg,"about.htm") == 0)
+      		else if(strcmp(http_msg,"d_flo.htm") == 0)
+			{
+				if(interfaceCreate_Display_Flows())
+				{
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+				}
+			}
+      		else if(strcmp(http_msg,"cfg_home.htm") == 0)
+			{
+				if(interfaceCreate_Config_Home())
+				{
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+				}
+			}
+      		else if(strcmp(http_msg,"cfg_net.htm") == 0)
+			{
+				if(interfaceCreate_Config_Network())
+				{
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+				}
+			}
+      		else if(strcmp(http_msg,"cfg_vlan.htm") == 0)
+			{
+				if(interfaceCreate_Config_VLANs())
+				{
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+				}
+			}
+			else if(strcmp(http_msg,"cfg_of.htm") == 0)
+			{
+				if(interfaceCreate_Config_OpenFlow())
+				{
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+				}
+			}
+			else if(strcmp(http_msg,"about.htm") == 0)
 			{
 				if(interfaceCreate_About())
 				{
@@ -487,7 +552,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				reset_required = true;
 				
 				// Send updated config page
-				if(interfaceCreate_Config())
+				if(interfaceCreate_Config_Network())
 				{
 					http_send(&shared_buffer, pcb, 1);
 					TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
@@ -506,6 +571,14 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					
 			}
 			else if(strcmp(http_msg,"btn_restart") == 0)
+			{
+				TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
+				for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+				udc_detach();	// Detach the USB device before restart
+				rstc_start_software_reset(RSTC);	// Software reset
+				while (1);
+			}
+			else if(strcmp(http_msg,"btn_default") == 0)
 			{
 				TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
 				for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
@@ -652,7 +725,7 @@ uint8_t interfaceCreate_Header(void)
 							"color: white;"\
 							"position: fixed;"\
 							"right: 150px;"\
-							"top: 10px;"\
+							"top: 30px;"\
 						"}"\
 					"</style>"\
 					"</head>"\
@@ -661,13 +734,11 @@ uint8_t interfaceCreate_Header(void)
 							"<h1>Zodiac FX</h1>"\
 						"</header>"\
                 		"<div class=\"info\">"\
-							"Firmware Version: %s<br>"\
-							"CPU Temp: %d C<br>"\
 							"Uptime: %02d:%02d"\
 						"</div>"\
 					"</body>"\
 				"</html>"\
-					, VERSION, (int)ul_temp, hr, min) < SHARED_BUFFER_LEN)
+					, hr, min) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html written to buffer");
 			return 1;
@@ -714,7 +785,7 @@ uint8_t interfaceCreate_Header(void)
 						"color: white;"\
 						"position: fixed;"\
 						"right: 150px;"\
-						"top: 10px;"\
+						"top: 30px;"\
 					"}"\
 				"</style>"\
 				"</head>"\
@@ -728,13 +799,11 @@ uint8_t interfaceCreate_Header(void)
 						"</form>"\
 					"</div>"\
                 	"<div class=\"info\">"\
-						"Firmware Version: %s<br>"\
-						"CPU Temp: %d C<br>"\
 						"Uptime: %02d:%02d"\
 					"</div>"\
 				"</body>"\
 			"</html>"\
-				, VERSION, (int)ul_temp, hr, min) < SHARED_BUFFER_LEN)
+				, hr, min) < SHARED_BUFFER_LEN)
 	{
 		TRACE("http.c: html written to buffer");
 		return 1;
@@ -778,14 +847,24 @@ uint8_t interfaceCreate_Menu(void)
 				"body ul a:active {"\
 					"font-weight: 700;"\
 				"}"\
+				"#sub {"\
+					"font-size: 15px;"\
+					"margin-left: 10px;"\
+					"line-height: 1.7em;"\
+				"}"\
 				"</style>"\
 			"</head>"\
 				"<body>"\
 					"<ul>"\
-						"<li><a href=\"home.htm\" target=\"page\">Home</a></li>"\
-						"<li><a href=\"config.htm\" target=\"page\">Config</a></li>"\
-						"<li><a href=\"vlans.htm\" target=\"page\">VLANs</a></li>"\
-						"<li><a href=\"openflow.htm\" target=\"page\">OpenFlow</a></li>"\
+						"<li><a href=\"home.htm\" target=\"page\">Status</a></li>"\
+						"<li><a href=\"d_home.htm\" target=\"page\">Display</a></li>"\
+						"<li id=\"sub\"><a href=\"d_ports.htm\" target=\"page\">Ports</a></li>"\
+						"<li id=\"sub\"><a href=\"d_of.htm\" target=\"page\">OpenFlow</a></li>"\
+						"<li id=\"sub\"><a href=\"d_flo.htm\" target=\"page\">Flows</a></li>"\
+						"<li><a href=\"cfg_home.htm\" target=\"page\">Config</a></li>"\
+						"<li id=\"sub\"><a href=\"cfg_net.htm\" target=\"page\">Network</a></li>"\
+						"<li id=\"sub\"><a href=\"cfg_vlan.htm\" target=\"page\">VLANs</a></li>"\
+						"<li id=\"sub\"><a href=\"cfg_of.htm\" target=\"page\">OpenFlow</a></li>"\
 						"<li><a href=\"about.htm\" target=\"page\">About</a></li>"\
 					"</ul>"\
 				"</body>"\
@@ -807,87 +886,40 @@ uint8_t interfaceCreate_Menu(void)
 *
 */
 uint8_t interfaceCreate_Home(void)
-{
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
-		"<!DOCTYPE html>"\
-		"<html>"\
-			"<head>"\
-				"<style>"\
-					"body {"\
-						"overflow: auto;"\
-						"font-family:Sans-serif;"\
-						"font-size: 18px;"\
-						"margin-left: 20px;"\
-					"}"\
-				"</style>"\
-			"</head>"\
-			"<body>"\
-				"<p>"\
-				"Home Page<br>Placedholder text."\
-				"</p>"\
-			"</body>"\
-		"</html>"\
-				) < SHARED_BUFFER_LEN)
-	{
-		TRACE("http.c: html written to buffer");
-		return 1;
-	}
-	else
-	{
-		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
-		return 0;
-	}
-}
+{	
+	int hr = (totaltime/2)/3600;
+	int t = (totaltime/2)%3600;
+	int min = t/60;
 
-/*
-*	Create and format HTML for config page
-*
-*/
-uint8_t interfaceCreate_Config(void)
-{
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
+		"<META http-equiv=\"refresh\" content=\"61\">"\
 		"<html>"\
 			"<head>"\
 				"<style>"\
-					"body {"\
-						"overflow: auto;"\
-						"font-family:Sans-serif;"\
-						"line-height: 1.2em;"\
-						"font-size: 18px;"\
-						"margin-left: 20px;"\
-					"}"\
+				"body {"\
+					"overflow: auto;"\
+					"font-family:Sans-serif;"\
+					"line-height: 1.2em;"\
+					"font-size: 17px;"\
+					"margin-left: 20px;"\
+				"}"\
 				"</style>"\
 			"</head>"\
 			"<body>"\
+				"<h2>Status</h2>"\
 				"<p>"\
-					"<h1>Configuration</h1>"\
+					"Serial Number: %%s<br>"\
+					"Firmware Version: %s<br>"\
+					"CPU Temp: %d C<br>"\
+					"Uptime: %02d:%02d"\
 				"</p>"\
-				"<form style=\"width: 200px\" action=\"save_config\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes. Press the restart button on the top right for your changes to take effect.');\">"\
-					"<fieldset>"\
-					"<legend>Connection</legend>"\
-						"Name:<br>"\
-						"<input type=\"text\" name=\"w_deviceName\" value=\"%s\"><br><br>"\
-						"MAC Address:<br>"\
-						"<input type=\"text\" name=\"w_macAddress\" value=\"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X\"><br><br>"\
-						"IP Address:<br>"\
-						"<input type=\"text\" name=\"w_ipAddress\" value=\"%d.%d.%d.%d\"><br><br>"\
-						"Netmask:<br>"\
-						"<input type=\"text\" name=\"w_netmask\" value=\"%d.%d.%d.%d\"><br><br>"\
-						"Gateway:<br>"\
-						"<input type=\"text\" name=\"w_gateway\" value=\"%d.%d.%d.%d\"><br><br>"\
-						"<input type=\"submit\" value=\"Save\">"\
-						"<input type=\"reset\" value=\"Cancel\">"\
-					"</fieldset>"\
+				"<form action=\"btn_default\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will be reset to factory settings. Do you wish to proceed?');\">"\
+					"<button name=\"btn\" value=\"btn_default\">Factory Reset</button>"\
 				"</form>"\
 			"</body>"\
 		"</html>"\
-				, Zodiac_Config.device_name\
-				, Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]\
-				, Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1], Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]\
-				, Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]\
-				, Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]\
-		) < SHARED_BUFFER_LEN)
+				, VERSION, (int)ul_temp, hr, min) < SHARED_BUFFER_LEN)
 	{
 		TRACE("http.c: html written to buffer");
 		return 1;
@@ -900,10 +932,59 @@ uint8_t interfaceCreate_Config(void)
 }
 
 /*
-*	Create and format HTML for openflow page
+*	Create and format HTML for display help page
 *
 */
-uint8_t interfaceCreate_VLANs(uint8_t step)
+uint8_t interfaceCreate_Display_Home(void)
+{
+	
+	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		"<!DOCTYPE html>"\
+		"<html>"\
+			"<head>"\
+				"<style>"\
+				"body {"\
+					"overflow: auto;"\
+					"font-family:Sans-serif;"\
+					"line-height: 1.2em;"\
+					"font-size: 17px;"\
+					"margin-left: 20px;"\
+				"}"\
+				"</style>"\
+			"</head>"\
+			"<body>"\
+				"<h2>Display Help</h2>"\
+				"<h3>Ports</h3>"\
+					"<p>"\
+						"Displays information for each of the Zodiac FX Ethernet ports, including its status, byte/packet statistics, and VLAN configuration."\
+					"</p>"\
+				"<h3>OpenFlow</h3>"\
+					"<p>"\
+						"Information about the OpenFlow status and configuration can be found in the OpenFlow display menu. The configured version, and details of the connected controller are also shown."\
+					"</p>"\
+				"<h3>Flows</h3>"\
+					"<p>"\
+						"Flow table contents can be viewed in the flows menu."\
+					"</p>"\
+			"</body>"\
+		"</html>"\
+	) < SHARED_BUFFER_LEN)
+	{
+		TRACE("http.c: html written to buffer");
+		return 1;
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}
+}
+
+/*
+*	Create and format HTML for display ports page
+*
+*/
+uint8_t interfaceCreate_Display_Ports(uint8_t step)
 {
 	// Check port status
 	char portStatusch[5];
@@ -920,70 +1001,79 @@ uint8_t interfaceCreate_VLANs(uint8_t step)
 	if(step == 0)
 	{
 		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
-		"<!DOCTYPE html>"\
-		"<html>"\
-			"<head>"\
-				"<style>"\
-				"body {"\
-					"overflow: auto;"\
-					"font-family:Sans-serif;"\
-					"line-height: 1.2em;"\
-					"font-size: 18px;"\
-					"margin-left: 20px;"\
-				"}"\
-				"#p1 {"\
-					"position: fixed;"\
-					"top: 60px;"\
-					"left: 20px;"\
-				"}"\
-				"#p2 {"\
-					"position: fixed;"\
-					"top: 60px;"\
-					"left: 230px;"\
-				"}"\
-				"#p3 {"\
-					"position: fixed;"\
-					"top: 60px;"\
-					"left: 440px;"\
-				"}"\
-				"#p4 {"\
-					"position: fixed;"\
-					"top: 60px;"\
-					"left: 650px;"\
-				"}"\
-				"form {"\
-				  "width: 200px;"\
-				"}"\
-				"</style>"\
-			"</head>"\
-		"<body>"\
-			"<p>"\
-				"<h1>VLAN Configuration</h1>"\
-			"</p>"\
-			"<div id=p1>"\
-			  "<br>"\
-			  "<form action=\"save_port1\" method=\"post\">"\
-					"<fieldset>"\
-						"<legend>Port 1</legend>"\
-						"Status:<br>"\
-						"<input type=\"text\" name=\"w_portStatusch\" value=\"%s\" readonly><br><br>"\
-						"VLAN Type:<br>"\
-						"<select name=\"w_vlanType\">"\
-							"<option          value=\"w_vlanOF\">OpenFlow</option>"\
-							"<option          value=\"w_vlanNative\">Native</option>"\
-						"</select><br><br>"\
-						"VLAN Name:<br>"\
-						"<input type=\"text\" name=\"w_vlanName\" value=\"%s\"><br><br>"\
-						"VLAN ID:<br>"\
-						"<input type=\"text\" name=\"w_vlanID\" value=\"%d\"><br><br>"\
-						"<input type=\"submit\" value=\"Save\">"\
-						"<input type=\"reset\" value=\"Cancel\">"\
-					"</fieldset>"\
-				"</form>"\
-			"</div>"\
-				, portStatusch
-				, Zodiac_Config.vlan_list[step].cVlanName
-				, Zodiac_Config.vlan_list[step].uVlanID
+			"<!DOCTYPE html>"\
+			"<html>"\
+				"<head>"\
+					"<style>"\
+					"body {"\
+						"overflow: auto;"\
+						"font-family:Sans-serif;"\
+						"line-height: 1.2em;"\
+						"font-size: 17px;"\
+						"margin-left: 20px;"\
+					"}"\
+					"#p1 {"\
+						"position: fixed;"\
+						"top: 60px;"\
+						"left: 20px;"\
+					"}"\
+					"#p2 {"\
+						"position: fixed;"\
+						"top: 60px;"\
+						"left: 230px;"\
+					"}"\
+					"#p3 {"\
+						"position: fixed;"\
+						"top: 60px;"\
+						"left: 440px;"\
+					"}"\
+					"#p4 {"\
+						"position: fixed;"\
+						"top: 60px;"\
+						"left: 650px;"\
+					"}"\
+					"</style>"\
+				"</head>"\
+				"<body>"\
+					"<p>"\
+						"<h2>Port Information</h2>"\
+					"</p>"\
+					"<div id=p1>"\
+					  "<br>"\
+					  "<form action=\"save_port1\" method=\"post\">"\
+							"<fieldset>"\
+								"<legend>Port 1</legend>"\
+								"Status:<br>"\
+								"<input type=\"text\" name=\"w_portStatus\" value=\"UP\" readonly><br><br>"\
+								"VLAN Type:<br>"\
+								"<input type=\"text\" name=\"w_vlanType\" value=\"OpenFlow\" readonly><br><br>"\
+								"VLAN ID:<br>"\
+								"<select name=\"w_vlanID\">"\
+									"<option          value=\"0\">100</option>"\
+									"<option          value=\"1\">200</option>"\
+								"</select>"\
+								"<input type=\"submit\" value=\"Save\">"\
+								"<input type=\"reset\" value=\"Cancel\"><br><br>"\
+								"RX Bytes<br>"\
+								"<input type=\"text\" name=\"w_rxB\" value=\"97701\" readonly><br><br>"\
+								"TX Bytes<br>"\
+								"<input type=\"text\" name=\"w_txB\" value=\"69865\" readonly><br><br>"\
+								"RX Packets<br>"\
+								"<input type=\"text\" name=\"w_rxP\" value=\"1016\" readonly><br><br>"\
+								"TX Packets<br>"\
+								"<input type=\"text\" name=\"w_txP\" value=\"724\" readonly><br><br>"\
+								"RX Dropped Packets<br>"\
+								"<input type=\"text\" name=\"w_rxDP\" value=\"0\" readonly><br><br>"\
+								"TX Dropped Packets<br>"\
+								"<input type=\"text\" name=\"w_txDP\" value=\"0\" readonly><br><br>"\
+								"RX CRC Errors<br>"\
+								"<input type=\"text\" name=\"w_rxCRC\" value=\"0\" readonly><br>"\
+							"</fieldset>"\
+						"</form>"\
+					"</div>"\
+				//, portStatusch
+				//, Zodiac_Config.vlan_list[step].cVlanName
+				//, Zodiac_Config.vlan_list[step].uVlanID
 		) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html written to buffer");
@@ -1004,24 +1094,36 @@ uint8_t interfaceCreate_VLANs(uint8_t step)
 					"<fieldset>"\
 						"<legend>Port 2</legend>"\
 						"Status:<br>"\
-						"<input type=\"text\" name=\"w_portStatusch\" value=\"%s\" readonly><br><br>"\
+						"<input type=\"text\" name=\"w_portStatus\" value=\"DOWN\" readonly><br><br>"\
 						"VLAN Type:<br>"\
-						"<select name=\"w_vlanType\">"\
-							"<option          value=\"w_vlanOF\">OpenFlow</option>"\
-							"<option          value=\"w_vlanNative\">Native</option>"\
-						"</select><br><br>"\
-						"VLAN Name:<br>"\
-						"<input type=\"text\" name=\"w_vlanName\" value=\"%s\"><br><br>"\
+						"<input type=\"text\" name=\"w_vlanType\" value=\"OpenFlow\" readonly><br><br>"\
 						"VLAN ID:<br>"\
-						"<input type=\"text\" name=\"w_vlanID\" value=\"%s\"><br><br>"\
+						"<select name=\"w_vlanID\">"\
+							"<option          value=\"0\">100</option>"\
+							"<option          value=\"1\">200</option>"\
+						"</select>"\
 						"<input type=\"submit\" value=\"Save\">"\
-						"<input type=\"reset\" value=\"Cancel\">"\
+						"<input type=\"reset\" value=\"Cancel\"><br><br>"\
+						"RX Bytes<br>"\
+						"<input type=\"text\" name=\"w_rxB\" value=\"97701\" readonly><br><br>"\
+						"TX Bytes<br>"\
+						"<input type=\"text\" name=\"w_txB\" value=\"69865\" readonly><br><br>"\
+						"RX Packets<br>"\
+						"<input type=\"text\" name=\"w_rxP\" value=\"1016\" readonly><br><br>"\
+						"TX Packets<br>"\
+						"<input type=\"text\" name=\"w_txP\" value=\"724\" readonly><br><br>"\
+						"RX Dropped Packets<br>"\
+						"<input type=\"text\" name=\"w_rxDP\" value=\"0\" readonly><br><br>"\
+						"TX Dropped Packets<br>"\
+						"<input type=\"text\" name=\"w_txDP\" value=\"0\" readonly><br><br>"\
+						"RX CRC Errors<br>"\
+						"<input type=\"text\" name=\"w_rxCRC\" value=\"0\" readonly><br>"\
 					"</fieldset>"\
 				"</form>"\
 			"</div>"\
-				, portStatusch
-				, Zodiac_Config.vlan_list[step].cVlanName
-				, Zodiac_Config.vlan_list[step].uVlanID
+				//, portStatusch
+				//, Zodiac_Config.vlan_list[step].cVlanName
+				//, Zodiac_Config.vlan_list[step].uVlanID
 		) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html written to buffer");
@@ -1042,24 +1144,36 @@ uint8_t interfaceCreate_VLANs(uint8_t step)
 					"<fieldset>"\
 						"<legend>Port 3</legend>"\
 						"Status:<br>"\
-						"<input type=\"text\" name=\"w_portStatusch\" value=\"%s\" readonly><br><br>"\
+						"<input type=\"text\" name=\"w_portStatus\" value=\"DOWN\" readonly><br><br>"\
 						"VLAN Type:<br>"\
-						"<select name=\"w_vlanType\">"\
-							"<option          value=\"w_vlanOF\">OpenFlow</option>"\
-							"<option          value=\"w_vlanNative\">Native</option>"\
-						"</select><br><br>"\
-						"VLAN Name:<br>"\
-						"<input type=\"text\" name=\"w_vlanName\" value=\"%s\"><br><br>"\
+						"<input type=\"text\" name=\"w_vlanType\" value=\"Native\" readonly><br><br>"\
 						"VLAN ID:<br>"\
-						"<input type=\"text\" name=\"w_vlanID\" value=\"%s\"><br><br>"\
+						"<select name=\"w_vlanID\">"\
+							"<option          value=\"0\">100</option>"\
+							"<option          value=\"1\">200</option>"\
+						"</select>"\
 						"<input type=\"submit\" value=\"Save\">"\
-						"<input type=\"reset\" value=\"Cancel\">"\
+						"<input type=\"reset\" value=\"Cancel\"><br><br>"\
+						"RX Bytes<br>"\
+						"<input type=\"text\" name=\"w_rxB\" value=\"97701\" readonly><br><br>"\
+						"TX Bytes<br>"\
+						"<input type=\"text\" name=\"w_txB\" value=\"69865\" readonly><br><br>"\
+						"RX Packets<br>"\
+						"<input type=\"text\" name=\"w_rxP\" value=\"1016\" readonly><br><br>"\
+						"TX Packets<br>"\
+						"<input type=\"text\" name=\"w_txP\" value=\"724\" readonly><br><br>"\
+						"RX Dropped Packets<br>"\
+						"<input type=\"text\" name=\"w_rxDP\" value=\"0\" readonly><br><br>"\
+						"TX Dropped Packets<br>"\
+						"<input type=\"text\" name=\"w_txDP\" value=\"0\" readonly><br><br>"\
+						"RX CRC Errors<br>"\
+						"<input type=\"text\" name=\"w_rxCRC\" value=\"0\" readonly><br>"\
 					"</fieldset>"\
 				"</form>"\
 			"</div>"\
-				, portStatusch
-				, Zodiac_Config.vlan_list[step].cVlanName
-				, Zodiac_Config.vlan_list[step].uVlanID
+				//, portStatusch
+				//, Zodiac_Config.vlan_list[step].cVlanName
+				//, Zodiac_Config.vlan_list[step].uVlanID
 		) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html written to buffer");
@@ -1074,32 +1188,44 @@ uint8_t interfaceCreate_VLANs(uint8_t step)
 	else if(step == 3)
 	{
 		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
-				"<div id=p4>"\
-				"<br>"\
-				  "<form action=\"save_port4\" method=\"post\">"\
-							"<fieldset>"\
-								"<legend>Port 4</legend>"\
-								"Status:<br>"\
-								"<input type=\"text\" name=\"w_portStatusch\" value=\"%s\" readonly><br><br>"\
-								"VLAN Type:<br>"\
-								"<select name=\"w_vlanType\">"\
-									"<option          value=\"w_vlanOF\">OpenFlow</option>"\
-									"<option          value=\"w_vlanNative\">Native</option>"\
-								"</select><br><br>"\
-								"VLAN Name:<br>"\
-								"<input type=\"text\" name=\"w_vlanName\" value=\"%s\"><br><br>"\
-								"VLAN ID:<br>"\
-								"<input type=\"text\" name=\"w_vlanID\" value=\"%s\"><br><br>"\
-								"<input type=\"submit\" value=\"Save\">"\
-								"<input type=\"reset\" value=\"Cancel\">"\
-							"</fieldset>"\
-						"</form>"\
-				"</div>"\
-			"</body>"\
-		"</html>"
-			, portStatusch
-			, Zodiac_Config.vlan_list[step].cVlanName
-			, Zodiac_Config.vlan_list[step].uVlanID
+					"<div id=p4>"\
+						"<br>"\
+						  "<form action=\"save_port1\" method=\"post\">"\
+								"<fieldset>"\
+									"<legend>Port 4</legend>"\
+									"Status:<br>"\
+									"<input type=\"text\" name=\"w_portStatus\" value=\"UP\" readonly><br><br>"\
+									"VLAN Type:<br>"\
+									"<input type=\"text\" name=\"w_vlanType\" value=\"Native\" readonly><br><br>"\
+									"VLAN ID:<br>"\
+									"<select name=\"w_vlanID\">"\
+										"<option          value=\"0\">100</option>"\
+										"<option          value=\"1\">200</option>"\
+									"</select>"\
+									"<input type=\"submit\" value=\"Save\">"\
+									"<input type=\"reset\" value=\"Cancel\"><br><br>"\
+									"RX Bytes<br>"\
+									"<input type=\"text\" name=\"w_rxB\" value=\"97701\" readonly><br><br>"\
+									"TX Bytes<br>"\
+									"<input type=\"text\" name=\"w_txB\" value=\"69865\" readonly><br><br>"\
+									"RX Packets<br>"\
+									"<input type=\"text\" name=\"w_rxP\" value=\"1016\" readonly><br><br>"\
+									"TX Packets<br>"\
+									"<input type=\"text\" name=\"w_txP\" value=\"724\" readonly><br><br>"\
+									"RX Dropped Packets<br>"\
+									"<input type=\"text\" name=\"w_rxDP\" value=\"0\" readonly><br><br>"\
+									"TX Dropped Packets<br>"\
+									"<input type=\"text\" name=\"w_txDP\" value=\"0\" readonly><br><br>"\
+									"RX CRC Errors<br>"\
+									"<input type=\"text\" name=\"w_rxCRC\" value=\"0\" readonly><br>"\
+								"</fieldset>"\
+							"</form>"\
+						"</div>"\
+					"</body>"\
+				"</html>"\
+			//, portStatusch
+			//, Zodiac_Config.vlan_list[step].cVlanName
+			//, Zodiac_Config.vlan_list[step].uVlanID
 		) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html written to buffer");
@@ -1112,32 +1238,381 @@ uint8_t interfaceCreate_VLANs(uint8_t step)
 		}
 	}
 }
+
+
+/*
+*	Create and format HTML for display openflow page
+*
+*/
+uint8_t interfaceCreate_Display_OpenFlow(void)
+{
+	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		"<!DOCTYPE html>"\
+		"<html>"\
+			"<head>"\
+				"<style>"\
+				"body {"\
+					"overflow: auto;"\
+					"font-family:Sans-serif;"\
+					"line-height: 1.2em;"\
+					"font-size: 17px;"\
+					"margin-left: 20px;"\
+				"}"\
+				"</style>"\
+			"</head>"\
+			"<body>"\
+				"<p>"\
+					"<h2>OpenFlow Information</h2>"\
+				"</p>"\
+				"<form style=\"width: 200px\" action=\"save_of\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes.\n\nPress the restart button on the top right for your changes to take effect.');\">"\
+					"<fieldset>"\
+						"<legend>OpenFlow</legend>"\
+						"Status:<br>"\
+						"<input type=\"text\" name=\"w_ofStatus\" value=\"%%s\" readonly><br><br>"\
+						"Version:<br>"\
+						"<input type=\"text\" name=\"w_ofVer\" value=\"%%s\" readonly><br><br>"\
+						"Tables:<br>"\
+						"<input type=\"text\" name=\"w_ofTab\" value=\"%%s\" readonly><br><br>"\
+						"Flows:<br>"\
+						"<input type=\"text\" name=\"w_ofFlows\" value=\"%%s\" readonly><br><br>"\
+						"Table Lookups:<br>"\
+						"<input type=\"text\" name=\"w_ofLk\" value=\"%%s\" readonly><br><br>"\
+						"Table Matches:<br>"\
+						"<input type=\"text\" name=\"w_ofMatch\" value=\"%%s\" readonly><br>"\
+					"</fieldset>"\
+				"</form>"\
+			"</body>"\
+		"</html>"\
+	) < SHARED_BUFFER_LEN)
+	{
+		TRACE("http.c: html written to buffer");
+		return 1;
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}
+}
+
+/*
+*	Create and format HTML for display flows page
+*
+*/
+uint8_t interfaceCreate_Display_Flows(void)
+{
+	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		"<!DOCTYPE html>"\
+		"<html>"\
+			"<head>"\
+				"<style>"\
+				"body {"\
+					"overflow: auto;"\
+					"font-family:Sans-serif;"\
+					"line-height: 1.2em;"\
+					"font-size: 17px;"\
+					"margin-left: 20px;"\
+				"}"\
+				"</style>"\
+			"</head>"\
+			"<body>"\
+				"<p>"\
+					"<h2>Flows</h2>"\
+				"</p>"\
+				"<pre>"\
+		"Flow 1\n"\
+		"Match:\n"\
+		"Attributes :\n"\
+		"Priority :  Duration :  secs\n"\
+		"Hard Timeout :  secs Idle Timeout :  secs\n"\
+		"Byte Count :  Packet Count : \n"\
+		"Instructions :\n"\
+		"Apply Actions :\n"\
+		"Output : CONTROLLER\n"\
+		"Flow 2\n"\
+		"...\n"\
+		"Flow 3\n"\
+		"...\n"\
+				"</pre>"\
+				"<form action=\"btn_ofNext\" method=\"post\">"\
+						"<br><button name=\"btn\" value=\"btn_ofNext\">Next</button>"\
+				"</form>"\
+				"<form action=\"btn_ofPrev\" method=\"post\">"\
+						"<button name=\"btn\" value=\"btn_ofPrev\">Previous</button>"\
+				"</form>"\
+				"<form action=\"btn_ofClear\" method=\"post\"  onsubmit=\"return confirm('All flows will be cleared. Do you wish to proceed?');\">"\
+						"<br><button name=\"btn\" value=\"btn_ofClear\">Clear Flows</button>"\
+				"</form>"\
+			"</body>"\
+		"</html>"\
+	) < SHARED_BUFFER_LEN)
+	{
+		TRACE("http.c: html written to buffer");
+		return 1;
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}
+}
 			
+/*
+*	Create and format HTML for config help page
+*
+*/
+uint8_t interfaceCreate_Config_Home(void)
+{
+	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		"<!DOCTYPE html>"\
+		"<html>"\
+			"<head>"\
+				"<style>"\
+				"body {"\
+					"overflow: auto;"\
+					"font-family:Sans-serif;"\
+					"line-height: 1.2em;"\
+					"font-size: 17px;"\
+					"margin-left: 20px;"\
+				"}"\
+				"</style>"\
+			"</head>"\
+			"<body>"\
+				"<h2>Config Help</h2>"\
+				"<h3>Network</h3>"\
+					"<p>"\
+						"The network settings of the Zodiac FX can be configured in this menu, including the device name, IP address, MAC address, netmask, and default gateway."\
+					"</p>"\
+				"<h3>VLANs</h3>"\
+					"<p>"\
+						"Virtual LANs can be added or removed in the VLANs menu. These can be assigned in the Ports menu on the left."\
+					"</p>"\
+				"<h3>OpenFlow</h3>"\
+					"<p>"\
+						"The OpenFlow configuration can be modified here. OpenFlow can be enabled or disabled, the version can be specified, and the failstate can be set. The OpenFlow controller's IP address and port can be configured based on your network."\
+					"</p>"\
+			"</body>"\
+		"</html>"\
+		) < SHARED_BUFFER_LEN)
+	{
+		TRACE("http.c: html written to buffer");
+		return 1;
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}
+}
+
+/*
+*	Create and format HTML for config network page
+*
+*/
+uint8_t interfaceCreate_Config_Network(void)
+{
+	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		"<!DOCTYPE html>"\
+		"<html>"\
+		"<head>"\
+		"<style>"\
+		"body {"\
+			"overflow: auto;"\
+			"font-family:Sans-serif;"\
+			"line-height: 1.2em;"\
+			"font-size: 18px;"\
+			"margin-left: 20px;"\
+		"}"\
+		"</style>"\
+		"</head>"\
+		"<body>"\
+		"<p>"\
+		"<h1>Network Configuration</h1>"\
+		"</p>"\
+		"<form style=\"width: 200px\" action=\"save_config\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes. Press the restart button on the top right for your changes to take effect.');\">"\
+		"<fieldset>"\
+		"<legend>Connection</legend>"\
+		"Name:<br>"\
+		"<input type=\"text\" name=\"w_deviceName\" value=\"%s\"><br><br>"\
+		"MAC Address:<br>"\
+		"<input type=\"text\" name=\"w_macAddress\" value=\"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X\"><br><br>"\
+		"IP Address:<br>"\
+		"<input type=\"text\" name=\"w_ipAddress\" value=\"%d.%d.%d.%d\"><br><br>"\
+		"Netmask:<br>"\
+		"<input type=\"text\" name=\"w_netmask\" value=\"%d.%d.%d.%d\"><br><br>"\
+		"Gateway:<br>"\
+		"<input type=\"text\" name=\"w_gateway\" value=\"%d.%d.%d.%d\"><br><br>"\
+		"<input type=\"submit\" value=\"Save\">"\
+		"<input type=\"reset\" value=\"Cancel\">"\
+		"</fieldset>"\
+		"</form>"\
+		"</body>"\
+		"</html>"\
+			, Zodiac_Config.device_name\
+			, Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]\
+			, Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1], Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]\
+			, Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]\
+			, Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]\
+		) < SHARED_BUFFER_LEN)
+	{
+		TRACE("http.c: html written to buffer");
+		return 1;
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}	
+}
+
+/*
+*	Create and format HTML for config vlans page
+*
+*/
+uint8_t interfaceCreate_Config_VLANs(void)
+{
+	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		"<!DOCTYPE html>"\
+		"<html>"\
+			"<head>"\
+			"<style>"\
+			"body {"\
+				"overflow: auto;"\
+				"font-family:Sans-serif;"\
+				"line-height: 1.2em;"\
+				"font-size: 17px;"\
+				"margin-left: 20px;"\
+			"}"\
+			"table {"\
+				"border-collapse: collapse;"\
+				"border: 1px solid black;"\
+				"width: 100%;"\
+			"}"\
+			"td {"\
+				"height: 25px;"\
+			"}"\
+			"</style>"\
+			"</head>"\
+			"<body>"\
+				"<p>"\
+				"<h2>Virtual LAN Configuration</h2>"\
+				"</p>"\
+				"<form style=\"width: 400px\" action=\"save_of\" method=\"post\">"\
+					"<fieldset>"\
+					"<legend>VLANs</legend>"\
+					"<table border=\"1\">"\
+					"<tr>"\
+					"<th>ID</th>"\
+					"<th>Name</th>"\
+					"<th>Type</th>"\
+					"<th>Options</th>"\
+					"</tr>"\
+					"<tr>"\
+					"<td>100</td>"\
+					"<td>OpenFlow</td>"\
+					"<td>OpenFlow</td>"\
+					"<td>"\
+					"<form action=\"del0\" method=\"post\">"\
+					"<button name=\"btn\" value=\"del0\">Delete</button>"\
+					"</form>"\
+					"</td>"\
+					"</tr>"\
+					"<tr>"\
+					"<td>%%d</td>"\
+					"<td>%%s</td>"\
+					"<td>%%s</td>"\
+					"<td>"\
+					"<form action=\"del1\" method=\"post\">"\
+					"<button name=\"btn\" value=\"del2\">Delete</button>"\
+					"</form>"\
+					"</td>"\
+					"</tr>"\
+					"<tr>"\
+					"<td>"\
+					"<input type=\"text\" name=\"w_ofIP\" size=\"5\">"\
+					"</td>"\
+					"<td>"\
+					"<input type=\"text\" name=\"w_ofIP\" size=\"5\">"\
+					"</td>"\
+					"<td>"\
+					"<input type=\"text\" name=\"w_ofIP\" size=\"5\">"\
+					"</td>"\
+					"<td>"\
+					"<form action=\"btn_add\" method=\"post\">"\
+					"<button style=\"width:54px\" name=\"btn\" value=\"btn_add\" size=\"10\">Add</button>"\
+					"</form>"\
+					"</td>"\
+					"</tr>"\
+					"</table>"\
+				"</fieldset>"\
+			"</form>"\
+			"</body>"\
+		"</html>"\
+	) < SHARED_BUFFER_LEN)
+	{
+		TRACE("http.c: html written to buffer");
+		return 1;
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}
+}
+
 /*
 *	Create and format HTML for openflow page
 *
 */
-uint8_t interfaceCreate_OpenFlow(void)
+uint8_t interfaceCreate_Config_OpenFlow(void)
 {
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
-	"<!DOCTYPE html>"\
-	"<html>"\
-		"<head>"\
-			"<style>"\
+		"<!DOCTYPE html>"\
+		"<html>"\
+			"<head>"\
+				"<style>"\
 				"body {"\
 					"overflow: auto;"\
 					"font-family:Sans-serif;"\
-					"font-size: 18px;"\
+					"line-height: 1.2em;"\
+					"font-size: 17px;"\
 					"margin-left: 20px;"\
 				"}"\
-			"</style>"\
-		"</head>"\
-		"<body>"\
-			"<p>"\
-			"OpenFlow Page<br>Placedholder text."\
-			"</p>"\
-		"</body>"\
-	"</html>"\
+				"</style>"\
+			"</head>"\
+			"<body>"\
+				"<p>"\
+					"<h2>OpenFlow Configuration</h2>"\
+				"</p>"\
+				"<form style=\"width: 200px\" action=\"save_of\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes.\n\nPress the restart button on the top right for your changes to take effect.');\">"\
+					"<fieldset>"\
+						"<legend>OpenFlow</legend>"\
+						"Controller IP:<br>"\
+						"<input type=\"text\" name=\"w_ofIP\" value=\"%%s\"><br><br>"\
+						"Controller Port:<br>"\
+						"<input type=\"text\" name=\"w_ofPort\" value=\"%%s\"><br><br>"\
+						"OpenFlow Status:<br>"\
+						"<select name=\"w_ofStatus\">"\
+							"<option          value=\"Enable\">Enabled</option>"\
+							"<option          value=\"Disable\">Disabled</option>"\
+						"</select><br><br>"\
+						"Failstate:<br>"\
+						"<select name=\"w_failstate\">"\
+							"<option          value=\"0\">Secure</option>"\
+							"<option          value=\"1\">Safe</option>"\
+						"</select><br><br>"\
+						"OpenFlow Version:<br>"\
+						"<select name=\"w_ofVer\">"\
+							"<option value=\"0\">Auto</option>"\
+							"<option value=\"1\">1.0</option>"\
+							"<option value=\"4\">1.3</option>"\
+						"</select><br><br>"\
+						"<input type=\"submit\" value=\"Save\">"\
+						"<input type=\"reset\" value=\"Cancel\">"\
+					"</fieldset>"\
+				"</form>"\
+			"</body>"\
+		"</html>"\
 			) < SHARED_BUFFER_LEN)
 	{
 		TRACE("http.c: html written to buffer");
@@ -1161,18 +1636,25 @@ uint8_t interfaceCreate_About(void)
 		"<html>"\
 			"<head>"\
 				"<style>"\
-					"body {"\
-						"overflow: auto;"\
-						"font-family:Sans-serif;"\
-						"font-size: 18px;"\
-						"margin-left: 20px;"\
-					"}"\
+				"body {"\
+					"overflow: auto;"\
+					"font-family:Sans-serif;"\
+					"line-height: 1.2em;"\
+					"font-size: 17px;"\
+					"margin-left: 20px;"\
+				"}"\
 				"</style>"\
 			"</head>"\
 			"<body>"\
-				"<p>"\
-				"About Page<br>Placedholder text."\
-				"</p>"\
+				"<h2>About</h2>"\
+				"<h3>Zodiac FX</h3>"\
+					"<p>"\
+						"The Zodiac FX was created to allow the development of SDN applications on real hardware."\
+					"</p>"\
+				"<h3>Northbound Networks</h3>"\
+					"<p>"\
+						"Northbound Networks was founded in 2014 by Paul Zanna with the goal of providing affordable SDN tools for developers, research and hobbyists. Based in Melbourne, Australia they are a member of the ANZ SDN Alliance."\
+					"</p>"\
 			"</body>"\
 		"</html>"\
 				) < SHARED_BUFFER_LEN)
