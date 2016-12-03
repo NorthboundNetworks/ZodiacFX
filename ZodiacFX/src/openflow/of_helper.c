@@ -52,7 +52,7 @@ extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct table_counter table_counters[MAX_TABLES];
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_10];
-extern struct ofp13_flow_mod flow_match13[MAX_FLOWS_13];
+extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
@@ -329,21 +329,21 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 		if (flow_counters[i].active == false) continue;
 
 		// If the flow is not in the requested table then fail
-		if (table_id != flow_match13[i].table_id) continue;
+		if (table_id != flow_match13[i]->table_id) continue;
 
 		// If the flow has no match fields (full wild) it is an automatic match
 		if (ofp13_oxm_match[i] ==  NULL)
 		{
-			if (matched_flow == -1 || (ntohs(flow_match13[i].priority) > ntohs(flow_match13[matched_flow].priority))) matched_flow = i;
+			if (matched_flow == -1 || (ntohs(flow_match13[i]->priority) > ntohs(flow_match13[matched_flow]->priority))) matched_flow = i;
 			continue;
 		}
 		// If this flow is of a lower priority then one that is already match then there is no point going through a check.
-		if (matched_flow > -1 && (ntohs(flow_match13[matched_flow].priority) >= ntohs(flow_match13[i].priority))) continue;
+		if (matched_flow > -1 && (ntohs(flow_match13[matched_flow]->priority) >= ntohs(flow_match13[i]->priority))) continue;
 
 		// Main flow match loop
 		priority_match = 0;
 		uint8_t *hdr = ofp13_oxm_match[i];
-		uint8_t *tail = hdr + ntohs(flow_match13[i].match.length) - 4;
+		uint8_t *tail = hdr + ntohs(flow_match13[i]->match.length) - 4;
 		while (hdr < tail)
 		{
 			uint32_t field = ntohl(*(uint32_t*)(hdr));
@@ -977,8 +977,13 @@ void remove_flow13(int flow_id)
 		membag_free(ofp13_oxm_inst[flow_id]);
 		ofp13_oxm_inst[flow_id] = NULL;
 	}
+	if(flow_match13[flow_id] != NULL)
+	{
+		membag_free(flow_match13[flow_id]);
+		flow_match13[flow_id] = NULL;
+	}
 	// Copy the last flow to here to fill the gap
-	memcpy(&flow_match13[flow_id], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));
+	flow_match13[flow_id] = flow_match13[iLastFlow-1];
 	ofp13_oxm_match[flow_id] = ofp13_oxm_match[iLastFlow-1];
 	ofp13_oxm_inst[flow_id] = ofp13_oxm_inst[iLastFlow-1];
 	ofp13_oxm_inst_size[flow_id] = ofp13_oxm_inst_size[iLastFlow - 1];
@@ -1050,16 +1055,16 @@ void flow_timeouts()
 				}
 			} else if (OF_Version == 4)
 			{
-				if (flow_match13[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match13[i].idle_timeout))
+				if (flow_match13[i]->idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match13[i]->idle_timeout))
 				{
-					if (ntohs(flow_match13[i].flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_IDLE_TIMEOUT);
+					if (ntohs(flow_match13[i]->flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_IDLE_TIMEOUT);
 					remove_flow13(i);
 					return;
 				}
 
-				if (flow_match13[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match13[i].hard_timeout))
+				if (flow_match13[i]->hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match13[i]->hard_timeout))
 				{
-					if (ntohs(flow_match13[i].flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_HARD_TIMEOUT);
+					if (ntohs(flow_match13[i]->flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_HARD_TIMEOUT);
 					remove_flow13(i);
 					return;
 				}
@@ -1202,18 +1207,18 @@ int flow_stats_msg13(char *buffer, int first, int last)
 	for(int k = first; k<last;k++)
 	{
 		// ofp_flow_stats fixed fields are the same length with ofp_flow_mod
-		flow_stats.length = flow_match13[k].header.length;
-		flow_stats.table_id = flow_match13[k].table_id;
+		flow_stats.length = flow_match13[k]->header.length;
+		flow_stats.table_id = flow_match13[k]->table_id;
 		flow_stats.duration_sec = htonl((totaltime/2) - flow_counters[k].duration);
 		flow_stats.duration_nsec = htonl(0);
-		flow_stats.priority = flow_match13[k].priority;
-		flow_stats.idle_timeout = flow_match13[k].idle_timeout;
-		flow_stats.hard_timeout = flow_match13[k].hard_timeout;
-		flow_stats.flags = flow_match13[k].flags;
-		flow_stats.cookie = flow_match13[k].cookie;
+		flow_stats.priority = flow_match13[k]->priority;
+		flow_stats.idle_timeout = flow_match13[k]->idle_timeout;
+		flow_stats.hard_timeout = flow_match13[k]->hard_timeout;
+		flow_stats.flags = flow_match13[k]->flags;
+		flow_stats.cookie = flow_match13[k]->cookie;
 		flow_stats.packet_count = htonll(flow_counters[k].hitCount);
 		flow_stats.byte_count = htonll(flow_counters[k].bytes);
-		flow_stats.match = flow_match13[k].match;
+		flow_stats.match = flow_match13[k]->match;
 		// buffer must be shorter than 2048
 		if(buffer_ptr + ntohs(flow_stats.length) > buffer + 2048){
 			break; // XXX: should provide multipart OFPMPF_REPLY_MORE flow

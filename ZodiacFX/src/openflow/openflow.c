@@ -49,11 +49,11 @@ extern struct ofp13_port_stats phys13_port_stats[4];
 // Local Variables
 struct ofp_switch_config Switch_config;
 struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
-struct ofp13_flow_mod flow_match13[MAX_FLOWS_13];		// Convert to pointers
+struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
 uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
-struct flows_counter flow_counters[MAX_FLOWS_13];		// Convert to pointers
+struct flows_counter flow_counters[MAX_FLOWS_13];
 struct flow_tbl_actions *flow_actions10[MAX_FLOWS_10];
 struct table_counter table_counters[MAX_TABLES];
 int iLastFlow = 0;

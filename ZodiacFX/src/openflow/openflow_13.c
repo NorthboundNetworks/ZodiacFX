@@ -49,7 +49,7 @@ extern int OF_Version;
 extern bool rcv_freq;
 extern int iLastFlow;
 extern int totaltime;
-extern struct ofp13_flow_mod flow_match13[MAX_FLOWS_13];
+extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
@@ -536,9 +536,10 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 			multi_pos += multi_portdesc_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 
-		// Floodlight v1.2 crashes when it gets this reply, removed for the moment.
+		
 		if ( htons(multi_req->type) == OFPMP13_TABLE_FEATURES )
 		{
+			/**** Floodlight v1.2 crashes when it gets this reply, removed for the moment. *****/
 			//multi_pos += multi_tablefeat_reply13(&shared_buffer[multi_pos], multi_req);
 			of_error13(ofph, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
 		}
@@ -822,7 +823,7 @@ int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	for(uint8_t table_id=0; table_id<MAX_TABLES; table_id++){
 		uint32_t active = 0;
 		for(int i=0; i<iLastFlow; i++) {
-			if (flow_counters[i].active == true && flow_match13[i].table_id==table_id){
+			if (flow_counters[i].active == true && flow_match13[i]->table_id==table_id){
 				active++;
 			}
 		}
@@ -1088,7 +1089,7 @@ void flow_add13(struct ofp_header *msg)
 	{
 		if(ofp13_oxm_match[q] == NULL)
 		{
-			if((memcmp(&flow_match13[q].match.oxm_fields, ptr_fm->match.oxm_fields, 4) == 0) && (flow_match13[q].priority == ptr_fm->priority) && (flow_match13[q].table_id == ptr_fm->table_id))
+			if((memcmp(flow_match13[q]->match.oxm_fields, ptr_fm->match.oxm_fields, 4) == 0) && (flow_match13[q]->priority == ptr_fm->priority) && (flow_match13[q]->table_id == ptr_fm->table_id))
 			{
 				// Check for overlap flag
 				if (ptr_fm->flags &  OFPFF13_CHECK_OVERLAP)
@@ -1111,7 +1112,7 @@ void flow_add13(struct ofp_header *msg)
 			}
 		} else
 		{
-			if((memcmp(ofp13_oxm_match[q], ptr_fm->match.oxm_fields, ntohs(flow_match13[q].match.length)-4) == 0) && (flow_match13[q].priority == ptr_fm->priority) && (flow_match13[q].table_id == ptr_fm->table_id))
+			if((memcmp(ofp13_oxm_match[q], ptr_fm->match.oxm_fields, ntohs(flow_match13[q]->match.length)-4) == 0) && (flow_match13[q]->priority == ptr_fm->priority) && (flow_match13[q]->table_id == ptr_fm->table_id))
 			{
 				if (ptr_fm->flags &  OFPFF13_CHECK_OVERLAP)
 				{
@@ -1133,27 +1134,40 @@ void flow_add13(struct ofp_header *msg)
 			}
 		}
 	}
-	memcpy(&flow_match13[iLastFlow], ptr_fm, sizeof(struct ofp13_flow_mod));
+	
+	// Allocate a space to store flow mod
+	flow_match13[iLastFlow] = membag_alloc(sizeof(struct ofp13_flow_mod));	
+	if (flow_match13[iLastFlow] == NULL)
+	{
+		TRACE("openflow_13.c: Unable to allocate %d bytes of memory for flow mod", sizeof(struct ofp13_flow_mod));
+		of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
+		return;
+	}
+	TRACE("openflow_13.c: Allocating %d bytes at %p for flow mode in flow %d", sizeof(struct ofp13_flow_mod), flow_match13[iLastFlow], iLastFlow+1);
+	memcpy(flow_match13[iLastFlow], ptr_fm, sizeof(struct ofp13_flow_mod));
+	
+	// Allocate a space to store match fields
 	if (ntohs(ptr_fm->match.length) > 4)
 	{
-		ofp13_oxm_match[iLastFlow] = membag_alloc(ntohs(flow_match13[iLastFlow].match.length)-4);	// Allocate a space to store match fields
+		ofp13_oxm_match[iLastFlow] = membag_alloc(ntohs(flow_match13[iLastFlow]->match.length)-4);	
 		if (ofp13_oxm_match[iLastFlow] == NULL)
 		{
-			TRACE("openflow_13.c: Unable to allocate %d bytes of memory for match fields", ntohs(flow_match13[iLastFlow].match.length)-4);
+			TRACE("openflow_13.c: Unable to allocate %d bytes of memory for match fields", ntohs(flow_match13[iLastFlow]->match.length)-4);
 			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 			return;
 		}
-		TRACE("openflow_13.c: Allocating %d bytes at %p for match field in flow %d", ntohs(flow_match13[iLastFlow].match.length)-4, ofp13_oxm_match[iLastFlow], iLastFlow+1);
-		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, ntohs(flow_match13[iLastFlow].match.length)-4);
+		TRACE("openflow_13.c: Allocating %d bytes at %p for match field in flow %d", ntohs(flow_match13[iLastFlow]->match.length)-4, ofp13_oxm_match[iLastFlow], iLastFlow+1);
+		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, ntohs(flow_match13[iLastFlow]->match.length)-4);
 	} else {
 		ofp13_oxm_match[iLastFlow] = NULL;
 	}
 
+	// Allocate a space to store instructions and actions
 	int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
 	int instruction_size = ntohs(ptr_fm->header.length) - mod_size;
 	if (instruction_size > 0)
 	{
-		ofp13_oxm_inst[iLastFlow] = membag_alloc(instruction_size);	// Allocate a space to store instructions and actions
+		ofp13_oxm_inst[iLastFlow] = membag_alloc(instruction_size);	
 		if (ofp13_oxm_inst[iLastFlow] == NULL)
 		{
 			TRACE("openflow_13.c: Unable to allocate %d bytes of memory for instructions", instruction_size);
@@ -1185,12 +1199,12 @@ void flow_delete13(struct ofp_header *msg)
 		{
 			continue;
 		}
-		if (ptr_fm->table_id != OFPTT_ALL && ptr_fm->table_id != flow_match13[q].table_id)
+		if (ptr_fm->table_id != OFPTT_ALL && ptr_fm->table_id != flow_match13[q]->table_id)
 		{
 			continue;
 		}
 
-		if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q].cookie & ptr_fm->cookie_mask)
+		if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q]->cookie & ptr_fm->cookie_mask)
 		{
 			continue;
 		}
@@ -1198,7 +1212,7 @@ void flow_delete13(struct ofp_header *msg)
 		{
 			bool out_port_match = false;
 			int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
-			int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+			int instruction_size = ntohs(flow_match13[q]->header.length) - mod_size;
 			struct ofp13_instruction *inst;
 			for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
 			{
@@ -1229,7 +1243,7 @@ void flow_delete13(struct ofp_header *msg)
 		{
 			bool out_group_match = false;
 			int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
-			int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+			int instruction_size = ntohs(flow_match13[q]->header.length) - mod_size;
 			struct ofp13_instruction *inst;
 			for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
 			{
@@ -1256,7 +1270,7 @@ void flow_delete13(struct ofp_header *msg)
 			}
 		}
 
-		if(field_match13(ptr_fm->match.oxm_fields, ntohs(ptr_fm->match.length)-4, ofp13_oxm_match[q], ntohs(flow_match13[q].match.length)-4) == 0)
+		if(field_match13(ptr_fm->match.oxm_fields, ntohs(ptr_fm->match.length)-4, ofp13_oxm_match[q], ntohs(flow_match13[q]->match.length)-4) == 0)
 		{
 			continue;
 		}
@@ -1288,17 +1302,17 @@ void flow_delete_strict13(struct ofp_header *msg)
 			continue;
 		}
 		// Check if it is the correct flow table
-		if (ptr_fm->table_id != OFPTT_ALL && ptr_fm->table_id != flow_match13[q].table_id)
+		if (ptr_fm->table_id != OFPTT_ALL && ptr_fm->table_id != flow_match13[q]->table_id)
 		{
 			continue;
 		}
 		// Check if the priority is the same
-		if (ptr_fm->priority != flow_match13[q].priority)
+		if (ptr_fm->priority != flow_match13[q]->priority)
 		{
 			continue;
 		}
 		// Check if the cookie values are the same
-		if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q].cookie & ptr_fm->cookie_mask)
+		if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q]->cookie & ptr_fm->cookie_mask)
 		{
 			continue;
 		}
@@ -1307,7 +1321,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 		{
 			bool out_port_match = false;
 			int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
-			int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+			int instruction_size = ntohs(flow_match13[q]->header.length) - mod_size;
 			struct ofp13_instruction *inst;
 			for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
 			{
@@ -1338,7 +1352,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 		{
 			bool out_group_match = false;
 			int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
-			int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+			int instruction_size = ntohs(flow_match13[q]->header.length) - mod_size;
 			struct ofp13_instruction *inst;
 			for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
 			{
@@ -1367,13 +1381,13 @@ void flow_delete_strict13(struct ofp_header *msg)
 
 		if(ofp13_oxm_match[q] == NULL)
 		{
-			if(memcmp(&flow_match13[q].match.oxm_fields, ptr_fm->match.oxm_fields, 4) != 0)
+			if(memcmp(flow_match13[q]->match.oxm_fields, ptr_fm->match.oxm_fields, 4) != 0)
 			{
 				continue;
 			}
 		} else
 		{
-			if(memcmp(ofp13_oxm_match[q], ptr_fm->match.oxm_fields, ntohs(flow_match13[q].match.length)-4) != 0)
+			if(memcmp(ofp13_oxm_match[q], ptr_fm->match.oxm_fields, ntohs(flow_match13[q]->match.length)-4) != 0)
 			{
 				continue;
 			}
@@ -1414,8 +1428,8 @@ void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason
 	pi->header.xid = 0;
 	pi->buffer_id = -1;
 	pi->reason = reason;
-	pi->table_id = flow_match13[flow].table_id;
-	pi->cookie = flow_match13[flow].cookie;
+	pi->table_id = flow_match13[flow]->table_id;
+	pi->cookie = flow_match13[flow]->cookie;
 
 	pi->match.type = htons(OFPMT_OXM);
 	pi->match.length = htons(12);
@@ -1525,24 +1539,24 @@ void flowrem_notif13(int flowid, uint8_t reason)
 
 	ofr.header.type = OFPT13_FLOW_REMOVED;
 	ofr.header.version = OF_Version;
-	ofr.header.length = htons((sizeof(struct ofp13_flow_removed) + ntohs(flow_match13[flowid].match.length)-4));
+	ofr.header.length = htons((sizeof(struct ofp13_flow_removed) + ntohs(flow_match13[flowid]->match.length)-4));
 	ofr.header.xid = 0;
-	ofr.cookie = flow_match13[flowid].cookie;
+	ofr.cookie = flow_match13[flowid]->cookie;
 	ofr.reason = reason;
-	ofr.priority = flow_match13[flowid].priority;
+	ofr.priority = flow_match13[flowid]->priority;
 	diff = (totaltime/2) - flow_counters[flowid].duration;
 	ofr.duration_sec = htonl(diff);
 	ofr.duration_nsec = 0;
 	ofr.packet_count = htonll(flow_counters[flowid].hitCount);
 	ofr.byte_count = htonll(flow_counters[flowid].bytes);
-	ofr.idle_timeout = flow_match13[flowid].idle_timeout;
-	ofr.hard_timeout = flow_match13[flowid].hard_timeout;
-	ofr.table_id = flow_match13[flowid].table_id;
-	memcpy(&ofr.match, &flow_match13[flowid].match, sizeof(struct ofp13_match));
+	ofr.idle_timeout = flow_match13[flowid]->idle_timeout;
+	ofr.hard_timeout = flow_match13[flowid]->hard_timeout;
+	ofr.table_id = flow_match13[flowid]->table_id;
+	memcpy(&ofr.match, &flow_match13[flowid]->match, sizeof(struct ofp13_match));
 	memcpy(flow_rem, &ofr, sizeof(struct ofp13_flow_removed));
-	if (ntohs(flow_match13[flowid].match.length) > 4) 
+	if (ntohs(flow_match13[flowid]->match.length) > 4) 
 	{
-		memcpy(flow_rem + (sizeof(struct ofp13_flow_removed)-4), ofp13_oxm_match[flowid], ntohs(flow_match13[flowid].match.length)-4);
+		memcpy(flow_rem + (sizeof(struct ofp13_flow_removed)-4), ofp13_oxm_match[flowid], ntohs(flow_match13[flowid]->match.length)-4);
 	}
 	sendtcp(&flow_rem, htons(ofr.header.length));
 	TRACE("openflow_13.c: Flow removed notification sent");

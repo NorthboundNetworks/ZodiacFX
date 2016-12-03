@@ -52,7 +52,7 @@ extern bool debug_output;
 
 extern int charcount, charcount_last;
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
-extern struct ofp13_flow_mod flow_match13[MAX_FLOWS_13];
+extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
@@ -1017,7 +1017,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf(" Match:\r\n");
 					match_size = 0;
 
-					while (match_size < (ntohs(flow_match13[i].match.length)-4))
+					while (match_size < (ntohs(flow_match13[i]->match.length)-4))
 					{
 						memcpy(&oxm_header, ofp13_oxm_match[i] + match_size,4);
 						bool has_mask = oxm_header.oxm_field & 1;
@@ -1115,9 +1115,9 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
 					}
 					printf("\r Attributes:\r\n");
-					printf("  Table ID: %d\t\t\t\tCookie:0x%" PRIx64 "\r\n",flow_match13[i].table_id, htonll(flow_match13[i].cookie));
-					printf("  Priority: %d\t\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i].priority), (totaltime/2) - flow_counters[i].duration);
-					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match13[i].hard_timeout), ntohs(flow_match13[i].idle_timeout));
+					printf("  Table ID: %d\t\t\t\tCookie:0x%" PRIx64 "\r\n",flow_match13[i]->table_id, htonll(flow_match13[i]->cookie));
+					printf("  Priority: %d\t\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i]->priority), (totaltime/2) - flow_counters[i].duration);
+					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match13[i]->hard_timeout), ntohs(flow_match13[i]->idle_timeout));
 					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
 					int lm = (totaltime/2) - flow_counters[i].lastmatch;
 					int hr = lm/3600;
@@ -1345,7 +1345,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				flow_count = 0;
 				for (int i=0;i<iLastFlow;i++)
 				{
-					if(flow_match13[i].table_id == x)
+					if(flow_match13[i]->table_id == x)
 					{
 						flow_count++;
 					}
@@ -1390,7 +1390,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				flow_count = 0;
 				for (int i=0;i<iLastFlow;i++)
 				{
-					if(flow_match13[i].table_id == x)
+					if(flow_match13[i]->table_id == x)
 					{
 						flow_count++;
 					}
