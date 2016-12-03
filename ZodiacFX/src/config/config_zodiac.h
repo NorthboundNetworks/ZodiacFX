@@ -36,7 +36,7 @@
 #define MAX_OFP_VERSION   0x04
 
 #define MAX_FLOWS_10	128		// Maximum number of flows for OpenFlow 1.0
-#define MAX_FLOWS_13	384		// Maximum number of flows for OpenFlow 1.3
+#define MAX_FLOWS_13	256		// Maximum number of flows for OpenFlow 1.3
 
 #define MAX_VLANS	4	// Maximum number of VLANS, default is 1 per port (4)
 

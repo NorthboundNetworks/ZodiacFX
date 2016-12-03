@@ -652,6 +652,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 
 	if (err == ERR_OK && p == NULL)
 	{
+		TRACE("http.c: Closing TCP connection.");
 		tcp_close(pcb);
 	}
 

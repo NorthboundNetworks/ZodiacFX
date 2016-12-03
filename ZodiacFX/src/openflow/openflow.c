@@ -138,7 +138,7 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
         int len = p->tot_len;	//size of the payload
         for (int i=0; i<len; i++)packetbuffer[i] = pc[i];	//copy to our own buffer
         pbuf_free(p);	//Free the packet buffer
-		TRACE("OpenFlow data received (%d bytes)", len);
+		TRACE("openflow.c: OpenFlow data received (%d bytes)", len);
 		struct ofp_header *ofph;
 		int size = 0;
 		int plen = 0;
@@ -154,16 +154,16 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 			
 			if (ofph->version > 6 || ofph->type > 30) //	Invalid OpenFlow message
 			{
-				TRACE("Invalid OpenFlow command, ignoring!");
+				TRACE("openflow.c: Invalid OpenFlow command, ignoring!");
 				return ERR_OK;
 			}
 			size = size + plen;
 			if (size > len) // corrupt OpenFlow command
 			{
 				break;
-				printf("Corrupt OpenFlow Message!!!");	
+				TRACE("openflow.c: Corrupt OpenFlow Message!!!");	
 			}
-			TRACE("Processing %d byte OpenFlow message %u (%d)", plen, htonl(ofph->xid), size);
+			TRACE("openflow.c: Processing %d byte OpenFlow message %u (%d)", plen, htonl(ofph->xid), size);
 
 			switch(ofph->type)
 			{
@@ -224,8 +224,8 @@ void OF_hello(void)
 	ofph.type = OFPT10_HELLO;
 	ofph.length = HTONS(sizeof(ofph));
 	ofph.xid = HTONL(1);
+	TRACE("openflow.c: Sending HELLO, version 0x%d", ofph.version);
 	sendtcp(&ofph, sizeof(ofph));
-	TRACE("Sent HELLO, version 0x%d", ofph.version);
 	return;
 }
 
@@ -242,8 +242,8 @@ void echo_reply(uint32_t xid)
 	echo.length = HTONS(sizeof(echo));
 	echo.type   = OFPT10_ECHO_REPLY;
 	echo.xid = xid;
+	TRACE("openflow.c: Sent ECHO reply");
 	sendtcp(&echo, sizeof(echo));
-	TRACE("Sent ECHO reply");
 	return;
 }
 
@@ -258,8 +258,8 @@ void echo_request(void)
 	echo.length = HTONS(sizeof(echo));
 	echo.type   = OFPT10_ECHO_REQUEST;
 	echo.xid = 1234;
+	TRACE("openflow.c: Sent ECHO request");
 	sendtcp(&echo, sizeof(echo));
-	TRACE("Sent ECHO request");
 	return;
 }
 
@@ -273,14 +273,18 @@ void echo_request(void)
 void sendtcp(const void *buffer, u16_t len)
 {
 	err_t err;
+	uint16_t buf_size;
+	
 	if( tcp_pcb != tcp_pcb_check)
 	{
 		tcp_con_state = -1;
 		tcp_pcb = NULL;
 		return;
 	}
-	err = tcp_write(tcp_pcb, buffer, len, TCP_WRITE_FLAG_COPY);
-	if (err == ERR_OK) tcp_output(tcp_pcb);
+	
+	buf_size = tcp_sndbuf(tcp_pcb);
+	err = tcp_write(tcp_pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
+	TRACE("openflow.c: Sending %d bytes to TCP stack, %d available in buffer", len, buf_size);
 	return;
 }
 
@@ -290,11 +294,6 @@ void sendtcp(const void *buffer, u16_t len)
 */
 void task_openflow(void)
 {
-	if (delay_barrier == 1) {
-		if (OF_Version == 0x01) barrier10_reply(barrier_xid);
-		if (OF_Version == 0x04) barrier13_reply(barrier_xid);
-		delay_barrier = 0;
-	}
 
 	if (tcp_con_state == 0 && Zodiac_Config.OFEnabled == OF_ENABLED)
 	{
@@ -340,7 +339,7 @@ void task_openflow(void)
 			{
 				tcp_con_state = -1;
 				if(Zodiac_Config.failstate == 0) clear_flows();		// Clear the flow if in secure mode
-				TRACE("Closing connection due to failed handshake!");
+				TRACE("openflow.c: Closing connection due to failed handshake!");
 				tcp_close(tcp_pcb);
 			} else {
 				echo_request();
@@ -351,7 +350,7 @@ void task_openflow(void)
 		{
 			tcp_con_state = -1;
 			if(Zodiac_Config.failstate == 0) clear_flows();		// Clear the flow if in secure mode
-			TRACE("Closing connection due to no heartbeat!");
+			TRACE("openflow.c: Closing connection due to no heartbeat!");
 			tcp_close(tcp_pcb);
 		}
 
@@ -381,7 +380,7 @@ err_t TCPready(void *arg, struct tcp_pcb *tpcb, err_t err)
 	tcp_poll(tpcb, NULL, 4);
 	tcp_err(tpcb, NULL);
 	if(Zodiac_Config.failstate == 0) clear_flows();		// Clear the flow if in secure mode
-	TRACE("Connected to controller");
+	TRACE("openflow.c: Connected to controller");
 	OF_hello();
 	return ERR_OK;
 }

@@ -143,7 +143,7 @@ void MasterStackRcv(void)
 {
 	uint32_t cmd_buffer;
 	
-	TRACE("Master received slave IRQ!");
+	TRACE("switch.c: Master received slave IRQ!");
 	// Send the preamble mark the beginning of a transfer
 	cmd_buffer = ntohl(SPI_MASTER_PREAMBLE);
 	stack_mst_write(&cmd_buffer, sizeof(cmd_buffer));
@@ -151,7 +151,7 @@ void MasterStackRcv(void)
 	// Send 4 bytes to receive slave packet size
 	cmd_buffer = 0xFFFFFFFF;
 	stack_mst_write(&cmd_buffer, sizeof(cmd_buffer));
-	TRACE("Rcv Size = %04X", cmd_buffer);
+	TRACE("switch.c: Rcv Size = %04X", cmd_buffer);
 	while(ioport_get_pin_level(SPI_IRQ1));
 }
 
@@ -170,11 +170,11 @@ void stack_mst_write(uint8_t *rx_data, uint16_t ul_size)
 	for (int i = 0; i < ul_size; i++) {
 		for(int x = 0;x<10000;x++);
 		spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 0);
-		TRACE("SPI Write - %d , %02X", i, p_buffer[i]);
+		TRACE("switch.c: SPI Write - %d , %02X", i, p_buffer[i]);
 		/* Wait transfer done. */
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 		//spi_read(SPI_MASTER_BASE, p_buffer[i], &uc_pcs);
-		TRACE("SPI Read - %d , %02X", i, data);
+		TRACE("switch.c: SPI Read - %d , %02X", i, data);
 	}
 	return;
 }
@@ -269,10 +269,10 @@ void SPI_Handler(void)
 				spi_data_count++;
 				if (spi_data_count == spi_command_size)
 				{
-					TRACE("%d bytes of Data received", spi_data_count);
+					TRACE("switch.c: %d bytes of Data received", spi_data_count);
 					uint8_t* tail_tag = (uint8_t*)(spibuffer + (int)(spi_command_size)-1);
 					uint8_t tag = *tail_tag + 1;
-					TRACE("Tag = %d", tag);
+					TRACE("switch.c: Tag = %d", tag);
 					gmac_write(spibuffer, spi_data_count-1, tag);
 					spi_data_count = 0;
 					spi_state = SPI_STATE_PREAMBLE;
@@ -304,7 +304,7 @@ void SPI_Handler(void)
 			{
 				spi_state = SPI_STATE_COMMAND;
 				spi_data_count = 0;
-				TRACE("Master send preamble received!");
+				TRACE("switch.c: Master send preamble received!");
 				return;
 			}
 			// Command bytes
@@ -330,7 +330,7 @@ void SPI_Handler(void)
 						spi_command_size += data;
 						spi_state = SPI_STATE_DATA;
 						spi_data_count = 0;
-						TRACE("Command received! %d - %d", spi_command, spi_command_size);
+						TRACE("switch.c: Command received! %d - %d", spi_command, spi_command_size);
 						break;
 				}
 			}
@@ -343,7 +343,7 @@ void SPI_Handler(void)
 		if (spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF)
 		{
 			spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
-			TRACE("%d - %02X (%d)", spi_data_count, data, spi_state);
+			TRACE("switch.c: %d - %02X (%d)", spi_data_count, data, spi_state);
 
 			//	Start of Preamble
 			if (spi_state == SPI_STATE_PREAMBLE && data == 0xBB)
@@ -374,7 +374,7 @@ void SPI_Handler(void)
 				spi_state = SPI_STATE_COMMAND;
 				spi_write(SPI_SLAVE_BASE, data, 0, 0);
 				spi_data_count = 0;
-				TRACE("Slave send reamble received!");
+				TRACE("switch.c: Slave send reamble received!");
 				return;
 			}
 			// Command bytes
@@ -405,7 +405,7 @@ void SPI_Handler(void)
 						spi_write(SPI_SLAVE_BASE, 0xFF, 0, 0);
 						spi_data_count = 0;
 						//TRACE("Master fill received! %d - %d", spi_command, spi_command_size);
-						TRACE("Packet Size = 0x%X (%d)", spi_slave_send_size, spi_slave_send_size);
+						TRACE("switch.c: Packet Size = 0x%X (%d)", spi_slave_send_size, spi_slave_send_size);
 						break;
 				}
 			}
@@ -414,7 +414,7 @@ void SPI_Handler(void)
 			{
 				ioport_set_pin_level(SPI_IRQ1, false);
 				spi_slave_send = false;
-				TRACE("Set Slave to false!");
+				TRACE("switch.c: Set Slave to false!");
 				spi_state = SPI_STATE_PREAMBLE;
 				return;
 			}
@@ -814,7 +814,7 @@ void task_switch(struct netif *netif)
 		eth_prot = ntohs(eth_prot);
 		if (eth_prot != 0x0800 && eth_prot != 0x0806 && eth_prot != 0x86DD && eth_prot != 0x0842 && eth_prot != 0x8100 && eth_prot != 0x88E7 && eth_prot != 0x8847 && eth_prot != 0x88CC)
 		{
-			TRACE("Invalid EtherType: %X, dropping packet!", eth_prot);
+			TRACE("switch.c: Invalid EtherType: %X, dropping packet!", eth_prot);
 			return;
 		}
 		
@@ -833,7 +833,7 @@ void task_switch(struct netif *netif)
 					nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
 					return;
 				} else {
-					TRACE("%d byte received from controller", ul_rcv_size);
+					TRACE("switch.c: %d byte received from controller", ul_rcv_size);
 					struct pbuf *p;
 					p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);
 					memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));
@@ -846,7 +846,7 @@ void task_switch(struct netif *netif)
 			}
 		} else
 		{
-			TRACE("Set Slave to true!");
+			TRACE("switch.c: Set Slave to true!");
 			spi_slave_send = true;
 			spi_slave_send_size = ul_rcv_size;
 			ioport_set_pin_level(SPI_IRQ1, true);

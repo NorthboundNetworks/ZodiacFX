@@ -166,7 +166,7 @@ int flowmatch10(uint8_t *pBuffer, int port, struct packet_fields *fields)
 		packet_fields_parser(pBuffer, fields);
 	}
 
-	TRACE("Looking for match from port %d : "
+	TRACE("of_helper.c: Looking for match from port %d : "
 	"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X eth type %4.4X", port,
 	eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5],
 	eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5],
@@ -316,7 +316,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 		packet_fields_parser(pBuffer, fields);
 	}
 
-	TRACE("Looking for match in table %d from port %d : "
+	TRACE("of_helper.c: Looking for match in table %d from port %d : "
 		"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X eth type %4.4X",
 		table_id, port,
 		eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5],

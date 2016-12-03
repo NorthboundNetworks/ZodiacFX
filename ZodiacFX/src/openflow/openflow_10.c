@@ -406,13 +406,7 @@ void of10_message(struct ofp_header *ofph, int size, int len)
 		break;
 
 		case OFPT10_BARRIER_REQUEST:
-		if (size == len) {
-			barrier10_reply(ofph->xid);
-			delay_barrier = 0;
-			} else {
-			barrier_xid = ofph->xid;
-			delay_barrier = 1;
-		}
+		barrier10_reply(ofph->xid);
 		break;
 
 	};
