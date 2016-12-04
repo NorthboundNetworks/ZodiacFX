@@ -47,15 +47,15 @@
 // Global variables
 extern int iLastFlow;
 extern int OF_Version;
-extern struct ofp_flow_mod flow_match[MAX_FLOWS];
-extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
-extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
-extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
-extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
-extern struct flows_counter flow_counters[MAX_FLOWS];
 extern int totaltime;
-extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
+extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct table_counter table_counters[MAX_TABLES];
+extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
+extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_10];
+extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
+extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
+extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
+extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
 
 // Local Variables
 uint8_t timer_alt;
@@ -147,20 +147,12 @@ void nnOF_timer(void)
 *	@param port - The port that the packet was received on.
 *
 */
-int flowmatch10(uint8_t *pBuffer, int port)
+int flowmatch10(uint8_t *pBuffer, int port, struct packet_fields *fields)
 {
 	int matched_flow = -1;
 	int i;
-
-	uint8_t eth_src[6];
-	uint8_t eth_dst[6];
-	uint16_t eth_prot;
-	uint16_t vlanid;
-	uint32_t ip_src;
-	uint32_t ip_dst;
-	uint8_t ip_prot;
-	uint16_t tcp_src;
-	uint16_t tcp_dst;
+	uint8_t *eth_dst = pBuffer;
+	uint8_t *eth_src = pBuffer + 6;
 	uint8_t icmp_type;
 	uint8_t icmp_code;
 	bool port_match, eth_src_match, eth_dst_match, eth_prot_match;
@@ -168,63 +160,28 @@ int flowmatch10(uint8_t *pBuffer, int port)
 	bool tcp_src_match = false;
 	bool tcp_dst_match = false;
 	bool vlan_match;
-	bool vtag = false;
 	uint64_t zero_field = 0;
 
-	memcpy(&eth_dst, pBuffer, 6);
-	memcpy(&eth_src, pBuffer + 6, 6);
-	memcpy(&eth_prot, pBuffer + 12, 2);
-
-	if (eth_src[0] == 0x21 && eth_src[1] == 0x21)
-	{
-		// Unknown packet corruption
-		return -2;
+	if (!fields->parsed) {
+		packet_fields_parser(pBuffer, fields);
 	}
 
-	// VLAN tagged
-	if (ntohs(eth_prot) == 0x8100)
-	{
-		memcpy(&vlanid, pBuffer + 14, 2);
-		memcpy(&eth_prot, pBuffer + 16, 2);	// Add 4 bytes to the offset
-		vtag = true;
-	}
+	TRACE("of_helper.c: Looking for match from port %d : "
+	"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X eth type %4.4X", port,
+	eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5],
+	eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5],
+	ntohs(fields->eth_prot))
 
 	// IP packets
-	if (ntohs(eth_prot) == 0x0800)
+	if (ntohs(fields->eth_prot) == 0x0800 && fields->ip_prot == 1)		// ICMP
 	{
-		if (vtag == true)	// Add 4 bytes to the offset
+		if (fields->isVlanTag == true)	// Add 4 bytes to the offset
 		{
-			memcpy(&ip_src, pBuffer + 30, 4);
-			memcpy(&ip_dst, pBuffer + 34, 4);
-			memcpy(&ip_prot, pBuffer + 27, 1);
+			memcpy(&icmp_type, pBuffer + 38, 1);
+			memcpy(&icmp_code, pBuffer + 49, 1);
 		} else {
-			memcpy(&ip_src, pBuffer + 26, 4);
-			memcpy(&ip_dst, pBuffer + 30, 4);
-			memcpy(&ip_prot, pBuffer + 23, 1);
-		}
-		// TCP / UDP
-		if (ip_prot == 6 || ip_prot == 17)
-		{
-			if (vtag == true)	// Add 4 bytes to the offset
-			{
-				memcpy(&tcp_src, pBuffer + 38, 2);
-				memcpy(&tcp_dst, pBuffer + 40, 2);
-			} else {
-				memcpy(&tcp_src, pBuffer + 34, 2);
-				memcpy(&tcp_dst, pBuffer + 36, 2);
-			}
-		}
-		// ICMP
-		if (ip_prot == 1)
-		{
-			if (vtag == true)	// Add 4 bytes to the offset
-			{
-				memcpy(&icmp_type, pBuffer + 38, 1);
-				memcpy(&icmp_code, pBuffer + 49, 1);
-			} else {
-				memcpy(&icmp_type, pBuffer + 34, 1);
-				memcpy(&icmp_code, pBuffer + 35, 1);
-			}
+			memcpy(&icmp_type, pBuffer + 34, 1);
+			memcpy(&icmp_code, pBuffer + 35, 1);
 		}
 	}
 
@@ -237,36 +194,36 @@ int flowmatch10(uint8_t *pBuffer, int port)
 		}
 
 		// If this flow is of a lower priority then one that is already match then there is no point going through a check.
-		if(ntohs(flow_match[i].priority) <= ntohs(flow_match[matched_flow].priority)) continue;
+		if(ntohs(flow_match10[i]->priority) <= ntohs(flow_match10[matched_flow]->priority)) continue;
 
-		port_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_IN_PORT) || ntohs(flow_match[i].match.in_port) == port || flow_match[i].match.in_port == 0;
-		eth_src_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_DL_SRC) || memcmp(eth_src, flow_match[i].match.dl_src, 6) == 0 || memcmp(flow_match[i].match.dl_src, zero_field, 6) == 0;
-		eth_dst_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_DL_DST) || memcmp(eth_dst, flow_match[i].match.dl_dst, 6) == 0 || memcmp(flow_match[i].match.dl_dst, zero_field, 6) == 0;
-		eth_prot_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_DL_TYPE) || eth_prot == flow_match[i].match.dl_type || flow_match[i].match.dl_type == 0;
-		vlan_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_DL_VLAN) || (vtag == true && (ntohl(vlanid) & VLAN_VID_MASK) == (ntohl(flow_match[i].match.dl_vlan) & VLAN_VID_MASK)) || (ntohs(flow_match[i].match.dl_vlan) == OFP_VLAN_NONE);
+		port_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_IN_PORT) || ntohs(flow_match10[i]->match.in_port) == port || flow_match10[i]->match.in_port == 0;
+		eth_src_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_DL_SRC) || memcmp(eth_src, flow_match10[i]->match.dl_src, 6) == 0 || memcmp(flow_match10[i]->match.dl_src, zero_field, 6) == 0;
+		eth_dst_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_DL_DST) || memcmp(eth_dst, flow_match10[i]->match.dl_dst, 6) == 0 || memcmp(flow_match10[i]->match.dl_dst, zero_field, 6) == 0;
+		eth_prot_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_DL_TYPE) || fields->eth_prot == flow_match10[i]->match.dl_type || flow_match10[i]->match.dl_type == 0;
+		vlan_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_DL_VLAN) || (fields->isVlanTag == true && (ntohl(fields->vlanid) & VLAN_VID_MASK) == (ntohl(flow_match10[i]->match.dl_vlan) & VLAN_VID_MASK)) || (ntohs(flow_match10[i]->match.dl_vlan) == OFP_VLAN_NONE);
 
-		uint8_t ip_src_wild = ntohl(flow_match[i].match.wildcards) >> 8; // OFPFW_NW_SRC_SHIFT
+		uint8_t ip_src_wild = ntohl(flow_match10[i]->match.wildcards) >> 8; // OFPFW_NW_SRC_SHIFT
 		ip_src_wild &= 63; // OFPFW_NW_SRC_BITS
-		ip_src_match = (ip_src_wild >= 32) || (ntohs(eth_prot) == 0x0800 && (ntohl(ip_src) >> ip_src_wild) == (ntohl(flow_match[i].match.nw_src) >> ip_src_wild)) || flow_match[i].match.nw_src == 0;
+		ip_src_match = (ip_src_wild >= 32) || (ntohs(fields->eth_prot) == 0x0800 && (ntohl(fields->ip_src) >> ip_src_wild) == (ntohl(flow_match10[i]->match.nw_src) >> ip_src_wild)) || flow_match10[i]->match.nw_src == 0;
 
-		uint8_t ip_dst_wild = ntohl(flow_match[i].match.wildcards) >> 14;
+		uint8_t ip_dst_wild = ntohl(flow_match10[i]->match.wildcards) >> 14;
 		ip_dst_wild &= 63;
-		ip_dst_match = (ip_dst_wild >= 32) || (ntohs(eth_prot) == 0x0800 && (ntohl(ip_dst) >> ip_dst_wild) == (ntohl(flow_match[i].match.nw_dst) >> ip_dst_wild)) || flow_match[i].match.nw_dst == 0;
-		ip_prot_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_NW_PROTO) || (ntohs(eth_prot) == 0x0800 && ip_prot == flow_match[i].match.nw_proto) || flow_match[i].match.nw_proto == 0  || ntohs(eth_prot) != 0x0800;
+		ip_dst_match = (ip_dst_wild >= 32) || (ntohs(fields->eth_prot) == 0x0800 && (ntohl(fields->ip_dst) >> ip_dst_wild) == (ntohl(flow_match10[i]->match.nw_dst) >> ip_dst_wild)) || flow_match10[i]->match.nw_dst == 0;
+		ip_prot_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_NW_PROTO) || (ntohs(fields->eth_prot) == 0x0800 && fields->ip_prot == flow_match10[i]->match.nw_proto) || flow_match10[i]->match.nw_proto == 0  || ntohs(fields->eth_prot) != 0x0800;
 		// If it is TCP or UDP we match on source and destination ports
-		if (ntohs(eth_prot) == 0x0800 && (ip_prot == 6 || ip_prot == 17))
+		if (ntohs(fields->eth_prot) == 0x0800 && (fields->ip_prot == 6 || fields->ip_prot == 17))
 		{
-			tcp_src_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_TP_SRC) || tcp_src == flow_match[i].match.tp_src || flow_match[i].match.tp_src == 0;
-			tcp_dst_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_TP_DST) || tcp_dst == flow_match[i].match.tp_dst || flow_match[i].match.tp_dst == 0;
+			tcp_src_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_TP_SRC) || fields->tp_src == flow_match10[i]->match.tp_src || flow_match10[i]->match.tp_src == 0;
+			tcp_dst_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_TP_DST) || fields->tp_dst == flow_match10[i]->match.tp_dst || flow_match10[i]->match.tp_dst == 0;
 		}
 		// If it is ICMP the TCP source and destination ports become type and code values
-		if (ntohs(eth_prot) == 0x0800 && ip_prot == 1)
+		if (ntohs(fields->eth_prot) == 0x0800 && fields->ip_prot == 1)
 		{
-			tcp_src_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_TP_SRC) || icmp_type == ntohs(flow_match[i].match.tp_src) || flow_match[i].match.tp_src == 0;
-			tcp_dst_match = (ntohl(flow_match[i].match.wildcards) & OFPFW_TP_DST) || icmp_code == ntohs(flow_match[i].match.tp_dst) || flow_match[i].match.tp_dst == 0;
+			tcp_src_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_TP_SRC) || icmp_type == ntohs(flow_match10[i]->match.tp_src) || flow_match10[i]->match.tp_src == 0;
+			tcp_dst_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_TP_DST) || icmp_code == ntohs(flow_match10[i]->match.tp_dst) || flow_match10[i]->match.tp_dst == 0;
 		}
 		// If it is ARP then we skip IP and TCP/UDP values
-		if (ntohs(eth_prot) == 0x0806)
+		if (ntohs(fields->eth_prot) == 0x0806)
 		{
 			ip_src_match = true;
 			ip_dst_match = true;
@@ -277,7 +234,7 @@ int flowmatch10(uint8_t *pBuffer, int port)
 		{
 			if (matched_flow > -1)
 			{
-				if(ntohs(flow_match[i].priority) > ntohs(flow_match[matched_flow].priority)) matched_flow = i;
+				if(ntohs(flow_match10[i]->priority) > ntohs(flow_match10[matched_flow]->priority)) matched_flow = i;
 			} else {
 				matched_flow = i;
 			}
@@ -287,7 +244,13 @@ int flowmatch10(uint8_t *pBuffer, int port)
 	return matched_flow;
 }
 
-
+/*
+*	Populate the packet header fields.
+*
+*	@param *pBuffer - pointer to the buffer that contains the packet to be macthed.
+*	@param *fields - pointer the struct to store the field values.
+*
+*/
 void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
 	static const uint8_t vlan1[2] = { 0x81, 0x00 };
 	static const uint8_t vlan2[2] = { 0x88, 0xa8 };
@@ -353,7 +316,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 		packet_fields_parser(pBuffer, fields);
 	}
 
-	TRACE("Looking for match in table %d from port %d : "
+	TRACE("of_helper.c: Looking for match in table %d from port %d : "
 		"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X eth type %4.4X",
 		table_id, port,
 		eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5],
@@ -366,21 +329,21 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 		if (flow_counters[i].active == false) continue;
 
 		// If the flow is not in the requested table then fail
-		if (table_id != flow_match13[i].table_id) continue;
+		if (table_id != flow_match13[i]->table_id) continue;
 
 		// If the flow has no match fields (full wild) it is an automatic match
 		if (ofp13_oxm_match[i] ==  NULL)
 		{
-			if (matched_flow == -1 || (ntohs(flow_match13[i].priority) > ntohs(flow_match13[matched_flow].priority))) matched_flow = i;
+			if (matched_flow == -1 || (ntohs(flow_match13[i]->priority) > ntohs(flow_match13[matched_flow]->priority))) matched_flow = i;
 			continue;
 		}
 		// If this flow is of a lower priority then one that is already match then there is no point going through a check.
-		if (matched_flow > -1 && (ntohs(flow_match13[matched_flow].priority) >= ntohs(flow_match13[i].priority))) continue;
+		if (matched_flow > -1 && (ntohs(flow_match13[matched_flow]->priority) >= ntohs(flow_match13[i]->priority))) continue;
 
 		// Main flow match loop
 		priority_match = 0;
 		uint8_t *hdr = ofp13_oxm_match[i];
-		uint8_t *tail = hdr + ntohs(flow_match13[i].match.length) - 4;
+		uint8_t *tail = hdr + ntohs(flow_match13[i]->match.length) - 4;
 		while (hdr < tail)
 		{
 			uint32_t field = ntohl(*(uint32_t*)(hdr));
@@ -996,7 +959,7 @@ int field_match13(uint8_t *oxm_a, int len_a, uint8_t *oxm_b, int len_b)
 }
 
 /*
-*	Remove a flow entry from the flow table
+*	Remove a flow entry from the flow table (OF 1.3)
 *
 *	@param flow_id - the idex number of the flow to remove
 *
@@ -1014,8 +977,13 @@ void remove_flow13(int flow_id)
 		membag_free(ofp13_oxm_inst[flow_id]);
 		ofp13_oxm_inst[flow_id] = NULL;
 	}
+	if(flow_match13[flow_id] != NULL)
+	{
+		membag_free(flow_match13[flow_id]);
+		flow_match13[flow_id] = NULL;
+	}
 	// Copy the last flow to here to fill the gap
-	memcpy(&flow_match13[flow_id], &flow_match13[iLastFlow-1], sizeof(struct ofp13_flow_mod));
+	flow_match13[flow_id] = flow_match13[iLastFlow-1];
 	ofp13_oxm_match[flow_id] = ofp13_oxm_match[iLastFlow-1];
 	ofp13_oxm_inst[flow_id] = ofp13_oxm_inst[iLastFlow-1];
 	ofp13_oxm_inst_size[flow_id] = ofp13_oxm_inst_size[iLastFlow - 1];
@@ -1024,6 +992,36 @@ void remove_flow13(int flow_id)
 	memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
 	iLastFlow --;
 	return;
+}
+
+/*
+*	Remove a flow entry from the flow table (OF 1.3)
+*
+*	@param flow_id - the idex number of the flow to remove
+*
+*/
+void remove_flow10(int flow_id)
+{
+	// Clear flow counters and actions
+	memset(&flow_counters[flow_id], 0, sizeof(struct flows_counter));
+	
+	// Copy the last flow to here to fill the gap
+	flow_match10[flow_id] = flow_match10[iLastFlow-1];
+	flow_actions10[flow_id] = flow_actions10[iLastFlow-1];
+	membag_free(flow_match10[iLastFlow-1]);
+	membag_free(flow_actions10[iLastFlow-1]);
+	flow_match10[iLastFlow-1] = NULL;
+	flow_actions10[iLastFlow-1] = NULL;
+	
+	// Move the counters
+	memcpy(&flow_counters[flow_id], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
+	
+	// Clear the counters and action from the last flow that was moved
+	memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
+	
+	iLastFlow --;
+	return;
+
 }
 
 /*
@@ -1038,52 +1036,35 @@ void flow_timeouts()
 		{
 			if (OF_Version == 1)
 			{
-				if (flow_match[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match[i].idle_timeout))
+				if (&flow_match10[i]->idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(&flow_match10[i]->idle_timeout))
 				{
-					if (ntohs(flow_match[i].flags) &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(i,OFPRR10_IDLE_TIMEOUT);
+					if (ntohs(flow_match10[i]->flags) &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(i,OFPRR10_IDLE_TIMEOUT);
 					// Clear flow counters and actions
-					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
-					memset(&flow_actions[i], 0, sizeof(struct flow_tbl_actions));
-					// Copy the last flow to here to fill the gap
-					memcpy(&flow_match[i], &flow_match[iLastFlow-1], sizeof(struct ofp_flow_mod));
-					memcpy(&flow_actions[i], &flow_actions[iLastFlow-1], sizeof(struct flow_tbl_actions));
-					memcpy(&flow_counters[i], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-					// Clear the match, counters and action from the last flow that was moved
-					memset(&flow_match[iLastFlow-1], 0, sizeof(struct ofp_flow_mod));
-					memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-					memset(&flow_actions[iLastFlow-1], 0, sizeof(struct flow_tbl_actions));
+					remove_flow10(i);
 					iLastFlow --;
 					return;
 				}
 
-				if (flow_match[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match[i].hard_timeout))
+				if (&flow_match10[i]->hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(&flow_match10[i]->hard_timeout))
 				{
-					if (ntohs(flow_match[i].flags) &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(i,OFPRR10_HARD_TIMEOUT);
+					if (ntohs(&flow_match10[i]->flags) &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(i,OFPRR10_HARD_TIMEOUT);
 					// Clear flow counters and actions
-					memset(&flow_counters[i], 0, sizeof(struct flows_counter));
-					memset(&flow_actions[i], 0, sizeof(struct flow_tbl_actions));
-					// Copy the last flow to here to fill the gap
-					memcpy(&flow_match[i], &flow_match[iLastFlow-1], sizeof(struct ofp_flow_mod));
-					memcpy(&flow_actions[i], &flow_actions[iLastFlow-1], sizeof(struct flow_tbl_actions));
-					memcpy(&flow_counters[i], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-					// Clear the counters and action from the last flow that was moved
-					memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-					memset(&flow_actions[iLastFlow-1], 0, sizeof(struct flow_tbl_actions));
+					remove_flow10(i);
 					iLastFlow --;
 					return;
 				}
 			} else if (OF_Version == 4)
 			{
-				if (flow_match13[i].idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match13[i].idle_timeout))
+				if (flow_match13[i]->idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match13[i]->idle_timeout))
 				{
-					if (ntohs(flow_match13[i].flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_IDLE_TIMEOUT);
+					if (ntohs(flow_match13[i]->flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_IDLE_TIMEOUT);
 					remove_flow13(i);
 					return;
 				}
 
-				if (flow_match13[i].hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match13[i].hard_timeout))
+				if (flow_match13[i]->hard_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].duration) >= ntohs(flow_match13[i]->hard_timeout))
 				{
-					if (ntohs(flow_match13[i].flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_HARD_TIMEOUT);
+					if (ntohs(flow_match13[i]->flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_HARD_TIMEOUT);
 					remove_flow13(i);
 					return;
 				}
@@ -1101,14 +1082,29 @@ void clear_flows(void)
 {
 	iLastFlow = 0;
 	membag_init();
-		
-	for(int q=0;q<MAX_FLOWS;q++)
+
+	/*	Clear OpenFlow 1.0 flow table	*/
+	if (OF_Version == 0x01)
 	{
-		memset(&flow_counters[q], 0, sizeof(struct flows_counter));
-		memset(&flow_actions[q], 0, sizeof(struct flow_tbl_actions));
-		if (ofp13_oxm_match[q] != NULL) ofp13_oxm_match[q] = NULL;
-		if (ofp13_oxm_inst[q] != NULL) ofp13_oxm_inst[q] = NULL;
+		for(int q=0;q<MAX_FLOWS_10;q++)
+		{
+			memset(&flow_counters[q], 0, sizeof(struct flows_counter));
+			if (flow_match10[q] != NULL) flow_match10[q] = NULL;
+			if (flow_actions10[q] != NULL) flow_actions10[q] = NULL;
+		}
 	}
+	
+	/*	Clear OpenFlow 1.3 flow table	*/
+	if (OF_Version == 0x04)
+	{
+		for(int q=0;q<MAX_FLOWS_13;q++)
+		{
+			if (ofp13_oxm_match[q] != NULL) ofp13_oxm_match[q] = NULL;
+			if (ofp13_oxm_inst[q] != NULL) ofp13_oxm_inst[q] = NULL;
+		}
+	}
+	
+	/*	Clear Table Counters	*/
 	for(int x=0; x<MAX_TABLES;x++)
 	{
 		table_counters[x].lookup_count = 0;
@@ -1138,17 +1134,17 @@ int flow_stats_msg10(char *buffer, int first, int last)
 
 	for(int k=first; k<last;k++)
 	{
-		action_hdr1 = flow_actions[k].action1;
-		action_hdr2 = flow_actions[k].action2;
-		action_hdr3 = flow_actions[k].action3;
-		action_hdr4 = flow_actions[k].action4;
+		action_hdr1 = flow_actions10[k]->action1;
+		action_hdr2 = flow_actions10[k]->action2;
+		action_hdr3 = flow_actions10[k]->action3;
+		action_hdr4 = flow_actions10[k]->action4;
 		stats_size = sizeof(flow_stats);
 		flow_stats.table_id = 0;
-		memcpy(&flow_stats.match, &flow_match[k].match, sizeof(struct ofp_match));
-		memcpy(&flow_stats.cookie, &flow_match[k].cookie, sizeof(uint64_t));
-		memcpy(&flow_stats.priority, &flow_match[k].priority, sizeof(uint16_t));
-		memcpy(&flow_stats.idle_timeout, &flow_match[k].idle_timeout, sizeof(uint16_t));
-		memcpy(&flow_stats.hard_timeout, &flow_match[k].hard_timeout, sizeof(uint16_t));
+		memcpy(&flow_stats.match, &flow_match10[k]->match, sizeof(struct ofp_match));
+		memcpy(&flow_stats.cookie, &flow_match10[k]->cookie, sizeof(uint64_t));
+		memcpy(&flow_stats.priority, flow_match10[k]->priority, sizeof(uint16_t));
+		memcpy(&flow_stats.idle_timeout, flow_match10[k]->idle_timeout, sizeof(uint16_t));
+		memcpy(&flow_stats.hard_timeout, flow_match10[k]->hard_timeout, sizeof(uint16_t));
 		flow_stats.duration_sec = HTONL((totaltime/2) - flow_counters[k].duration);
 		flow_stats.duration_nsec = 0;
 		flow_stats.packet_count = htonll(flow_counters[k].hitCount);
@@ -1161,28 +1157,28 @@ int flow_stats_msg10(char *buffer, int first, int last)
 
 		if(ntohs(action_hdr1->len) > 0)
 		{
-			memcpy(buffer + len, &flow_actions[k].action1, ntohs(action_hdr1->len));
+			memcpy(buffer + len, flow_actions10[k]->action1, ntohs(action_hdr1->len));
 			stats_size += ntohs(action_hdr1->len);
 			len += ntohs(action_hdr1->len);
 		}
 
 		if(ntohs(action_hdr2->len) > 0)
 		{
-			memcpy(buffer + len, &flow_actions[k].action2, ntohs(action_hdr2->len));
+			memcpy(buffer + len, flow_actions10[k]->action2, ntohs(action_hdr2->len));
 			stats_size += ntohs(action_hdr2->len);
 			len += ntohs(action_hdr2->len);
 		}
 
 		if(ntohs(action_hdr3->len) > 0)
 		{
-			memcpy(buffer + len, &flow_actions[k].action3, ntohs(action_hdr3->len));
+			memcpy(buffer + len, flow_actions10[k]->action3, ntohs(action_hdr3->len));
 			stats_size += ntohs(action_hdr3->len);
 			len += ntohs(action_hdr3->len);
 		}
 
 		if(ntohs(action_hdr4->len) > 0)
 		{
-			memcpy(buffer + len, &flow_actions[k].action4, ntohs(action_hdr4->len));
+			memcpy(buffer + len, flow_actions10[k]->action4, ntohs(action_hdr4->len));
 			stats_size += ntohs(action_hdr4->len);
 			len += ntohs(action_hdr4->len);
 		}
@@ -1211,18 +1207,18 @@ int flow_stats_msg13(char *buffer, int first, int last)
 	for(int k = first; k<last;k++)
 	{
 		// ofp_flow_stats fixed fields are the same length with ofp_flow_mod
-		flow_stats.length = flow_match13[k].header.length;
-		flow_stats.table_id = flow_match13[k].table_id;
+		flow_stats.length = flow_match13[k]->header.length;
+		flow_stats.table_id = flow_match13[k]->table_id;
 		flow_stats.duration_sec = htonl((totaltime/2) - flow_counters[k].duration);
 		flow_stats.duration_nsec = htonl(0);
-		flow_stats.priority = flow_match13[k].priority;
-		flow_stats.idle_timeout = flow_match13[k].idle_timeout;
-		flow_stats.hard_timeout = flow_match13[k].hard_timeout;
-		flow_stats.flags = flow_match13[k].flags;
-		flow_stats.cookie = flow_match13[k].cookie;
+		flow_stats.priority = flow_match13[k]->priority;
+		flow_stats.idle_timeout = flow_match13[k]->idle_timeout;
+		flow_stats.hard_timeout = flow_match13[k]->hard_timeout;
+		flow_stats.flags = flow_match13[k]->flags;
+		flow_stats.cookie = flow_match13[k]->cookie;
 		flow_stats.packet_count = htonll(flow_counters[k].hitCount);
 		flow_stats.byte_count = htonll(flow_counters[k].bytes);
-		flow_stats.match = flow_match13[k].match;
+		flow_stats.match = flow_match13[k]->match;
 		// buffer must be shorter than 2048
 		if(buffer_ptr + ntohs(flow_stats.length) > buffer + 2048){
 			break; // XXX: should provide multipart OFPMPF_REPLY_MORE flow

@@ -49,18 +49,16 @@ extern int OF_Version;
 extern bool rcv_freq;
 extern int iLastFlow;
 extern int totaltime;
-extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
-extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
-extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
-extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
-extern struct flows_counter flow_counters[MAX_FLOWS];
+extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
+extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
+extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
+extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
+extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
 extern uint8_t port_status[4];
 extern struct ofp_switch_config Switch_config;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
-extern int delay_barrier;
-extern uint32_t barrier_xid;
 extern int multi_pos;
 extern uint8_t NativePortMatrix;
 
@@ -95,40 +93,12 @@ static inline uint64_t (htonll)(uint64_t n)
 	return HTONL(1) == 1 ? n : ((uint64_t) HTONL(n) << 32) | HTONL(n >> 32);
 }
 
-bool packet_sane(uint8_t *p_uc_data, uint16_t packet_size, struct packet_fields *fields)
-{
-        uint16_t ip_size = 0;
-	switch (ntohs(fields->eth_prot))
-	{
-		case 0x0800:
-		{
-			struct ip_hdr *iphdr = (struct ip_hdr*)fields->payload;
-			uint16_t ip_size = htons(IPH_LEN(iphdr));
-			uint16_t ip_size_diff = fields->payload - p_uc_data;
-			if (packet_size != (ip_size + ip_size_diff)) {
-				return false;
-			}
-			uint16_t iphdr_hlen = IPH_HL(iphdr) * 4;
-			if (inet_chksum(iphdr, iphdr_hlen) != 0) {
-				return false;
-			}
-		}
-		break;
-		default:
-		break;
-	}
-	return true;
-}
-
 void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 {
 	uint8_t table_id = 0;
 	uint16_t packet_size = (uint16_t)*ul_size;
 	struct packet_fields fields = {0};
 	packet_fields_parser(p_uc_data, &fields);
-// 	if (!packet_sane(p_uc_data, packet_size, &fields)) {
-// 		return;
-// 	}
 
 	while(1)	// Loop through goto_tables until we get a miss
 	{
@@ -138,7 +108,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 		if(i < 0){
 			return;
 		}
-		TRACE("Matched flow %d, table %d", i+1, table_id);
+		TRACE("openflow_13.c: Matched flow %d, table %d", i+1, table_id);
 		flow_counters[i].hitCount++; // Increment flow hit count
 		flow_counters[i].bytes += packet_size;
 		flow_counters[i].lastmatch = (totaltime/2); // Increment flow hit count
@@ -180,24 +150,24 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					if (htonl(act_output->port) < OFPP13_MAX && htonl(act_output->port) != port)
 					{
 						int outport = (1<< (ntohl(act_output->port)-1));
-						TRACE("Output to port %d (%d bytes)", ntohl(act_output->port), packet_size);
+						TRACE("openflow_13.c: Output to port %d (%d bytes)", ntohl(act_output->port), packet_size);
 						gmac_write(p_uc_data, packet_size, outport);
 					} else if (htonl(act_output->port) == OFPP13_IN_PORT)
 					{
 						int outport = (1<< (port-1));
-						TRACE("Output to in_port %d (%d bytes)", port, packet_size);
+						TRACE("openflow_13.c: Output to in_port %d (%d bytes)", port, packet_size);
 						gmac_write(p_uc_data, packet_size, outport);
 					} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
 					{
 						int pisize = ntohs(act_output->max_len);
 						if (pisize > packet_size) pisize = packet_size;
-						TRACE("Output to controller (%d bytes)", packet_size);
+						TRACE("openflow_13.c: Output to controller (%d bytes)", packet_size);
 						packet_in13(p_uc_data, pisize, port, OFPR_ACTION, i);
 					} else if (htonl(act_output->port) == OFPP13_FLOOD || htonl(act_output->port) == OFPP13_ALL)
 					{
 						int outport = (15 - NativePortMatrix) - (1<<(port-1));
-						if (htonl(act_output->port) == OFPP13_FLOOD) TRACE("Output to FLOOD (%d bytes)", packet_size);
-						if (htonl(act_output->port) == OFPP13_ALL) TRACE("Output to ALL (%d bytes)", packet_size);
+						if (htonl(act_output->port) == OFPP13_FLOOD) TRACE("openflow_13.c: Output to FLOOD (%d bytes)", packet_size);
+						if (htonl(act_output->port) == OFPP13_ALL) TRACE("openflow_13.c: Output to ALL (%d bytes)", packet_size);
 						gmac_write(p_uc_data, packet_size, outport);
 					}
 				}
@@ -322,7 +292,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							struct ip_hdr *hdr = fields.payload;
 							IPH_TOS_SET(hdr, (oxm_value[0]<<2)|(IPH_TOS(hdr)&0x3));
 							recalculate_ip_checksum = true;
-							TRACE("Set IP_DSCP %u", oxm_value[0]);
+							TRACE("openflow_13.c: Set IP_DSCP %u", oxm_value[0]);
 						}// TODO: IPv6
 						break;
 
@@ -333,7 +303,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							struct ip_hdr *hdr = fields.payload;
 							IPH_TOS_SET(hdr, (oxm_value[0]&0x3)|(IPH_TOS(hdr)&0xFC));
 							recalculate_ip_checksum = true;
-							TRACE("Set IP_ECN %u", oxm_value[0]);
+							TRACE("openflow_13.c: Set IP_ECN %u", oxm_value[0]);
 						}// TODO: IPv6
 						break;
 
@@ -491,11 +461,11 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 		{
 			struct ofp13_instruction_goto_table *inst_goto_ptr = insts[OFPIT13_GOTO_TABLE];
 			if (table_id >= inst_goto_ptr->table_id) {
-				TRACE("goto loop detected, aborting (cannot goto to earlier/same table)");
+				TRACE("openflow_13.c: Goto loop detected, aborting (cannot goto to earlier/same table)");
 				return;
 			}
 			table_id = inst_goto_ptr->table_id;
-			TRACE("Goto table %d", table_id);
+			TRACE("openflow_13.c: Goto table %d", table_id);
 		}
 		else
 		{
@@ -508,7 +478,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 void of13_message(struct ofp_header *ofph, int size, int len)
 {
 	struct ofp13_multipart_request *multi_req;
-	TRACE("%u: OpenFlow message received type = %d", htonl(ofph->xid), ofph->type);
+	TRACE("openflow_13.c: %u: OpenFlow message received type = %d", htonl(ofph->xid), ofph->type);
 	switch(ofph->type)
 	{
 		case OFPT13_FEATURES_REQUEST:
@@ -564,9 +534,10 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 			multi_pos += multi_portdesc_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 
-		// Floodlight v1.2 crashes when it gets this reply, removed for the moment.
+		
 		if ( htons(multi_req->type) == OFPMP13_TABLE_FEATURES )
 		{
+			/**** Floodlight v1.2 crashes when it gets this reply, removed for the moment. *****/
 			//multi_pos += multi_tablefeat_reply13(&shared_buffer[multi_pos], multi_req);
 			of_error13(ofph, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
 		}
@@ -583,17 +554,11 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 		break;
 
 		case OFPT13_BARRIER_REQUEST:
-		if (size == len) {
-			barrier13_reply(ofph->xid);
-			delay_barrier = 0;
-			} else {
-			barrier_xid = ofph->xid;
-			delay_barrier = 1;
-		}
+		barrier13_reply(ofph->xid);
 		break;
 	};
 
-	if (size == len)
+	if (size == len && multi_pos !=0)
 	{
 		sendtcp(&shared_buffer, multi_pos);
 	}
@@ -677,6 +642,8 @@ void role_reply13(struct ofp_header *msg)
 	struct ofp13_role_request role_request;
 	memcpy(&role_request, msg, sizeof(struct ofp13_role_request));
 	role_request.header.type = OFPT13_ROLE_REPLY;
+	role_request.generation_id = 0;
+	role_request.role = htonl(OFPCR_ROLE_MASTER);
 	sendtcp(&role_request, sizeof(struct ofp13_role_request));
 	return;
 }
@@ -729,7 +696,6 @@ int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	memcpy(reply->body, &statsbuffer, len);
 	len += 	sizeof(struct ofp13_multipart_reply);
 	reply->header.length = htons(len);
-
 	return len;
 }
 
@@ -854,7 +820,7 @@ int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	for(uint8_t table_id=0; table_id<MAX_TABLES; table_id++){
 		uint32_t active = 0;
 		for(int i=0; i<iLastFlow; i++) {
-			if (flow_counters[i].active == true && flow_match13[i].table_id==table_id){
+			if (flow_counters[i].active == true && flow_match13[i]->table_id==table_id){
 				active++;
 			}
 		}
@@ -896,7 +862,7 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 	tbl_feats.metadata_match = 0;
 	tbl_feats.metadata_write = 0;
 	tbl_feats.config = 0;
-	tbl_feats.max_entries = htonl(MAX_FLOWS);
+	tbl_feats.max_entries = htonl(MAX_FLOWS_13);
 	int len = sizeof(struct ofp13_multipart_reply) + sizeof(struct ofp13_table_features) + prop_size;
 	reply->header.length = htons(len);
 	tbl_feats.length = htons(sizeof(struct ofp13_table_features) + prop_size);
@@ -1100,7 +1066,7 @@ void flow_mod13(struct ofp_header *msg)
 void flow_add13(struct ofp_header *msg)
 {
 	// Return an error if tables are full
-	if (iLastFlow > (MAX_FLOWS-1))
+	if (iLastFlow > (MAX_FLOWS_13-1))
 	{
 		of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 		return;
@@ -1120,7 +1086,7 @@ void flow_add13(struct ofp_header *msg)
 	{
 		if(ofp13_oxm_match[q] == NULL)
 		{
-			if((memcmp(&flow_match13[q].match.oxm_fields, ptr_fm->match.oxm_fields, 4) == 0) && (flow_match13[q].priority == ptr_fm->priority) && (flow_match13[q].table_id == ptr_fm->table_id))
+			if((memcmp(flow_match13[q]->match.oxm_fields, ptr_fm->match.oxm_fields, 4) == 0) && (flow_match13[q]->priority == ptr_fm->priority) && (flow_match13[q]->table_id == ptr_fm->table_id))
 			{
 				// Check for overlap flag
 				if (ptr_fm->flags &  OFPFF13_CHECK_OVERLAP)
@@ -1134,7 +1100,7 @@ void flow_add13(struct ofp_header *msg)
 					remove_flow13(q);	// remove the matching flow
 				} else
 				{
-					TRACE("Replacing flow %d", q);
+					TRACE("openflow_13.c: Replacing flow %d", q);
 					memcpy(&flow_count_old, &flow_counters[q], sizeof(struct flows_counter));	// Copy counters from the old flow to temp location
 					remove_flow13(q);	// remove the matching flow
 					memcpy(&flow_counters[iLastFlow], &flow_count_old, sizeof(struct flows_counter));	// Copy counters from the temp location to the new flow
@@ -1143,7 +1109,7 @@ void flow_add13(struct ofp_header *msg)
 			}
 		} else
 		{
-			if((memcmp(ofp13_oxm_match[q], ptr_fm->match.oxm_fields, ntohs(flow_match13[q].match.length)-4) == 0) && (flow_match13[q].priority == ptr_fm->priority) && (flow_match13[q].table_id == ptr_fm->table_id))
+			if((memcmp(ofp13_oxm_match[q], ptr_fm->match.oxm_fields, ntohs(flow_match13[q]->match.length)-4) == 0) && (flow_match13[q]->priority == ptr_fm->priority) && (flow_match13[q]->table_id == ptr_fm->table_id))
 			{
 				if (ptr_fm->flags &  OFPFF13_CHECK_OVERLAP)
 				{
@@ -1156,7 +1122,7 @@ void flow_add13(struct ofp_header *msg)
 					remove_flow13(q);	// remove the matching flow
 				} else
 				{
-					TRACE("Replacing flow %d", q);
+					TRACE("openflow_13.c: Replacing flow %d", q);
 					memcpy(&flow_count_old, &flow_counters[q], sizeof(struct flows_counter));	// Copy counters from the old flow to temp location
 					remove_flow13(q);	// remove the matching flow
 					memcpy(&flow_counters[iLastFlow], &flow_count_old, sizeof(struct flows_counter));	// Copy counters from the temp location to the new flow
@@ -1165,34 +1131,50 @@ void flow_add13(struct ofp_header *msg)
 			}
 		}
 	}
-	memcpy(&flow_match13[iLastFlow], ptr_fm, sizeof(struct ofp13_flow_mod));
+	
+	// Allocate a space to store flow mod
+	flow_match13[iLastFlow] = membag_alloc(sizeof(struct ofp13_flow_mod));	
+	if (flow_match13[iLastFlow] == NULL)
+	{
+		TRACE("openflow_13.c: Unable to allocate %d bytes of memory for flow mod", sizeof(struct ofp13_flow_mod));
+		of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
+		return;
+	}
+	TRACE("openflow_13.c: Allocating %d bytes at %p for flow mode in flow %d", sizeof(struct ofp13_flow_mod), flow_match13[iLastFlow], iLastFlow+1);
+	//printf("openflow_13.c: Allocating %d bytes at %p for flow mode in flow %d\r\n", sizeof(struct ofp13_flow_mod), flow_match13[iLastFlow], iLastFlow+1);
+	memcpy(flow_match13[iLastFlow], ptr_fm, sizeof(struct ofp13_flow_mod));
+	
+	// Allocate a space to store match fields
 	if (ntohs(ptr_fm->match.length) > 4)
 	{
-		ofp13_oxm_match[iLastFlow] = membag_alloc(ntohs(flow_match13[iLastFlow].match.length)-4);	// Allocate a space to store match fields
+		ofp13_oxm_match[iLastFlow] = membag_alloc(ntohs(flow_match13[iLastFlow]->match.length)-4);	
 		if (ofp13_oxm_match[iLastFlow] == NULL)
 		{
-			TRACE("Unable to allocate %d bytes of memory for match fields", ntohs(flow_match13[iLastFlow].match.length)-4);
+			TRACE("openflow_13.c: Unable to allocate %d bytes of memory for match fields", ntohs(flow_match13[iLastFlow]->match.length)-4);
 			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 			return;
 		}
-		TRACE("Allocating %d bytes at %p for match field in flow %d\r\n", ntohs(flow_match13[iLastFlow].match.length)-4, ofp13_oxm_match[iLastFlow], iLastFlow+1);
-		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, ntohs(flow_match13[iLastFlow].match.length)-4);
+		TRACE("openflow_13.c: Allocating %d bytes at %p for match field in flow %d", ntohs(flow_match13[iLastFlow]->match.length)-4, ofp13_oxm_match[iLastFlow], iLastFlow+1);
+		//printf("openflow_13.c: Allocating %d bytes at %p for match field in flow %d\r\n", ntohs(flow_match13[iLastFlow]->match.length)-4, ofp13_oxm_match[iLastFlow], iLastFlow+1);
+		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, ntohs(flow_match13[iLastFlow]->match.length)-4);
 	} else {
 		ofp13_oxm_match[iLastFlow] = NULL;
 	}
 
+	// Allocate a space to store instructions and actions
 	int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
 	int instruction_size = ntohs(ptr_fm->header.length) - mod_size;
 	if (instruction_size > 0)
 	{
-		ofp13_oxm_inst[iLastFlow] = membag_alloc(instruction_size);	// Allocate a space to store instructions and actions
+		ofp13_oxm_inst[iLastFlow] = membag_alloc(instruction_size);	
 		if (ofp13_oxm_inst[iLastFlow] == NULL)
 		{
-			TRACE("Unable to allocate %d bytes of memory for instructions", instruction_size);
+			TRACE("openflow_13.c: Unable to allocate %d bytes of memory for instructions", instruction_size);
 			of_error13(msg, OFPET13_FLOW_MOD_FAILED, OFPFMFC13_TABLE_FULL);
 			return;
 		}
-		TRACE("Allocating %d bytes at %p for instruction field in flow %d\r\n", instruction_size, ofp13_oxm_inst[iLastFlow], iLastFlow+1);
+		TRACE("openflow_13.c: Allocating %d bytes at %p for instruction field in flow %d", instruction_size, ofp13_oxm_inst[iLastFlow], iLastFlow+1);
+		//printf("openflow_13.c: Allocating %d bytes at %p for instruction field in flow %d\r\n", instruction_size, ofp13_oxm_inst[iLastFlow], iLastFlow+1);
 		uint8_t *inst_ptr = (uint8_t *)ptr_fm + mod_size;
 		memcpy(ofp13_oxm_inst[iLastFlow], inst_ptr, instruction_size);
 	} else {
@@ -1203,26 +1185,26 @@ void flow_add13(struct ofp_header *msg)
 	flow_counters[iLastFlow].lastmatch = (totaltime/2);
 	flow_counters[iLastFlow].active = true;
 	iLastFlow++;
-	TRACE("New flow added at %d into table %d : priority %d : cookie 0x%" PRIx64, iLastFlow+1, ptr_fm->table_id, ntohs(ptr_fm->priority), htonll(ptr_fm->cookie));
+	TRACE("openflow_13.c: New flow added at %d into table %d : priority %d : cookie 0x%" PRIx64, iLastFlow+1, ptr_fm->table_id, ntohs(ptr_fm->priority), htonll(ptr_fm->cookie));
 	return;
 }
 
 void flow_delete13(struct ofp_header *msg)
 {
 	struct ofp13_flow_mod *ptr_fm = msg;
-	TRACE("Flow mod DELETE received");
+	TRACE("openflow_13.c: Flow mod DELETE received");
 	for(int q=0;q<iLastFlow;q++)
 	{
 		if(flow_counters[q].active == false)
 		{
 			continue;
 		}
-		if (ptr_fm->table_id != OFPTT_ALL && ptr_fm->table_id != flow_match13[q].table_id)
+		if (ptr_fm->table_id != OFPTT_ALL && ptr_fm->table_id != flow_match13[q]->table_id)
 		{
 			continue;
 		}
 
-		if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q].cookie & ptr_fm->cookie_mask)
+		if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q]->cookie & ptr_fm->cookie_mask)
 		{
 			continue;
 		}
@@ -1230,7 +1212,7 @@ void flow_delete13(struct ofp_header *msg)
 		{
 			bool out_port_match = false;
 			int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
-			int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+			int instruction_size = ntohs(flow_match13[q]->header.length) - mod_size;
 			struct ofp13_instruction *inst;
 			for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
 			{
@@ -1261,7 +1243,7 @@ void flow_delete13(struct ofp_header *msg)
 		{
 			bool out_group_match = false;
 			int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
-			int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+			int instruction_size = ntohs(flow_match13[q]->header.length) - mod_size;
 			struct ofp13_instruction *inst;
 			for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
 			{
@@ -1288,13 +1270,13 @@ void flow_delete13(struct ofp_header *msg)
 			}
 		}
 
-		if(field_match13(ptr_fm->match.oxm_fields, ntohs(ptr_fm->match.length)-4, ofp13_oxm_match[q], ntohs(flow_match13[q].match.length)-4) == 0)
+		if(field_match13(ptr_fm->match.oxm_fields, ntohs(ptr_fm->match.length)-4, ofp13_oxm_match[q], ntohs(flow_match13[q]->match.length)-4) == 0)
 		{
 			continue;
 		}
 
 		if (ptr_fm->flags & OFPFF13_SEND_FLOW_REM) flowrem_notif13(q,OFPRR13_DELETE);
-		TRACE("Flow %d removed", q+1);
+		TRACE("openflow_13.c: Flow %d removed", q+1);
 		// Remove the flow entry
 		remove_flow13(q);
 		q--;
@@ -1311,7 +1293,7 @@ void flow_delete13(struct ofp_header *msg)
 void flow_delete_strict13(struct ofp_header *msg)
 {
 	struct ofp13_flow_mod *ptr_fm = msg;
-	TRACE("Flow mod DELETE STRICT received");
+	TRACE("openflow_13.c: Flow mod DELETE STRICT received");
 	for(int q=0;q<iLastFlow;q++)
 	{
 		// Check if the flow is active
@@ -1320,17 +1302,17 @@ void flow_delete_strict13(struct ofp_header *msg)
 			continue;
 		}
 		// Check if it is the correct flow table
-		if (ptr_fm->table_id != OFPTT_ALL && ptr_fm->table_id != flow_match13[q].table_id)
+		if (ptr_fm->table_id != OFPTT_ALL && ptr_fm->table_id != flow_match13[q]->table_id)
 		{
 			continue;
 		}
 		// Check if the priority is the same
-		if (ptr_fm->priority != flow_match13[q].priority)
+		if (ptr_fm->priority != flow_match13[q]->priority)
 		{
 			continue;
 		}
 		// Check if the cookie values are the same
-		if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q].cookie & ptr_fm->cookie_mask)
+		if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q]->cookie & ptr_fm->cookie_mask)
 		{
 			continue;
 		}
@@ -1339,7 +1321,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 		{
 			bool out_port_match = false;
 			int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
-			int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+			int instruction_size = ntohs(flow_match13[q]->header.length) - mod_size;
 			struct ofp13_instruction *inst;
 			for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
 			{
@@ -1370,7 +1352,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 		{
 			bool out_group_match = false;
 			int mod_size = ALIGN8(offsetof(struct ofp13_flow_mod, match) + ntohs(ptr_fm->match.length));
-			int instruction_size = ntohs(flow_match13[q].header.length) - mod_size;
+			int instruction_size = ntohs(flow_match13[q]->header.length) - mod_size;
 			struct ofp13_instruction *inst;
 			for(inst=ofp13_oxm_inst[q]; inst<ofp13_oxm_inst[q]+instruction_size; inst+=inst->len)
 			{
@@ -1399,20 +1381,20 @@ void flow_delete_strict13(struct ofp_header *msg)
 
 		if(ofp13_oxm_match[q] == NULL)
 		{
-			if(memcmp(&flow_match13[q].match.oxm_fields, ptr_fm->match.oxm_fields, 4) != 0)
+			if(memcmp(flow_match13[q]->match.oxm_fields, ptr_fm->match.oxm_fields, 4) != 0)
 			{
 				continue;
 			}
 		} else
 		{
-			if(memcmp(ofp13_oxm_match[q], ptr_fm->match.oxm_fields, ntohs(flow_match13[q].match.length)-4) != 0)
+			if(memcmp(ofp13_oxm_match[q], ptr_fm->match.oxm_fields, ntohs(flow_match13[q]->match.length)-4) != 0)
 			{
 				continue;
 			}
 		}
 
 		if (ptr_fm->flags & OFPFF13_SEND_FLOW_REM) flowrem_notif13(q,OFPRR13_DELETE);
-		TRACE("Flow %d removed", q+1);
+		TRACE("openflow_13.c: Flow %d removed", q+1);
 		// Remove the flow entry
 		remove_flow13(q);
 		q--;
@@ -1431,7 +1413,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 */
 void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason, int flow)
 {
-	TRACE("Packet in from packet received on port %d reason = %d (%d bytes)", port, reason, ul_size);
+	TRACE("openflow_13.c: Packet in from packet received on port %d reason = %d (%d bytes)", port, reason, ul_size);
 	uint16_t size = 0;
 	struct ofp13_packet_in * pi;
 	uint16_t send_size = ul_size;
@@ -1446,8 +1428,8 @@ void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason
 	pi->header.xid = 0;
 	pi->buffer_id = -1;
 	pi->reason = reason;
-	pi->table_id = flow_match13[flow].table_id;
-	pi->cookie = flow_match13[flow].cookie;
+	pi->table_id = flow_match13[flow]->table_id;
+	pi->cookie = flow_match13[flow]->cookie;
 
 	pi->match.type = htons(OFPMT_OXM);
 	pi->match.length = htons(12);
@@ -1484,14 +1466,14 @@ void packet_out13(struct ofp_header *msg)
 	if (ntohs(act_hdr->type) != OFPAT13_OUTPUT) return;
 	struct ofp13_action_output *act_out = act_hdr;
 	uint32_t outPort = htonl(act_out->port);
-	TRACE("Packet out port %d (%d bytes)", outPort, size);
 	if (outPort == OFPP13_FLOOD)
 	{
 		outPort = 7 - (1 << (inPort-1));	// Need to fix this, may also send out the Non-OpenFlow port
 		} else {
 		outPort = 1 << (outPort-1);
-		TRACE("Packet out FLOOD (%d bytes)", size);
+		TRACE("openflow_13.c: Packet out FLOOD (%d bytes)", size);
 	}
+	TRACE("openflow_13.c: Packet out port %d (%d bytes)", outPort, size);
 	gmac_write(ptr, size, outPort);
 	return;
 }
@@ -1524,7 +1506,7 @@ void barrier13_reply(uint32_t xid)
 */
 void of_error13(struct ofp_header *msg, uint16_t type, uint16_t code)
 {
-	TRACE("Sent OF error code %d", code);
+	TRACE("openflow_13.c: Sent OF error code %d", code);
 	// get the size of the message, we send up to the first 64 back with the error
 	int msglen = htons(msg->length);
 	if (msglen > 64) msglen = 64;
@@ -1557,26 +1539,26 @@ void flowrem_notif13(int flowid, uint8_t reason)
 
 	ofr.header.type = OFPT13_FLOW_REMOVED;
 	ofr.header.version = OF_Version;
-	ofr.header.length = htons((sizeof(struct ofp13_flow_removed) + ntohs(flow_match13[flowid].match.length)-4));
+	ofr.header.length = htons((sizeof(struct ofp13_flow_removed) + ntohs(flow_match13[flowid]->match.length)-4));
 	ofr.header.xid = 0;
-	ofr.cookie = flow_match13[flowid].cookie;
+	ofr.cookie = flow_match13[flowid]->cookie;
 	ofr.reason = reason;
-	ofr.priority = flow_match13[flowid].priority;
+	ofr.priority = flow_match13[flowid]->priority;
 	diff = (totaltime/2) - flow_counters[flowid].duration;
 	ofr.duration_sec = htonl(diff);
 	ofr.duration_nsec = 0;
 	ofr.packet_count = htonll(flow_counters[flowid].hitCount);
 	ofr.byte_count = htonll(flow_counters[flowid].bytes);
-	ofr.idle_timeout = flow_match13[flowid].idle_timeout;
-	ofr.hard_timeout = flow_match13[flowid].hard_timeout;
-	ofr.table_id = flow_match13[flowid].table_id;
-	memcpy(&ofr.match, &flow_match13[flowid].match, sizeof(struct ofp13_match));
+	ofr.idle_timeout = flow_match13[flowid]->idle_timeout;
+	ofr.hard_timeout = flow_match13[flowid]->hard_timeout;
+	ofr.table_id = flow_match13[flowid]->table_id;
+	memcpy(&ofr.match, &flow_match13[flowid]->match, sizeof(struct ofp13_match));
 	memcpy(flow_rem, &ofr, sizeof(struct ofp13_flow_removed));
-	if (ntohs(flow_match13[flowid].match.length) > 4) 
+	if (ntohs(flow_match13[flowid]->match.length) > 4) 
 	{
-		memcpy(flow_rem + (sizeof(struct ofp13_flow_removed)-4), ofp13_oxm_match[flowid], ntohs(flow_match13[flowid].match.length)-4);
+		memcpy(flow_rem + (sizeof(struct ofp13_flow_removed)-4), ofp13_oxm_match[flowid], ntohs(flow_match13[flowid]->match.length)-4);
 	}
 	sendtcp(&flow_rem, htons(ofr.header.length));
-	TRACE("Flow removed notification sent");
+	TRACE("openflow_13.c: Flow removed notification sent");
 	return;
 }

@@ -36,6 +36,7 @@
 #include "conf_eth.h"
 #include "eeprom.h"
 #include "switch.h"
+#include "flash.h"
 #include "openflow/openflow.h"
 #include "openflow/of_helper.h"
 #include "lwip/def.h"
@@ -50,13 +51,13 @@ extern struct zodiac_config Zodiac_Config;
 extern bool debug_output;
 
 extern int charcount, charcount_last;
-extern struct ofp_flow_mod flow_match[MAX_FLOWS];
-extern struct ofp13_flow_mod flow_match13[MAX_FLOWS];
-extern uint8_t *ofp13_oxm_match[MAX_FLOWS];
-extern uint8_t *ofp13_oxm_inst[MAX_FLOWS];
-extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS];
-extern struct flows_counter flow_counters[MAX_FLOWS];
-extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
+extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
+extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
+extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
+extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
+extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
+extern struct flows_counter flow_counters[MAX_FLOWS_13];
+extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_13];
 extern int iLastFlow;
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
@@ -69,7 +70,7 @@ extern uint8_t port_status[4];
 extern int totaltime;
 extern int32_t ul_temp;
 extern int OF_Version;
-
+extern uint32_t uid_buf[4];
 
 // Local Variables
 bool showintro = true;
@@ -275,6 +276,15 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 	}
 
 	// Display help
+	if (strcmp(command, "update") == 0)
+	{
+		printf("Please begin firmware upload\r\n");
+		firmware_update();
+		return;
+
+	}
+	
+	// Display help
 	if (strcmp(command, "help") == 0)
 	{
 		printhelp();
@@ -346,6 +356,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 
 		printf("\r\n-------------------------------------------------------------------------\r\n");
 		printf("Device Status\r\n");
+		printf(" CPU UID: %d-%d-%d-%d\r\n", uid_buf[0], uid_buf[1], uid_buf[2], uid_buf[3]);
 		printf(" Firmware Version: %s\r\n",VERSION);
 		printf(" CPU Temp: %d C\r\n", (int)ul_temp);
 		printf(" Uptime: %02d:%02d:%02d", hr, min, sec);
@@ -408,7 +419,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		// Force OpenFlow version
 		reset_config.of_version = 0;			// Force version disabled
 
-		memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existng MAC address so it is not reset
+		memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existing MAC address so it is not reset
 		memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
 		saveConfig();
 		printf("Setup complete, MAC Address = %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
@@ -419,7 +430,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 	if (strcmp(command, "restart")==0)
 	{
 		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
-		for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
+		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
 		udc_detach();	// Detach the USB device before restart
 		rstc_start_software_reset(RSTC);	// Software reset
 		while (1);
@@ -682,7 +693,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	// Set MAC Address
 	if (strcmp(command, "set")==0 && strcmp(param1, "mac-address")==0)
 	{
-		uint8_t mac1,mac2,mac3,mac4,mac5,mac6;
+		int mac1,mac2,mac3,mac4,mac5,mac6;
 		if (strlen(param2) != 17 )
 		{
 			printf("incorrect format\r\n");
@@ -720,7 +731,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	// Set Netmask Address
 	if (strcmp(command, "set")==0 && strcmp(param1, "netmask")==0)
 	{
-		uint8_t nm1,nm2,nm3,nm4;
+		int nm1,nm2,nm3,nm4;
 		if (strlen(param2) > 15 )
 		{
 			printf("incorrect format\r\n");
@@ -738,7 +749,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	// Set Gateway Address
 	if (strcmp(command, "set")==0 && strcmp(param1, "gateway")==0)
 	{
-		uint8_t gw1,gw2,gw3,gw4;
+		int gw1,gw2,gw3,gw4;
 		if (strlen(param2) > 15 )
 		{
 			printf("incorrect format\r\n");
@@ -756,7 +767,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	// Set OpenFlow Controller IP Address
 	if (strcmp(command, "set")==0 && strcmp(param1, "of-controller")==0)
 	{
-		uint8_t oc1,oc2,oc3,oc4;
+		int oc1,oc2,oc3,oc4;
 		if (strlen(param2) > 15 )
 		{
 			printf("incorrect format\r\n");
@@ -910,38 +921,38 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				{
 					printf("\r\nFlow %d\r\n",i+1);
 					printf(" Match:\r\n");
-					printf("  Incoming Port: %d\t\t\tEthernet Type: 0x%.4X\r\n",ntohs(flow_match[i].match.in_port), ntohs(flow_match[i].match.dl_type));
-					printf("  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t\tDestination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",flow_match[i].match.dl_src[0], flow_match[i].match.dl_src[1], flow_match[i].match.dl_src[2], flow_match[i].match.dl_src[3], flow_match[i].match.dl_src[4], flow_match[i].match.dl_src[5] \
-					, flow_match[i].match.dl_dst[0], flow_match[i].match.dl_dst[1], flow_match[i].match.dl_dst[2], flow_match[i].match.dl_dst[3], flow_match[i].match.dl_dst[4], flow_match[i].match.dl_dst[5]);
-					if (ntohs(flow_match[i].match.dl_vlan) == 0xffff)
+					printf("  Incoming Port: %d\t\t\tEthernet Type: 0x%.4X\r\n",ntohs(flow_match10[i]->match.in_port), ntohs(flow_match10[i]->match.dl_type));
+					printf("  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t\tDestination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",flow_match10[i]->match.dl_src[0], flow_match10[i]->match.dl_src[1], flow_match10[i]->match.dl_src[2], flow_match10[i]->match.dl_src[3], flow_match10[i]->match.dl_src[4], flow_match10[i]->match.dl_src[5] \
+					, flow_match10[i]->match.dl_dst[0], flow_match10[i]->match.dl_dst[1], flow_match10[i]->match.dl_dst[2], flow_match10[i]->match.dl_dst[3], flow_match10[i]->match.dl_dst[4], flow_match10[i]->match.dl_dst[5]);
+					if (ntohs(flow_match10[i]->match.dl_vlan) == 0xffff)
 					{
 						printf("  VLAN ID: N/A\t\t\t\tVLAN Priority: N/A\r\n");
 					} else {
-						printf("  VLAN ID: %d\t\t\t\tVLAN Priority: 0x%x\r\n",ntohs(flow_match[i].match.dl_vlan), flow_match[i].match.dl_vlan_pcp);
+						printf("  VLAN ID: %d\t\t\t\tVLAN Priority: 0x%x\r\n",ntohs(flow_match10[i]->match.dl_vlan), flow_match10[i]->match.dl_vlan_pcp);
 					}
-					if ((ntohs(flow_match[i].match.dl_type) == 0x0800) || (ntohs(flow_match[i].match.dl_type) == 0x8100)) printf("  IP Protocol: %d\t\t\tIP ToS Bits: 0x%.2X\r\n",flow_match[i].match.nw_proto, flow_match[i].match.nw_tos);
-					if (flow_match[i].match.nw_proto == 7 || flow_match[i].match.nw_proto == 16)
+					if ((ntohs(flow_match10[i]->match.dl_type) == 0x0800) || (ntohs(flow_match10[i]->match.dl_type) == 0x8100)) printf("  IP Protocol: %d\t\t\tIP ToS Bits: 0x%.2X\r\n",flow_match10[i]->match.nw_proto, flow_match10[i]->match.nw_tos);
+					if (flow_match10[i]->match.nw_proto == 7 || flow_match10[i]->match.nw_proto == 16)
 					{
-						printf("  TCP Source Address: %d.%d.%d.%d\r\n",ip4_addr1(&flow_match[i].match.nw_src), ip4_addr2(&flow_match[i].match.nw_src), ip4_addr3(&flow_match[i].match.nw_src), ip4_addr4(&flow_match[i].match.nw_src));
-						printf("  TCP Destination Address: %d.%d.%d.%d\r\n", ip4_addr1(&flow_match[i].match.nw_dst), ip4_addr2(&flow_match[i].match.nw_dst), ip4_addr3(&flow_match[i].match.nw_dst), ip4_addr4(&flow_match[i].match.nw_dst));
-						printf("  TCP/UDP Source Port: %d\t\tTCP/UDP Destination Port: %d\r\n",ntohs(flow_match[i].match.tp_src), ntohs(flow_match[i].match.tp_dst));
+						printf("  TCP Source Address: %d.%d.%d.%d\r\n",ip4_addr1(&flow_match10[i]->match.nw_src), ip4_addr2(&flow_match10[i]->match.nw_src), ip4_addr3(&flow_match10[i]->match.nw_src), ip4_addr4(&flow_match10[i]->match.nw_src));
+						printf("  TCP Destination Address: %d.%d.%d.%d\r\n", ip4_addr1(&flow_match10[i]->match.nw_dst), ip4_addr2(&flow_match10[i]->match.nw_dst), ip4_addr3(&flow_match10[i]->match.nw_dst), ip4_addr4(&flow_match10[i]->match.nw_dst));
+						printf("  TCP/UDP Source Port: %d\t\tTCP/UDP Destination Port: %d\r\n",ntohs(flow_match10[i]->match.tp_src), ntohs(flow_match10[i]->match.tp_dst));
 					}
-					if (flow_match[i].match.nw_proto == 1)
+					if (flow_match10[i]->match.nw_proto == 1)
 					{
-						printf("  ICMP Type: %d\t\t\t\tICMP Code: %d\r\n",ntohs(flow_match[i].match.tp_src), ntohs(flow_match[i].match.tp_dst));
+						printf("  ICMP Type: %d\t\t\t\tICMP Code: %d\r\n",ntohs(flow_match10[i]->match.tp_src), ntohs(flow_match10[i]->match.tp_dst));
 					}
-					printf("  Wildcards: 0x%.8x\t\t\tCookie: 0x%" PRIx64 "\r\n",ntohl(flow_match[i].match.wildcards), htonll(flow_match[i].cookie));
+					printf("  Wildcards: 0x%.8x\t\t\tCookie: 0x%" PRIx64 "\r\n",ntohl(flow_match10[i]->match.wildcards), htonll(flow_match10[i]->cookie));
 					printf("\r Attributes:\r\n");
-					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match[i].priority), (totaltime/2) - flow_counters[i].duration);
-					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match[i].hard_timeout), ntohs(flow_match[i].idle_timeout));
+					printf("  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match10[i]->priority), (totaltime/2) - flow_counters[i].duration);
+					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match10[i]->hard_timeout), ntohs(flow_match10[i]->idle_timeout));
 					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
 					printf("\r\n Actions:\r\n");
 					for(int q=0;q<4;q++)
 					{
-						if(q == 0) act_hdr = flow_actions[i].action1;
-						if(q == 1) act_hdr = flow_actions[i].action2;
-						if(q == 2) act_hdr = flow_actions[i].action3;
-						if(q == 3) act_hdr = flow_actions[i].action4;
+						if(q == 0) act_hdr = flow_actions10[i]->action1;
+						if(q == 1) act_hdr = flow_actions10[i]->action2;
+						if(q == 2) act_hdr = flow_actions10[i]->action3;
+						if(q == 3) act_hdr = flow_actions10[i]->action4;
 
 						if(act_hdr->len == 0 && q == 0) printf("   DROP\r\n"); // No actions = DROP
 
@@ -1006,7 +1017,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf(" Match:\r\n");
 					match_size = 0;
 
-					while (match_size < (ntohs(flow_match13[i].match.length)-4))
+					while (match_size < (ntohs(flow_match13[i]->match.length)-4))
 					{
 						memcpy(&oxm_header, ofp13_oxm_match[i] + match_size,4);
 						bool has_mask = oxm_header.oxm_field & 1;
@@ -1104,9 +1115,9 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
 					}
 					printf("\r Attributes:\r\n");
-					printf("  Table ID: %d\t\t\t\tCookie:0x%" PRIx64 "\r\n",flow_match13[i].table_id, htonll(flow_match13[i].cookie));
-					printf("  Priority: %d\t\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i].priority), (totaltime/2) - flow_counters[i].duration);
-					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match13[i].hard_timeout), ntohs(flow_match13[i].idle_timeout));
+					printf("  Table ID: %d\t\t\t\tCookie:0x%" PRIx64 "\r\n",flow_match13[i]->table_id, htonll(flow_match13[i]->cookie));
+					printf("  Priority: %d\t\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i]->priority), (totaltime/2) - flow_counters[i].duration);
+					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match13[i]->hard_timeout), ntohs(flow_match13[i]->idle_timeout));
 					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
 					int lm = (totaltime/2) - flow_counters[i].lastmatch;
 					int hr = lm/3600;
@@ -1334,7 +1345,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				flow_count = 0;
 				for (int i=0;i<iLastFlow;i++)
 				{
-					if(flow_match13[i].table_id == x)
+					if(flow_match13[i]->table_id == x)
 					{
 						flow_count++;
 					}
@@ -1379,7 +1390,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				flow_count = 0;
 				for (int i=0;i<iLastFlow;i++)
 				{
-					if(flow_match13[i].table_id == x)
+					if(flow_match13[i]->table_id == x)
 					{
 						flow_count++;
 					}
