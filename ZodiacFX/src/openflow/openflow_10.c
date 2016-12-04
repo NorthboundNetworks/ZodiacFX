@@ -34,6 +34,7 @@
 #include "openflow.h"
 #include "switch.h"
 #include "of_helper.h"
+#include "trace.h"
 #include "lwip/tcp.h"
 #include "ipv4/lwip/ip.h"
 #include "lwip/tcp_impl.h"
@@ -44,9 +45,9 @@ extern struct zodiac_config Zodiac_Config;
 extern int totaltime;
 extern struct tcp_pcb *tcp_pcb;
 extern int iLastFlow;
-extern struct ofp_flow_mod flow_match[MAX_FLOWS];
-extern struct flows_counter flow_counters[MAX_FLOWS];
-extern struct flow_tbl_actions flow_actions[MAX_FLOWS];
+extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
+extern struct flows_counter flow_counters[MAX_FLOWS_13];
+extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_10];
 extern struct table_counter table_counters[MAX_TABLES];
 extern int OF_Version;
 extern bool rcv_freq;
@@ -56,8 +57,6 @@ extern uint8_t port_status[4];
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern struct zodiac_config Zodiac_Config;
 extern struct ofp_switch_config Switch_config;
-extern int delay_barrier;
-extern uint32_t barrier_xid;
 
 //Internal Functions
 void packet_in(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason);
@@ -100,6 +99,9 @@ static inline uint64_t (htonll)(uint64_t n)
 void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 {
 	uint16_t packet_size;
+	struct packet_fields fields = {0};
+	packet_fields_parser(p_uc_data, &fields);
+		
 	memcpy(&packet_size, ul_size, 2);
 	uint16_t eth_prot;
 	memcpy(&eth_prot, p_uc_data + 12, 2);
@@ -133,7 +135,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	{
 		int i = -1;
 		// Check if packet matches an existing flow
-		i = flowmatch10(p_uc_data, port);
+		i = flowmatch10(p_uc_data, port, &fields);
 		if (i == -2) return;	// Error packet
 		if (i == -1)	// No match
 		{
@@ -150,7 +152,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			table_counters[0].byte_count += packet_size;
 
 			// If there are no actions DROP the packet
-			act_hdr = flow_actions[i].action1;
+			act_hdr = flow_actions10[i]->action1;
 			if(act_hdr->len == 0 )
 			{
 				return;
@@ -159,10 +161,10 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			// Apply each action included action
 			for(int q=0;q<4;q++)
 			{
-				if(q == 0) act_hdr = flow_actions[i].action1;
-				if(q == 1) act_hdr = flow_actions[i].action2;
-				if(q == 2) act_hdr = flow_actions[i].action3;
-				if(q == 3) act_hdr = flow_actions[i].action4;
+				if(q == 0) act_hdr = flow_actions10[i]->action1;
+				if(q == 1) act_hdr = flow_actions10[i]->action2;
+				if(q == 2) act_hdr = flow_actions10[i]->action3;
+				if(q == 3) act_hdr = flow_actions10[i]->action4;
 
 				if (act_hdr->len != 0)
 				{
@@ -402,13 +404,7 @@ void of10_message(struct ofp_header *ofph, int size, int len)
 		break;
 
 		case OFPT10_BARRIER_REQUEST:
-		if (size == len) {
-			barrier10_reply(ofph->xid);
-			delay_barrier = 0;
-			} else {
-			barrier_xid = ofph->xid;
-			delay_barrier = 1;
-		}
+		barrier10_reply(ofph->xid);
 		break;
 
 	};
@@ -624,7 +620,7 @@ void stats_table_reply(struct ofp_stats_request *msg)
 	reply.flags = 0;
 
 	tbl_stats.table_id = 0;
-	tbl_stats.max_entries = htonl(MAX_FLOWS);
+	tbl_stats.max_entries = htonl(MAX_FLOWS_13);
 	tbl_stats.active_count = htonl(iLastFlow);
 	tbl_stats.lookup_count = htonll(table_counters[0].lookup_count);
 	tbl_stats.matched_count = htonll(table_counters[0].matched_count);
@@ -832,7 +828,7 @@ void flow_mod(struct ofp_header *msg)
 void flow_add(struct ofp_header *msg)
 {
 
-	if (iLastFlow > (MAX_FLOWS-1))
+	if (iLastFlow > (MAX_FLOWS_10-1))
 	{
 		of10_error(msg, OFPET10_FLOW_MOD_FAILED, OFPFMFC10_ALL_TABLES_FULL);
 		return;
@@ -846,13 +842,19 @@ void flow_add(struct ofp_header *msg)
 	int action_cnt_size = 0;
 	int action_count = 0;
 
-	memset(&flow_actions[iLastFlow].action1, 0, 16);
-	memset(&flow_actions[iLastFlow].action2, 0, 16);
-	memset(&flow_actions[iLastFlow].action3, 0, 16);
-	memset(&flow_actions[iLastFlow].action4, 0, 16);
-
 	action_hdr = &ptr_fm->actions;
-	memcpy(&flow_match[iLastFlow], ptr_fm, action_hdr->len);
+	
+	flow_match10[iLastFlow] = membag_alloc(sizeof(struct ofp_flow_mod));	// Allocate a space to store match fields
+	flow_actions10[iLastFlow] = membag_alloc(sizeof(struct flow_tbl_actions));	// Allocate a space to store actions fields
+	if (flow_match10[iLastFlow] == NULL || flow_actions10[iLastFlow] == NULL)
+	{
+		TRACE("Unable to allocate %d bytes of memory for match fields", sizeof(struct ofp_flow_mod));
+		of10_error(msg, OFPET10_FLOW_MOD_FAILED, OFPFMFC10_ALL_TABLES_FULL);
+		return;
+	}
+	TRACE("Allocating %d bytes at %p for flow %d\r\n", sizeof(struct ofp_flow_mod), iLastFlow+1);
+	
+	memcpy(flow_match10[iLastFlow], ptr_fm, sizeof(struct ofp_flow_mod));
 
 	if(action_size > 0)
 	{
@@ -883,10 +885,10 @@ void flow_add(struct ofp_header *msg)
 				}
 
 				// Copy action
-				if(q == 0) memcpy(&flow_actions[iLastFlow].action1, action_hdr1, ntohs(action_hdr1->len));
-				if(q == 1) memcpy(&flow_actions[iLastFlow].action2, action_hdr1, ntohs(action_hdr1->len));
-				if(q == 2) memcpy(&flow_actions[iLastFlow].action3, action_hdr1, ntohs(action_hdr1->len));
-				if(q == 3) memcpy(&flow_actions[iLastFlow].action4, action_hdr1, ntohs(action_hdr1->len));
+				if(q == 0) memcpy(flow_actions10[iLastFlow]->action1, action_hdr1, ntohs(action_hdr1->len));
+				if(q == 1) memcpy(flow_actions10[iLastFlow]->action2, action_hdr1, ntohs(action_hdr1->len));
+				if(q == 2) memcpy(flow_actions10[iLastFlow]->action3, action_hdr1, ntohs(action_hdr1->len));
+				if(q == 3) memcpy(flow_actions10[iLastFlow]->action4, action_hdr1, ntohs(action_hdr1->len));
 			}
 			if(ntohs(action_hdr1->len) == 8) action_count += 1;
 			if(ntohs(action_hdr1->len) == 16) action_count += 2;
@@ -922,7 +924,7 @@ void flow_modify(struct ofp_header *msg)
 	{
 		if(flow_counters[q].active == true)
 		{
-			if (field_match10(&ptr_fm->match, &flow_match[q].match) == 1)
+			if (field_match10(&ptr_fm->match, &flow_match10[q]->match) == 1)
 			{
 				// Update actions
 				action_hdr = &ptr_fm->actions;
@@ -955,10 +957,10 @@ void flow_modify(struct ofp_header *msg)
 							}
 
 							// Copy actions
-							if(j == 0) memcpy(&flow_actions[q].action1, action_hdr1, ntohs(action_hdr1->len));
-							if(j == 1) memcpy(&flow_actions[q].action2, action_hdr1, ntohs(action_hdr1->len));
-							if(j == 2) memcpy(&flow_actions[q].action3, action_hdr1, ntohs(action_hdr1->len));
-							if(j == 3) memcpy(&flow_actions[q].action4, action_hdr1, ntohs(action_hdr1->len));
+							if(j == 0) memcpy(flow_actions10[q]->action1, action_hdr1, ntohs(action_hdr1->len));
+							if(j == 1) memcpy(flow_actions10[q]->action2, action_hdr1, ntohs(action_hdr1->len));
+							if(j == 2) memcpy(flow_actions10[q]->action3, action_hdr1, ntohs(action_hdr1->len));
+							if(j == 3) memcpy(flow_actions10[q]->action4, action_hdr1, ntohs(action_hdr1->len));
 						}
 						if(ntohs(action_hdr1->len) == 8) action_count += 1;
 						if(ntohs(action_hdr1->len) == 16) action_count += 2;
@@ -993,7 +995,7 @@ void flow_modify_strict(struct ofp_header *msg)
 	{
 		if(flow_counters[q].active == true)
 		{
-			if((memcmp(&flow_match[q].match, &ptr_fm->match, sizeof(struct ofp_match)) == 0) && (flow_match[q].priority == ptr_fm->priority))
+			if((memcmp(&flow_match10[q]->match, &ptr_fm->match, sizeof(struct ofp_match)) == 0) && (flow_match10[q]->priority == ptr_fm->priority))
 			{
 				// Update actions
 				action_hdr = &ptr_fm->actions;
@@ -1026,10 +1028,10 @@ void flow_modify_strict(struct ofp_header *msg)
 							}
 
 							// Copy actions
-							if(j == 0) memcpy(&flow_actions[q].action1, action_hdr1, ntohs(action_hdr1->len));
-							if(j == 1) memcpy(&flow_actions[q].action2, action_hdr1, ntohs(action_hdr1->len));
-							if(j == 2) memcpy(&flow_actions[q].action3, action_hdr1, ntohs(action_hdr1->len));
-							if(j == 3) memcpy(&flow_actions[q].action4, action_hdr1, ntohs(action_hdr1->len));
+							if(j == 0) memcpy(flow_actions10[q]->action1, action_hdr1, ntohs(action_hdr1->len));
+							if(j == 1) memcpy(flow_actions10[q]->action2, action_hdr1, ntohs(action_hdr1->len));
+							if(j == 2) memcpy(flow_actions10[q]->action3, action_hdr1, ntohs(action_hdr1->len));
+							if(j == 3) memcpy(flow_actions10[q]->action4, action_hdr1, ntohs(action_hdr1->len));
 						}
 						if(ntohs(action_hdr1->len) == 8) action_count += 1;
 						if(ntohs(action_hdr1->len) == 16) action_count += 2;
@@ -1060,19 +1062,19 @@ void flow_delete(struct ofp_header *msg)
 	{
 		if(flow_counters[q].active == true)
 		{
-			if (field_match10(&ptr_fm->match, &flow_match[q].match) == 1)
+			if (field_match10(&ptr_fm->match, &flow_match10[q]->match) == 1)
 			{
 				if (ptr_fm->flags &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(q,OFPRR10_DELETE);
 				// Clear flow counters and actions
 				memset(&flow_counters[q], 0, sizeof(struct flows_counter));
-				memset(&flow_actions[q], 0, sizeof(struct flow_tbl_actions));
+				memset(flow_actions10[q], 0, sizeof(struct flow_tbl_actions));
 				// Copy the last flow to here to fill the gap
-				memcpy(&flow_match[q], &flow_match[iLastFlow-1], sizeof(struct ofp_flow_mod));
-				memcpy(&flow_actions[q], &flow_actions[iLastFlow-1], sizeof(struct flow_tbl_actions));
+				memcpy(flow_match10[q], flow_match10[iLastFlow-1], sizeof(struct ofp_flow_mod));
+				memcpy(flow_actions10[q], &flow_actions10[iLastFlow-1], sizeof(struct flow_tbl_actions));
 				memcpy(&flow_counters[q], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
 				// Clear the counters and action from the last flow that was moved
 				memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-				memset(&flow_actions[iLastFlow-1], 0, sizeof(struct flow_tbl_actions));
+				memset(flow_actions10[iLastFlow-1], 0, sizeof(struct flow_tbl_actions));
 				iLastFlow --;
 				} else {
 				q++;
@@ -1098,20 +1100,10 @@ void flow_delete_strict(struct ofp_header *msg)
 	{
 		if(flow_counters[q].active == true)
 		{
-			if((memcmp(&flow_match[q].match, &ptr_fm->match, sizeof(struct ofp_match)) == 0) && (memcmp(&flow_match[q].cookie, &ptr_fm->cookie,8) == 0))
+			if((memcmp(&flow_match10[q]->match, &ptr_fm->match, sizeof(struct ofp_match)) == 0) && (memcmp(&flow_match10[q]->cookie, &ptr_fm->cookie,8) == 0))
 			{
 				if (ptr_fm->flags &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(q,OFPRR10_DELETE);
-				// Clear flow counters and actions
-				memset(&flow_counters[q], 0, sizeof(struct flows_counter));
-				memset(&flow_actions[q], 0, sizeof(struct flow_tbl_actions));
-				// Copy the last flow to here to fill the gap
-				memcpy(&flow_match[q], &flow_match[iLastFlow-1], sizeof(struct ofp_flow_mod));
-				memcpy(&flow_actions[q], &flow_actions[iLastFlow-1], sizeof(struct flow_tbl_actions));
-				memcpy(&flow_counters[q], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-				// Clear the counters and action from the last flow that was moved
-				memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-				memset(&flow_actions[iLastFlow-1], 0, sizeof(struct flow_tbl_actions));
-				iLastFlow --;
+				remove_flow10(q);
 			}
 		}
 	}
@@ -1161,15 +1153,15 @@ void flowrem_notif10(int flowid, uint8_t reason)
 	ofr.header.version = OF_Version;
 	ofr.header.length = htons(sizeof(struct ofp_flow_removed));
 	ofr.header.xid = 0;
-	ofr.cookie = flow_match[flowid].cookie;
+	ofr.cookie = flow_match10[flowid]->cookie;
 	ofr.reason = reason;
-	ofr.priority = flow_match[flowid].priority;
+	ofr.priority = flow_match10[flowid]->priority;
 	diff = (totaltime/2) - flow_counters[flowid].duration;
 	ofr.duration_sec = htonl(diff);
 	ofr.packet_count = flow_counters[flowid].hitCount;
 	ofr.byte_count = flow_counters[flowid].bytes;
-	ofr.idle_timeout = flow_match[flowid].idle_timeout;
-	ofr.match = flow_match[flowid].match;
+	ofr.idle_timeout = flow_match10[flowid]->idle_timeout;
+	ofr.match = flow_match10[flowid]->match;
 	sendtcp(&ofr, sizeof(struct ofp_flow_removed));
 	return;
 }

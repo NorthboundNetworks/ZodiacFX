@@ -42,6 +42,8 @@
 #include "command.h"
 #include "eeprom.h"
 #include "switch.h"
+#include "http.h"
+#include "flash.h"
 #include "openflow/openflow.h"
 #include "ksz8795clx/ethernet_phy.h"
 
@@ -54,6 +56,7 @@ bool stackenabled;
 int portmap[4];
 int32_t ul_temp;
 uint8_t NativePortMatrix;
+uint32_t uid_buf[4];
 
 /** Reference voltage for AFEC,in mv. */
 #define VOLT_REF        (3300)
@@ -61,7 +64,7 @@ uint8_t NativePortMatrix;
 #define MAX_DIGITAL     (4095UL)
 
 /*
-*	Coverts the temp sensor volatge to temp
+*	Coverts the temp sensor voltage to temp
 *
 */
 static void afec_temp_sensor_end_conversion(void)
@@ -125,6 +128,7 @@ int main (void)
 
 	sysclk_init();
 	board_init();
+	get_serial(&uid_buf);
 
 	// Set up the GPIO pin for the Mater Select jumper
 	ioport_init();
@@ -156,6 +160,7 @@ int main (void)
 	IP4_ADDR(&x_net_mask, Zodiac_Config.netmask[0], Zodiac_Config.netmask[1],Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);
 	IP4_ADDR(&x_gateway, Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1],Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
 
+	/* Initialize KSZ8795. */
 	switch_init();
 
 	/* Initialize lwIP. */
@@ -169,14 +174,14 @@ int main (void)
 
 	netif_set_up(&gs_net_if);
 
-	// Telnet to be included in v0.63
-	//telnet_init();
-
 	/* Initialize timer. */
 	sys_init_timing();
-
-	int v,p;
+	
+	/* Initialize HTTP server. */
+	//http_init();
+	
 	// Create port map
+	int v,p;
 	for (v = 0;v < MAX_VLANS;v++)
 	{
 		if (Zodiac_Config.vlan_list[v].uActive == 1 && Zodiac_Config.vlan_list[v].uVlanType == 1)
