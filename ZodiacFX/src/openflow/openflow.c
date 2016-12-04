@@ -66,8 +66,6 @@ struct tcp_pcb *tcp_pcb_check;
 int fast_of_timer = 0;
 int tcp_con_state = -1;
 int tcp_wait = 0;
-int delay_barrier;
-uint32_t barrier_xid;
 int totaltime = 0;
 int heartbeat = 0;
 int multi_pos;

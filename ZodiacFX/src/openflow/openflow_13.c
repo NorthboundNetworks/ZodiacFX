@@ -59,8 +59,6 @@ extern struct table_counter table_counters[MAX_TABLES];
 extern uint8_t port_status[4];
 extern struct ofp_switch_config Switch_config;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
-extern int delay_barrier;
-extern uint32_t barrier_xid;
 extern int multi_pos;
 extern uint8_t NativePortMatrix;
 
@@ -698,7 +696,6 @@ int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	memcpy(reply->body, &statsbuffer, len);
 	len += 	sizeof(struct ofp13_multipart_reply);
 	reply->header.length = htons(len);
-
 	return len;
 }
 
@@ -1144,6 +1141,7 @@ void flow_add13(struct ofp_header *msg)
 		return;
 	}
 	TRACE("openflow_13.c: Allocating %d bytes at %p for flow mode in flow %d", sizeof(struct ofp13_flow_mod), flow_match13[iLastFlow], iLastFlow+1);
+	//printf("openflow_13.c: Allocating %d bytes at %p for flow mode in flow %d\r\n", sizeof(struct ofp13_flow_mod), flow_match13[iLastFlow], iLastFlow+1);
 	memcpy(flow_match13[iLastFlow], ptr_fm, sizeof(struct ofp13_flow_mod));
 	
 	// Allocate a space to store match fields
@@ -1157,6 +1155,7 @@ void flow_add13(struct ofp_header *msg)
 			return;
 		}
 		TRACE("openflow_13.c: Allocating %d bytes at %p for match field in flow %d", ntohs(flow_match13[iLastFlow]->match.length)-4, ofp13_oxm_match[iLastFlow], iLastFlow+1);
+		//printf("openflow_13.c: Allocating %d bytes at %p for match field in flow %d\r\n", ntohs(flow_match13[iLastFlow]->match.length)-4, ofp13_oxm_match[iLastFlow], iLastFlow+1);
 		memcpy(ofp13_oxm_match[iLastFlow], ptr_fm->match.oxm_fields, ntohs(flow_match13[iLastFlow]->match.length)-4);
 	} else {
 		ofp13_oxm_match[iLastFlow] = NULL;
@@ -1175,6 +1174,7 @@ void flow_add13(struct ofp_header *msg)
 			return;
 		}
 		TRACE("openflow_13.c: Allocating %d bytes at %p for instruction field in flow %d", instruction_size, ofp13_oxm_inst[iLastFlow], iLastFlow+1);
+		//printf("openflow_13.c: Allocating %d bytes at %p for instruction field in flow %d\r\n", instruction_size, ofp13_oxm_inst[iLastFlow], iLastFlow+1);
 		uint8_t *inst_ptr = (uint8_t *)ptr_fm + mod_size;
 		memcpy(ofp13_oxm_inst[iLastFlow], inst_ptr, instruction_size);
 	} else {

@@ -37,10 +37,10 @@
 
 struct flows_counter
 {
-	int hitCount;
+	uint16_t hitCount;
 	int bytes;
 	int duration;
-	int active;
+	uint8_t active;
 	int lastmatch;
 };
 

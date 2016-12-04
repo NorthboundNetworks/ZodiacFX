@@ -57,8 +57,6 @@ extern uint8_t port_status[4];
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern struct zodiac_config Zodiac_Config;
 extern struct ofp_switch_config Switch_config;
-extern int delay_barrier;
-extern uint32_t barrier_xid;
 
 //Internal Functions
 void packet_in(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason);
