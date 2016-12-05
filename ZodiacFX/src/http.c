@@ -667,23 +667,20 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 */
 void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 {
-	int len = strlen(buffer);
-	//tcp_sent(pcb,NULL);
+	uint16_t len = strlen(buffer);
+	err_t err;
+	uint16_t buf_size;
+		
+	buf_size = tcp_sndbuf(pcb);
+	err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
+	TRACE("http.c: sending %d bytes to TCP stack, %d available in buffer", len, buf_size);
+	
 	if(out == true)
 	{
-		err_t err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY);
 		if (err == ERR_OK) tcp_output(pcb);
 		tcp_close(pcb);
 	}
-	else
-	{
-		err_t err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_MORE);
-		if (err != ERR_OK)
-		{
-			TRACE("http.c: tcp_write error");
-		}
-	}
-
+	
 	return;
 }
 
@@ -1702,10 +1699,6 @@ uint8_t interfaceCreate_About(void)
 				"<h3>Zodiac FX</h3>"\
 					"<p>"\
 						"The Zodiac FX was created to allow the development of SDN applications on real hardware."\
-					"</p>"\
-				"<h3>Northbound Networks</h3>"\
-					"<p>"\
-						"Northbound Networks was founded in 2014 by Paul Zanna with the goal of providing affordable SDN tools for developers, research and hobbyists. Based in Melbourne, Australia they are a member of the ANZ SDN Alliance."\
 					"</p>"\
 			"</body>"\
 		"</html>"\
