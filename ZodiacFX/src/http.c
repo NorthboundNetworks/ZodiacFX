@@ -641,6 +641,44 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				rstc_start_software_reset(RSTC);	// Software reset
 				while (1);
 			}
+			else if(strcmp(http_msg,"save_vlan") == 0)
+			{
+				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+				
+				// Search for btn=
+				pdat = strstr(http_payload, "btn=");	// Search for element
+				if(pdat != NULL)	// Check that the element exists
+				{
+					pdat += (strlen("btn="));	// Data format: btn=btn_name
+					
+					i = 0;
+					while(i < 7)	// VLAN button can only be "btn_add" or "btn_del"
+					{
+						http_msg[i] = pdat[i];	// Store value of element
+						i++;
+					}
+				}
+				else
+				{
+					TRACE("http.c: button not found in Config: VLANs response")
+				}
+
+				// Match pressed button
+				if(strcmp(http_msg,"btn_del") == 0)
+				{
+					// Delete existing VLAN
+					
+				}
+				else if(strcmp(http_msg,"btn_add") == 0)
+				{
+					// Add new VLAN
+					
+				}
+				else
+				{
+					TRACE("http.c: unhandled button in Config: VLANs")
+				}
+			}
 			else
 			{
 				TRACE("http.c: unknown request: \"%s\"", http_msg);
