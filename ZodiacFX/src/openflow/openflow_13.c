@@ -1275,7 +1275,7 @@ void flow_delete13(struct ofp_header *msg)
 			continue;
 		}
 
-		if (ptr_fm->flags & OFPFF13_SEND_FLOW_REM) flowrem_notif13(q,OFPRR13_DELETE);
+		if (ntohs(ptr_fm->flags) & OFPFF13_SEND_FLOW_REM || ntohs(flow_match13[q]->flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(q,OFPRR13_DELETE);
 		TRACE("openflow_13.c: Flow %d removed", q+1);
 		// Remove the flow entry
 		remove_flow13(q);
@@ -1393,7 +1393,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 			}
 		}
 
-		if (ptr_fm->flags & OFPFF13_SEND_FLOW_REM) flowrem_notif13(q,OFPRR13_DELETE);
+		if (ntohs(ptr_fm->flags) & OFPFF13_SEND_FLOW_REM || ntohs(flow_match13[q]->flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(q,OFPRR13_DELETE);
 		TRACE("openflow_13.c: Flow %d removed", q+1);
 		// Remove the flow entry
 		remove_flow13(q);
