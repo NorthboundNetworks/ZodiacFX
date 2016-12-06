@@ -48,6 +48,11 @@ extern int32_t ul_temp;
 extern struct zodiac_config Zodiac_Config;
 extern uint8_t port_status[4];
 extern uint32_t uid_buf[4];	// Unique identifier
+extern struct table_counter table_counters[MAX_TABLES];
+extern int iLastFlow;
+extern struct tcp_pcb *tcp_pcb;
+extern int OF_Version;
+extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
 
 // Local Variables
 struct tcp_pcb *http_pcb;
@@ -672,11 +677,24 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 	uint16_t buf_size;
 		
 	buf_size = tcp_sndbuf(pcb);
-	err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
-	TRACE("http.c: sending %d bytes to TCP stack, %d available in buffer", len, buf_size);
 	
+	// Check if tcp buffer needs to be sent
+	if(len >= buf_size)
+	{
+		TRACE("http.c: sending tcp output.")		
+		if (err == ERR_OK) tcp_output(pcb);
+		buf_size = tcp_sndbuf(pcb);
+		TRACE("http.c: %d available in buffer", buf_size)
+	}
+	
+	// Write data to tcp buffer
+	err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
+	TRACE("http.c: sending %d bytes to TCP stack, %d REMAINING in buffer", len, (buf_size - len));
+	
+	// Check if more data needs to be written
 	if(out == true)
 	{
+		TRACE("http.c: calling tcp_output & closing connection")
 		if (err == ERR_OK) tcp_output(pcb);
 		tcp_close(pcb);
 	}
@@ -1295,6 +1313,71 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 */
 uint8_t interfaceCreate_Display_OpenFlow(void)
 {
+	
+	// Status
+	char wi_ofStatus[15] = "";
+	
+	if (tcp_pcb->state != ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED)
+	{
+		snprintf(wi_ofStatus, 15, "Disconnected");
+	}
+	else if (tcp_pcb->state == ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED)
+	{
+		snprintf(wi_ofStatus, 15, "Connected");
+	}
+	else if (Zodiac_Config.OFEnabled == OF_DISABLED)
+	{
+		snprintf(wi_ofStatus, 15, "Disabled");
+	}
+	else
+	{
+		snprintf(wi_ofStatus, 15, "Error: unknown");
+	}
+	
+	// Version, Tables, Flows, Lookups, Matches
+	char wi_ofVersion[15] = "";
+	int	 wi_ofTables  = 0;
+	int  wi_ofFlows   = 0;
+	int  wi_ofLookups = 0;
+	int  wi_ofMatches = 0;
+	
+	if (OF_Version == 1)
+	{
+		snprintf(wi_ofVersion, 15, "1.0");
+		wi_ofTables  = 1;
+		wi_ofFlows   = iLastFlow;
+		wi_ofLookups = table_counters[0].lookup_count;
+		wi_ofMatches = table_counters[0].matched_count;
+	}
+	else if (OF_Version == 4)
+	{
+		int flow_count;
+		for (int x=0;x<MAX_TABLES;x++)
+		{
+			flow_count = 0;
+			for (int i=0;i<iLastFlow;i++)
+			{
+				if(flow_match13[i]->table_id == x)
+				{
+					flow_count++;
+				}
+			}
+			if(flow_count > 0) wi_ofTables++;
+	}
+		snprintf(wi_ofVersion, 15, "1.3");
+		wi_ofFlows = iLastFlow;
+		// Total up all the table stats
+		for (int x=0;x<MAX_TABLES;x++)
+		{
+			wi_ofLookups += table_counters[x].lookup_count;
+			wi_ofMatches += table_counters[x].matched_count;
+		}
+	}
+	else
+	{
+		snprintf(wi_ofVersion, 15, "Auto");
+	}
+	
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
 		"<html>"\
@@ -1317,21 +1400,22 @@ uint8_t interfaceCreate_Display_OpenFlow(void)
 					"<fieldset>"\
 						"<legend>OpenFlow</legend>"\
 						"Status:<br>"\
-						"<input type=\"text\" name=\"w_ofStatus\" value=\"%%s\" readonly><br><br>"\
+						"<input type=\"text\" name=\"w_ofStatus\" value=\"%s\" readonly><br><br>"\
 						"Version:<br>"\
-						"<input type=\"text\" name=\"w_ofVer\" value=\"%%s\" readonly><br><br>"\
+						"<input type=\"text\" name=\"w_ofVer\" value=\"%s\" readonly><br><br>"\
 						"Tables:<br>"\
-						"<input type=\"text\" name=\"w_ofTab\" value=\"%%s\" readonly><br><br>"\
+						"<input type=\"text\" name=\"w_ofTab\" value=\"%d\" readonly><br><br>"\
 						"Flows:<br>"\
-						"<input type=\"text\" name=\"w_ofFlows\" value=\"%%s\" readonly><br><br>"\
+						"<input type=\"text\" name=\"w_ofFlows\" value=\"%d\" readonly><br><br>"\
 						"Table Lookups:<br>"\
-						"<input type=\"text\" name=\"w_ofLk\" value=\"%%s\" readonly><br><br>"\
+						"<input type=\"text\" name=\"w_ofLk\" value=\"%d\" readonly><br><br>"\
 						"Table Matches:<br>"\
-						"<input type=\"text\" name=\"w_ofMatch\" value=\"%%s\" readonly><br>"\
+						"<input type=\"text\" name=\"w_ofMatch\" value=\"%d\" readonly><br>"\
 					"</fieldset>"\
 				"</form>"\
 			"</body>"\
 		"</html>"\
+		, wi_ofStatus , wi_ofVersion , wi_ofTables , wi_ofFlows , wi_ofLookups , wi_ofMatches\
 	) < SHARED_BUFFER_LEN)
 	{
 		TRACE("http.c: html written to buffer");
