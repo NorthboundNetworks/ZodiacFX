@@ -1563,7 +1563,7 @@ void printhelp(void)
 	printf(" set failstate <secure|safe>\r\n");
 	printf(" add vlan <vlan id> <vlan name>\r\n");
 	printf(" delete vlan <vlan id>\r\n");
-	printf(" set vlan-type <openflow|native>\r\n");
+	printf(" set vlan-type <vlan id> <openflow|native>\r\n");
 	printf(" add vlan-port <vlan id> <port>\r\n");
 	printf(" delete vlan-port <port>\r\n");
 	printf(" factory reset\r\n");

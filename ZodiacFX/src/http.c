@@ -666,8 +666,19 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				// Match pressed button
 				if(strcmp(http_msg,"btn_del") == 0)
 				{
-					// Delete existing VLAN
+					int num = -1;
+					pdat += (strlen("btn_del"));	// Data format: btn=btn_del[number]
 					
+					num = atoi(pdat[0]);
+					
+					if(num >= 0 && num < MAX_VLANS)
+					{
+						// Delete existing VLAN
+						Zodiac_Config.vlan_list[num].uActive = 0;
+						Zodiac_Config.vlan_list[num].uVlanType = 0;
+						Zodiac_Config.vlan_list[num].uTagged = 0;
+						Zodiac_Config.vlan_list[num].uVlanID = 0;
+					}
 				}
 				else if(strcmp(http_msg,"btn_add") == 0)
 				{
@@ -716,25 +727,20 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 		
 	buf_size = tcp_sndbuf(pcb);
 	
-	// Check if tcp buffer needs to be sent
-	if(len >= buf_size)
+	// Check available tcp buffer space
+	if(len < buf_size)
 	{
-		TRACE("http.c: sending tcp output.")		
-		if (err == ERR_OK) tcp_output(pcb);
-		buf_size = tcp_sndbuf(pcb);
-		TRACE("http.c: %d available in buffer", buf_size)
-	}
-	
-	// Write data to tcp buffer
-	err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
-	TRACE("http.c: sending %d bytes to TCP stack, %d REMAINING in buffer", len, (buf_size - len));
-	
-	// Check if more data needs to be written
-	if(out == true)
-	{
-		TRACE("http.c: calling tcp_output & closing connection")
-		if (err == ERR_OK) tcp_output(pcb);
-		tcp_close(pcb);
+		// Write data to tcp buffer
+		err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
+		TRACE("http.c: sending %d bytes to TCP stack, %d REMAINING in buffer", len, (buf_size - len));
+
+		// Check if more data needs to be written
+		if(out == true)
+		{
+			TRACE("http.c: calling tcp_output & closing connection")
+			if (err == ERR_OK) tcp_output(pcb);
+			tcp_close(pcb);
+		}
 	}
 	
 	return;
