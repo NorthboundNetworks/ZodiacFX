@@ -57,7 +57,7 @@ extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
 // Local Variables
 struct tcp_pcb *http_pcb;
 char http_msg[64];			// Buffer for HTTP message filtering
-extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
+extern uint8_t shared_buffer[SHARED_BUFFER_LEN];	// SHARED_BUFFER_LEN must never be reduced below 2048
 
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
@@ -1604,6 +1604,7 @@ uint8_t interfaceCreate_Config_Network(void)
 */
 uint8_t interfaceCreate_Config_VLANs(void)
 {
+	// Opening tags, and base table
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
 		"<html>"\
@@ -1640,55 +1641,62 @@ uint8_t interfaceCreate_Config_VLANs(void)
 					"<th>Type</th>"\
 					"<th>Options</th>"\
 					"</tr>"\
+					
+	) < SHARED_BUFFER_LEN)
+	{
+		TRACE("http.c: VLAN base written to buffer");
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+	}
+	
+	// Dynamic rows
+	strncat(shared_buffer,\
 					"<tr>"\
-					"<td>100</td>"\
-					"<td>OpenFlow</td>"\
-					"<td>OpenFlow</td>"\
-					"<td>"\
-					"<form action=\"del0\" method=\"post\">"\
-					"<button name=\"btn\" value=\"del0\">Delete</button>"\
-					"</form>"\
-					"</td>"\
+						"<td>%%d</td>"\
+						"<td>%%s</td>"\
+						"<td>%%s</td>"\
+						"<td>"\
+						"<form action=\"del1\" method=\"post\">"\
+							"<button name=\"btn\" value=\"del2\">Delete</button>"\
+						"</form>"\
+						"</td>"\
 					"</tr>"\
+	, (SHARED_BUFFER_LEN - strlen(shared_buffer) - 1));
+
+	// Final row (input form & ADD button), and closing tags
+	strncat(shared_buffer,\
 					"<tr>"\
-					"<td>%%d</td>"\
-					"<td>%%s</td>"\
-					"<td>%%s</td>"\
-					"<td>"\
-					"<form action=\"del1\" method=\"post\">"\
-					"<button name=\"btn\" value=\"del2\">Delete</button>"\
-					"</form>"\
-					"</td>"\
-					"</tr>"\
-					"<tr>"\
-					"<td>"\
-					"<input type=\"text\" name=\"w_ofIP\" size=\"5\">"\
-					"</td>"\
-					"<td>"\
-					"<input type=\"text\" name=\"w_ofIP\" size=\"5\">"\
-					"</td>"\
-					"<td>"\
-					"<input type=\"text\" name=\"w_ofIP\" size=\"5\">"\
-					"</td>"\
-					"<td>"\
-					"<form action=\"btn_add\" method=\"post\">"\
-					"<button style=\"width:54px\" name=\"btn\" value=\"btn_add\" size=\"10\">Add</button>"\
-					"</form>"\
-					"</td>"\
+						"<td>"\
+							"<input type=\"text\" name=\"w_vlID\" size=\"5\">"\
+						"</td>"\
+						"<td>"\
+							"<input type=\"text\" name=\"w_vlName\" size=\"5\">"\
+						"</td>"\
+						"<td>"\
+							"<input type=\"text\" name=\"w_vlType\" size=\"5\">"\
+						"</td>"\
+						"<td>"\
+							"<form action=\"btn_add\" method=\"post\">"\
+								"<button style=\"width:54px\" name=\"btn\" value=\"btn_add\" size=\"10\">Add</button>"\
+							"</form>"\
+						"</td>"\
 					"</tr>"\
 					"</table>"\
 				"</fieldset>"\
 			"</form>"\
 			"</body>"\
 		"</html>"\
-	) < SHARED_BUFFER_LEN)
+	, (SHARED_BUFFER_LEN - strlen(shared_buffer) - 1));
+	
+	if(strlen(shared_buffer) < (SHARED_BUFFER_LEN - 1))
 	{
-		TRACE("http.c: html written to buffer");
-		return 1;
+		return 1;	
 	}
 	else
 	{
-		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		// If second last element has been written to, the page has likely failed to fully write.
 		return 0;
 	}
 }
