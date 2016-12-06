@@ -348,10 +348,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 				
 				// Device Name
-				pdat = strstr(http_payload, "w_deviceName");	// Search for element
+				pdat = strstr(http_payload, "wi_deviceName");	// Search for element
 				if(pdat != NULL)	// Check that element exists
 				{
-					pdat += (strlen("w_deviceName")+1);	// Data format: w_deviceName=(name)
+					pdat += (strlen("wi_deviceName")+1);	// Data format: wi_deviceName=(name)
 					
 					i = 0;
 					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
@@ -379,10 +379,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				memset(&http_msg, 0, sizeof(http_msg));
 								
 				// MAC Address
-				pdat = strstr(http_payload, "w_macAddress");
+				pdat = strstr(http_payload, "wi_macAddress");
 				if(pdat != NULL)	// Check that element exists
 				{
-					pdat += (strlen("w_macAddress")+1);	// Data format: w_deviceName=(name)
+					pdat += (strlen("wi_macAddress")+1);	// Data format: wi_deviceName=(name)
 					
 					i = 0;
 					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
@@ -440,10 +440,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				memset(&http_msg, 0, sizeof(http_msg));
 								
 				// IP Address
-				pdat = strstr(http_payload, "w_ipAddress");
+				pdat = strstr(http_payload, "wi_ipAddress");
 				if(pdat != NULL)	// Check that element exists
 				{
-					pdat += (strlen("w_ipAddress")+1);	// Data format: w_deviceName=(name)
+					pdat += (strlen("wi_ipAddress")+1);	// Data format: wi_deviceName=(name)
 									
 					i = 0;
 					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
@@ -479,10 +479,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				memset(&http_msg, 0, sizeof(http_msg));
 								
 				// Netmask
-				pdat = strstr(http_payload, "w_netmask");
+				pdat = strstr(http_payload, "wi_netmask");
 				if(pdat != NULL)	// Check that element exists
 				{
-					pdat += (strlen("w_netmask")+1);	// Data format: w_deviceName=(name)
+					pdat += (strlen("wi_netmask")+1);	// Data format: wi_deviceName=(name)
 									
 					i = 0;
 					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
@@ -518,10 +518,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				memset(&http_msg, 0, sizeof(http_msg));
 							
 				// Gateway	
-				pdat = strstr(http_payload, "w_gateway");
+				pdat = strstr(http_payload, "wi_gateway");
 				if(pdat != NULL)	// Check that element exists
 				{
-					pdat += (strlen("w_gateway")+1);	// Data format: w_deviceName=(name)
+					pdat += (strlen("wi_gateway")+1);	// Data format: wi_deviceName=(name)
 									
 					i = 0;
 					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
@@ -1111,30 +1111,30 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<fieldset>"\
 								"<legend>Port 1</legend>"\
 								"Status:<br>"\
-								"<input type=\"text\" name=\"w_portStatus\" value=\"UP\" readonly><br><br>"\
+								"<input type=\"text\" name=\"wi_portStatus\" value=\"UP\" readonly><br><br>"\
 								"VLAN Type:<br>"\
-								"<input type=\"text\" name=\"w_vlanType\" value=\"OpenFlow\" readonly><br><br>"\
+								"<input type=\"text\" name=\"wi_vlanType\" value=\"OpenFlow\" readonly><br><br>"\
 								"VLAN ID:<br>"\
-								"<select name=\"w_vlanID\">"\
+								"<select name=\"wi_vlanID\">"\
 									"<option          value=\"0\">100</option>"\
 									"<option          value=\"1\">200</option>"\
 								"</select>"\
 								"<input type=\"submit\" value=\"Save\">"\
 								"<input type=\"reset\" value=\"Cancel\"><br><br>"\
 								"RX Bytes<br>"\
-								"<input type=\"text\" name=\"w_rxB\" value=\"97701\" readonly><br><br>"\
+								"<input type=\"text\" name=\"wi_rxB\" value=\"97701\" readonly><br><br>"\
 								"TX Bytes<br>"\
-								"<input type=\"text\" name=\"w_txB\" value=\"69865\" readonly><br><br>"\
+								"<input type=\"text\" name=\"wi_txB\" value=\"69865\" readonly><br><br>"\
 								"RX Packets<br>"\
-								"<input type=\"text\" name=\"w_rxP\" value=\"1016\" readonly><br><br>"\
+								"<input type=\"text\" name=\"wi_rxP\" value=\"1016\" readonly><br><br>"\
 								"TX Packets<br>"\
-								"<input type=\"text\" name=\"w_txP\" value=\"724\" readonly><br><br>"\
+								"<input type=\"text\" name=\"wi_txP\" value=\"724\" readonly><br><br>"\
 								"RX Dropped Packets<br>"\
-								"<input type=\"text\" name=\"w_rxDP\" value=\"0\" readonly><br><br>"\
+								"<input type=\"text\" name=\"wi_rxDP\" value=\"0\" readonly><br><br>"\
 								"TX Dropped Packets<br>"\
-								"<input type=\"text\" name=\"w_txDP\" value=\"0\" readonly><br><br>"\
+								"<input type=\"text\" name=\"wi_txDP\" value=\"0\" readonly><br><br>"\
 								"RX CRC Errors<br>"\
-								"<input type=\"text\" name=\"w_rxCRC\" value=\"0\" readonly><br>"\
+								"<input type=\"text\" name=\"wi_rxCRC\" value=\"0\" readonly><br>"\
 							"</fieldset>"\
 						"</form>"\
 					"</div>"\
@@ -1161,30 +1161,30 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 					"<fieldset>"\
 						"<legend>Port 2</legend>"\
 						"Status:<br>"\
-						"<input type=\"text\" name=\"w_portStatus\" value=\"DOWN\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_portStatus\" value=\"DOWN\" readonly><br><br>"\
 						"VLAN Type:<br>"\
-						"<input type=\"text\" name=\"w_vlanType\" value=\"OpenFlow\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_vlanType\" value=\"OpenFlow\" readonly><br><br>"\
 						"VLAN ID:<br>"\
-						"<select name=\"w_vlanID\">"\
+						"<select name=\"wi_vlanID\">"\
 							"<option          value=\"0\">100</option>"\
 							"<option          value=\"1\">200</option>"\
 						"</select>"\
 						"<input type=\"submit\" value=\"Save\">"\
 						"<input type=\"reset\" value=\"Cancel\"><br><br>"\
 						"RX Bytes<br>"\
-						"<input type=\"text\" name=\"w_rxB\" value=\"97701\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_rxB\" value=\"97701\" readonly><br><br>"\
 						"TX Bytes<br>"\
-						"<input type=\"text\" name=\"w_txB\" value=\"69865\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_txB\" value=\"69865\" readonly><br><br>"\
 						"RX Packets<br>"\
-						"<input type=\"text\" name=\"w_rxP\" value=\"1016\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_rxP\" value=\"1016\" readonly><br><br>"\
 						"TX Packets<br>"\
-						"<input type=\"text\" name=\"w_txP\" value=\"724\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_txP\" value=\"724\" readonly><br><br>"\
 						"RX Dropped Packets<br>"\
-						"<input type=\"text\" name=\"w_rxDP\" value=\"0\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_rxDP\" value=\"0\" readonly><br><br>"\
 						"TX Dropped Packets<br>"\
-						"<input type=\"text\" name=\"w_txDP\" value=\"0\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_txDP\" value=\"0\" readonly><br><br>"\
 						"RX CRC Errors<br>"\
-						"<input type=\"text\" name=\"w_rxCRC\" value=\"0\" readonly><br>"\
+						"<input type=\"text\" name=\"wi_rxCRC\" value=\"0\" readonly><br>"\
 					"</fieldset>"\
 				"</form>"\
 			"</div>"\
@@ -1211,30 +1211,30 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 					"<fieldset>"\
 						"<legend>Port 3</legend>"\
 						"Status:<br>"\
-						"<input type=\"text\" name=\"w_portStatus\" value=\"DOWN\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_portStatus\" value=\"DOWN\" readonly><br><br>"\
 						"VLAN Type:<br>"\
-						"<input type=\"text\" name=\"w_vlanType\" value=\"Native\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_vlanType\" value=\"Native\" readonly><br><br>"\
 						"VLAN ID:<br>"\
-						"<select name=\"w_vlanID\">"\
+						"<select name=\"wi_vlanID\">"\
 							"<option          value=\"0\">100</option>"\
 							"<option          value=\"1\">200</option>"\
 						"</select>"\
 						"<input type=\"submit\" value=\"Save\">"\
 						"<input type=\"reset\" value=\"Cancel\"><br><br>"\
 						"RX Bytes<br>"\
-						"<input type=\"text\" name=\"w_rxB\" value=\"97701\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_rxB\" value=\"97701\" readonly><br><br>"\
 						"TX Bytes<br>"\
-						"<input type=\"text\" name=\"w_txB\" value=\"69865\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_txB\" value=\"69865\" readonly><br><br>"\
 						"RX Packets<br>"\
-						"<input type=\"text\" name=\"w_rxP\" value=\"1016\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_rxP\" value=\"1016\" readonly><br><br>"\
 						"TX Packets<br>"\
-						"<input type=\"text\" name=\"w_txP\" value=\"724\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_txP\" value=\"724\" readonly><br><br>"\
 						"RX Dropped Packets<br>"\
-						"<input type=\"text\" name=\"w_rxDP\" value=\"0\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_rxDP\" value=\"0\" readonly><br><br>"\
 						"TX Dropped Packets<br>"\
-						"<input type=\"text\" name=\"w_txDP\" value=\"0\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_txDP\" value=\"0\" readonly><br><br>"\
 						"RX CRC Errors<br>"\
-						"<input type=\"text\" name=\"w_rxCRC\" value=\"0\" readonly><br>"\
+						"<input type=\"text\" name=\"wi_rxCRC\" value=\"0\" readonly><br>"\
 					"</fieldset>"\
 				"</form>"\
 			"</div>"\
@@ -1261,30 +1261,30 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 								"<fieldset>"\
 									"<legend>Port 4</legend>"\
 									"Status:<br>"\
-									"<input type=\"text\" name=\"w_portStatus\" value=\"UP\" readonly><br><br>"\
+									"<input type=\"text\" name=\"wi_portStatus\" value=\"UP\" readonly><br><br>"\
 									"VLAN Type:<br>"\
-									"<input type=\"text\" name=\"w_vlanType\" value=\"Native\" readonly><br><br>"\
+									"<input type=\"text\" name=\"wi_vlanType\" value=\"Native\" readonly><br><br>"\
 									"VLAN ID:<br>"\
-									"<select name=\"w_vlanID\">"\
+									"<select name=\"wi_vlanID\">"\
 										"<option          value=\"0\">100</option>"\
 										"<option          value=\"1\">200</option>"\
 									"</select>"\
 									"<input type=\"submit\" value=\"Save\">"\
 									"<input type=\"reset\" value=\"Cancel\"><br><br>"\
 									"RX Bytes<br>"\
-									"<input type=\"text\" name=\"w_rxB\" value=\"97701\" readonly><br><br>"\
+									"<input type=\"text\" name=\"wi_rxB\" value=\"97701\" readonly><br><br>"\
 									"TX Bytes<br>"\
-									"<input type=\"text\" name=\"w_txB\" value=\"69865\" readonly><br><br>"\
+									"<input type=\"text\" name=\"wi_txB\" value=\"69865\" readonly><br><br>"\
 									"RX Packets<br>"\
-									"<input type=\"text\" name=\"w_rxP\" value=\"1016\" readonly><br><br>"\
+									"<input type=\"text\" name=\"wi_rxP\" value=\"1016\" readonly><br><br>"\
 									"TX Packets<br>"\
-									"<input type=\"text\" name=\"w_txP\" value=\"724\" readonly><br><br>"\
+									"<input type=\"text\" name=\"wi_txP\" value=\"724\" readonly><br><br>"\
 									"RX Dropped Packets<br>"\
-									"<input type=\"text\" name=\"w_rxDP\" value=\"0\" readonly><br><br>"\
+									"<input type=\"text\" name=\"wi_rxDP\" value=\"0\" readonly><br><br>"\
 									"TX Dropped Packets<br>"\
-									"<input type=\"text\" name=\"w_txDP\" value=\"0\" readonly><br><br>"\
+									"<input type=\"text\" name=\"wi_txDP\" value=\"0\" readonly><br><br>"\
 									"RX CRC Errors<br>"\
-									"<input type=\"text\" name=\"w_rxCRC\" value=\"0\" readonly><br>"\
+									"<input type=\"text\" name=\"wi_rxCRC\" value=\"0\" readonly><br>"\
 								"</fieldset>"\
 							"</form>"\
 						"</div>"\
@@ -1400,17 +1400,17 @@ uint8_t interfaceCreate_Display_OpenFlow(void)
 					"<fieldset>"\
 						"<legend>OpenFlow</legend>"\
 						"Status:<br>"\
-						"<input type=\"text\" name=\"w_ofStatus\" value=\"%s\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_ofStatus\" value=\"%s\" readonly><br><br>"\
 						"Version:<br>"\
-						"<input type=\"text\" name=\"w_ofVer\" value=\"%s\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_ofVer\" value=\"%s\" readonly><br><br>"\
 						"Tables:<br>"\
-						"<input type=\"text\" name=\"w_ofTab\" value=\"%d\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_ofTab\" value=\"%d\" readonly><br><br>"\
 						"Flows:<br>"\
-						"<input type=\"text\" name=\"w_ofFlows\" value=\"%d\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_ofFlows\" value=\"%d\" readonly><br><br>"\
 						"Table Lookups:<br>"\
-						"<input type=\"text\" name=\"w_ofLk\" value=\"%d\" readonly><br><br>"\
+						"<input type=\"text\" name=\"wi_ofLk\" value=\"%d\" readonly><br><br>"\
 						"Table Matches:<br>"\
-						"<input type=\"text\" name=\"w_ofMatch\" value=\"%d\" readonly><br>"\
+						"<input type=\"text\" name=\"wi_ofMatch\" value=\"%d\" readonly><br>"\
 					"</fieldset>"\
 				"</form>"\
 			"</body>"\
@@ -1566,15 +1566,15 @@ uint8_t interfaceCreate_Config_Network(void)
 		"<fieldset>"\
 		"<legend>Connection</legend>"\
 		"Name:<br>"\
-		"<input type=\"text\" name=\"w_deviceName\" value=\"%s\"><br><br>"\
+		"<input type=\"text\" name=\"wi_deviceName\" value=\"%s\"><br><br>"\
 		"MAC Address:<br>"\
-		"<input type=\"text\" name=\"w_macAddress\" value=\"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X\"><br><br>"\
+		"<input type=\"text\" name=\"wi_macAddress\" value=\"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X\"><br><br>"\
 		"IP Address:<br>"\
-		"<input type=\"text\" name=\"w_ipAddress\" value=\"%d.%d.%d.%d\"><br><br>"\
+		"<input type=\"text\" name=\"wi_ipAddress\" value=\"%d.%d.%d.%d\"><br><br>"\
 		"Netmask:<br>"\
-		"<input type=\"text\" name=\"w_netmask\" value=\"%d.%d.%d.%d\"><br><br>"\
+		"<input type=\"text\" name=\"wi_netmask\" value=\"%d.%d.%d.%d\"><br><br>"\
 		"Gateway:<br>"\
-		"<input type=\"text\" name=\"w_gateway\" value=\"%d.%d.%d.%d\"><br><br>"\
+		"<input type=\"text\" name=\"wi_gateway\" value=\"%d.%d.%d.%d\"><br><br>"\
 		"<input type=\"submit\" value=\"Save\">"\
 		"<input type=\"reset\" value=\"Cancel\">"\
 		"</fieldset>"\
@@ -1604,6 +1604,8 @@ uint8_t interfaceCreate_Config_Network(void)
 */
 uint8_t interfaceCreate_Config_VLANs(void)
 {
+	int delRow = 0;
+	
 	// Opening tags, and base table
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
@@ -1631,7 +1633,7 @@ uint8_t interfaceCreate_Config_VLANs(void)
 				"<p>"\
 				"<h2>Virtual LAN Configuration</h2>"\
 				"</p>"\
-				"<form style=\"width: 400px\" action=\"save_of\" method=\"post\">"\
+				"<form style=\"width: 400px\" action=\"save_vlan\" method=\"post\">"\
 					"<fieldset>"\
 					"<legend>VLANs</legend>"\
 					"<table border=\"1\">"\
@@ -1651,36 +1653,38 @@ uint8_t interfaceCreate_Config_VLANs(void)
 		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
 	}
 	
-	// Dynamic rows
+	// Dynamic row
 	strncat(shared_buffer,\
 					"<tr>"\
 						"<td>%%d</td>"\
 						"<td>%%s</td>"\
 						"<td>%%s</td>"\
 						"<td>"\
-						"<form action=\"del1\" method=\"post\">"\
-							"<button name=\"btn\" value=\"del2\">Delete</button>"\
-						"</form>"\
+	, (SHARED_BUFFER_LEN - strlen(shared_buffer) - 1));
+	
+	// Name delete button
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+							"<button name=\"btn\" value=\"btn_del%d\">Delete</button>"\
 						"</td>"\
 					"</tr>"\
-	, (SHARED_BUFFER_LEN - strlen(shared_buffer) - 1));
+					, delRow);
+	
+	delRow++;
 
 	// Final row (input form & ADD button), and closing tags
 	strncat(shared_buffer,\
 					"<tr>"\
 						"<td>"\
-							"<input type=\"text\" name=\"w_vlID\" size=\"5\">"\
+							"<input type=\"text\" name=\"wi_vlID\" size=\"5\">"\
 						"</td>"\
 						"<td>"\
-							"<input type=\"text\" name=\"w_vlName\" size=\"5\">"\
+							"<input type=\"text\" name=\"wi_vlName\" size=\"5\">"\
 						"</td>"\
 						"<td>"\
-							"<input type=\"text\" name=\"w_vlType\" size=\"5\">"\
+							"<input type=\"text\" name=\"wi_vlType\" size=\"5\">"\
 						"</td>"\
 						"<td>"\
-							"<form action=\"btn_add\" method=\"post\">"\
-								"<button style=\"width:54px\" name=\"btn\" value=\"btn_add\" size=\"10\">Add</button>"\
-							"</form>"\
+							"<button style=\"width:54px\" name=\"btn\" value=\"btn_add\" size=\"10\">Add</button>"\
 						"</td>"\
 					"</tr>"\
 					"</table>"\
@@ -1729,21 +1733,21 @@ uint8_t interfaceCreate_Config_OpenFlow(void)
 					"<fieldset>"\
 						"<legend>OpenFlow</legend>"\
 						"Controller IP:<br>"\
-						"<input type=\"text\" name=\"w_ofIP\" value=\"%%s\"><br><br>"\
+						"<input type=\"text\" name=\"wi_ofIP\" value=\"%%s\"><br><br>"\
 						"Controller Port:<br>"\
-						"<input type=\"text\" name=\"w_ofPort\" value=\"%%s\"><br><br>"\
+						"<input type=\"text\" name=\"wi_ofPort\" value=\"%%s\"><br><br>"\
 						"OpenFlow Status:<br>"\
-						"<select name=\"w_ofStatus\">"\
+						"<select name=\"wi_ofStatus\">"\
 							"<option          value=\"Enable\">Enabled</option>"\
 							"<option          value=\"Disable\">Disabled</option>"\
 						"</select><br><br>"\
 						"Failstate:<br>"\
-						"<select name=\"w_failstate\">"\
+						"<select name=\"wi_failstate\">"\
 							"<option          value=\"0\">Secure</option>"\
 							"<option          value=\"1\">Safe</option>"\
 						"</select><br><br>"\
 						"OpenFlow Version:<br>"\
-						"<select name=\"w_ofVer\">"\
+						"<select name=\"wi_ofVer\">"\
 							"<option value=\"0\">Auto</option>"\
 							"<option value=\"1\">1.0</option>"\
 							"<option value=\"4\">1.3</option>"\
