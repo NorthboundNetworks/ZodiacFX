@@ -602,7 +602,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				memset(&reset_config.vlan_list, 0, sizeof(struct virtlan)* MAX_VLANS); // Clear vlan array
 
 				// Config VLAN 100
-				sprintf(&reset_config.vlan_list[0].cVlanName, "Openflow");	// Vlan name
+				sprintf(&reset_config.vlan_list[0].cVlanName, "OpenFlow");	// Vlan name
 				reset_config.vlan_list[0].portmap[0] = 1;		// Assign port 1 to this vlan
 				reset_config.vlan_list[0].portmap[1] = 1;		// Assign port 2 to this vlan
 				reset_config.vlan_list[0].portmap[2] = 1;		// Assign port 3 to this vlan
@@ -1396,7 +1396,7 @@ uint8_t interfaceCreate_Display_OpenFlow(void)
 				"<p>"\
 					"<h2>OpenFlow Information</h2>"\
 				"</p>"\
-				"<form style=\"width: 200px\" action=\"save_of\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes.\n\nPress the restart button on the top right for your changes to take effect.');\">"\
+				"<form style=\"width: 200px\" action=\"save_none\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes.\n\nPress the restart button on the top right for your changes to take effect.');\">"\
 					"<fieldset>"\
 						"<legend>OpenFlow</legend>"\
 						"Status:<br>"\
@@ -1604,10 +1604,12 @@ uint8_t interfaceCreate_Config_Network(void)
 */
 uint8_t interfaceCreate_Config_VLANs(void)
 {
+	int x;
 	int delRow = 0;
+	char wi_vlType[10] = "";
 	
 	// Opening tags, and base table
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -1624,8 +1626,10 @@ uint8_t interfaceCreate_Config_VLANs(void)
 				"border: 1px solid black;"\
 				"width: 100%;"\
 			"}"\
-			"td {"\
+			"td, th {"\
 				"height: 25px;"\
+				"padding-left: 5px;"\
+				"padding-right: 5px;"\
 			"}"\
 			"</style>"\
 			"</head>"\
@@ -1633,7 +1637,7 @@ uint8_t interfaceCreate_Config_VLANs(void)
 				"<p>"\
 				"<h2>Virtual LAN Configuration</h2>"\
 				"</p>"\
-				"<form style=\"width: 400px\" action=\"save_vlan\" method=\"post\">"\
+				"<form style=\"width: 405px\" action=\"save_vlan\" method=\"post\">"\
 					"<fieldset>"\
 					"<legend>VLANs</legend>"\
 					"<table border=\"1\">"\
@@ -1643,36 +1647,43 @@ uint8_t interfaceCreate_Config_VLANs(void)
 					"<th>Type</th>"\
 					"<th>Options</th>"\
 					"</tr>"\
-					
-	) < SHARED_BUFFER_LEN)
-	{
-		TRACE("http.c: VLAN base written to buffer");
-	}
-	else
-	{
-		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
-	}
+	);
 	
 	// Dynamic row
-	strncat(shared_buffer,\
-					"<tr>"\
-						"<td>%%d</td>"\
-						"<td>%%s</td>"\
-						"<td>%%s</td>"\
-						"<td>"\
-	, (SHARED_BUFFER_LEN - strlen(shared_buffer) - 1));
-	
-	// Name delete button
-	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-							"<button name=\"btn\" value=\"btn_del%d\">Delete</button>"\
-						"</td>"\
-					"</tr>"\
-					, delRow);
-	
-	delRow++;
 
+	for (x=0;x<MAX_VLANS;x++)
+	{
+		if (Zodiac_Config.vlan_list[x].uActive == 1)
+		{
+			if (Zodiac_Config.vlan_list[x].uVlanType == 0)
+			{
+				snprintf(wi_vlType, 10, "Undefined");
+			}
+			else if (Zodiac_Config.vlan_list[x].uVlanType == 1)
+			{
+				snprintf(wi_vlType, 10, "OpenFlow");
+			}
+			else if (Zodiac_Config.vlan_list[x].uVlanType == 2)
+			{			
+				snprintf(wi_vlType, 10, "Native");
+			}
+	
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+							"<tr>"\
+								"<td>%d</td>"\
+								"<td>%s</td>"\
+								"<td>%s</td>"\
+								"<td>"\
+									"<button style=\"width:65px\" name=\"btn\" value=\"btn_del%d\">Delete</button>"\
+								"</td>"\
+							"</tr>"\
+							, Zodiac_Config.vlan_list[x].uVlanID, Zodiac_Config.vlan_list[x].cVlanName, wi_vlType, delRow);
+			delRow++;
+		}
+	}
+			
 	// Final row (input form & ADD button), and closing tags
-	strncat(shared_buffer,\
+	if(snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 					"<tr>"\
 						"<td>"\
 							"<input type=\"text\" name=\"wi_vlID\" size=\"5\">"\
@@ -1684,7 +1695,7 @@ uint8_t interfaceCreate_Config_VLANs(void)
 							"<input type=\"text\" name=\"wi_vlType\" size=\"5\">"\
 						"</td>"\
 						"<td>"\
-							"<button style=\"width:54px\" name=\"btn\" value=\"btn_add\" size=\"10\">Add</button>"\
+							"<button style=\"width:65px\" name=\"btn\" value=\"btn_add\" size=\"10\">Add</button>"\
 						"</td>"\
 					"</tr>"\
 					"</table>"\
@@ -1692,15 +1703,14 @@ uint8_t interfaceCreate_Config_VLANs(void)
 			"</form>"\
 			"</body>"\
 		"</html>"\
-	, (SHARED_BUFFER_LEN - strlen(shared_buffer) - 1));
-	
-	if(strlen(shared_buffer) < (SHARED_BUFFER_LEN - 1))
+		) < SHARED_BUFFER_LEN)
 	{
-		return 1;	
+		TRACE("http.c: VLAN base written to buffer");
+		return 1;
 	}
 	else
 	{
-		// If second last element has been written to, the page has likely failed to fully write.
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
 		return 0;
 	}
 }
