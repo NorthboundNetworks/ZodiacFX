@@ -359,7 +359,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						http_msg[i] = pdat[i];	// Store value of element
 						i++;
 					}
-					if(pdat[i+1] == 'w')
+					if(pdat[i+1] == 'w')	// Check that the next parameter directly follows the "&" at end of data
 					{
 						uint8_t namelen = strlen(http_msg);
 						if (namelen > 15 ) namelen = 15; // Make sure name is less then 16 characters
@@ -669,25 +669,148 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					int num = -1;
 					pdat += (strlen("btn_del"));	// Data format: btn=btn_del[number]
 					
-					num = atoi(pdat[0]);
+					num = pdat[0] - '0';	// Convert single char element to int
 					
-					if(num >= 0 && num < MAX_VLANS)
+					TRACE("http.c: deleting element %d in vlan list", num);
+					
+					// Table row must be mapped to the ACTIVE VLANs
+					i = 0;				// for stepping through the vlan list
+					uint8_t ctr = 0;	// for mapping active items & checking against desired delete
+					uint8_t done = 0;	// Break once the correct element is found
+					while(i >= 0 && i < MAX_VLANS && !done)
 					{
-						// Delete existing VLAN
-						Zodiac_Config.vlan_list[num].uActive = 0;
-						Zodiac_Config.vlan_list[num].uVlanType = 0;
-						Zodiac_Config.vlan_list[num].uTagged = 0;
-						Zodiac_Config.vlan_list[num].uVlanID = 0;
+						// Check if vlan is active
+						if(Zodiac_Config.vlan_list[i].uActive == 1)
+						{
+							// Check if this is the element to be deleted
+							if(ctr == num)
+							{
+								// Delete existing VLAN
+								Zodiac_Config.vlan_list[i].uActive = 0;
+								Zodiac_Config.vlan_list[i].uVlanType = 0;
+								Zodiac_Config.vlan_list[i].uTagged = 0;
+								Zodiac_Config.vlan_list[i].uVlanID = 0;
+								done = 1;
+							}
+							else
+							{
+								ctr++;
+							}
+						}
+						i++;
 					}
 				}
 				else if(strcmp(http_msg,"btn_add") == 0)
 				{
-					// Add new VLAN
+					int vlID = 0;
+					char vlName[16] = "";
+					int vlType = 0;
 					
+					// Find ID input	
+					memset(&http_msg, 0, sizeof(http_msg));		
+					pdat = strstr(http_payload, "wi_vlID");
+					if(pdat != NULL)	// Check that element exists
+					{
+						pdat += (strlen("wi_vlID")+1);	// Data format: wi_vlID=(ID)
+					
+						i = 0;
+						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+						{
+							http_msg[i] = pdat[i];	// Store value of element
+							i++;
+						}
+						if(pdat[i+1] == 'w' && strlen(http_msg))	// Check to make sure data follows
+						{
+							vlID = atoi(http_msg);
+							TRACE("http.c: VLAN ID: %d", vlID);
+						}
+						else
+						{
+							TRACE("http.c: invalid VLAN ID input");
+						}
+					}
+					else
+					{
+						TRACE("http.c: no VLAN ID found");
+					}
+				
+					// Find VLAN name input
+					pdat = strstr(http_payload, "wi_vlName");
+					if(pdat != NULL)	// Check that element exists
+					{
+						pdat += (strlen("wi_vlName")+1);	// Data format: wi_vlName=(Name)
+					
+						i = 0;
+						while(i < 15 && (pdat[i] != '&'))
+						{
+							vlName[i] = pdat[i];	// Store value of element
+							i++;
+						}
+						if(pdat[i+1] == 'w' && strlen(vlName))	// Check to make sure data follows
+						{
+							TRACE("http.c: VLAN Name: %s", vlName);
+						}
+						else
+						{
+							TRACE("http.c: invalid VLAN Name input");
+						}
+					}
+					else
+					{
+						TRACE("http.c: no VLAN Name found");
+					}
+					
+					// Find VLAN type input	
+					pdat = strstr(http_payload, "wi_vlType");
+					if(pdat != NULL)	// Check that element exists
+					{
+						pdat += (strlen("wi_vlType")+1);	// Data format: wi_vlType=(Type)
+						vlType = pdat[0] - '0';		// Convert single char element to int
+					}
+					else
+					{
+						TRACE("http.c: no VLAN Type found");
+					}
+					
+					// Add new VLAN
+					int v=0;
+					uint8_t done = 0;
+					while(v < MAX_VLANS && !done)
+					{
+						if(Zodiac_Config.vlan_list[v].uActive != 1)
+						{
+							Zodiac_Config.vlan_list[v].uActive = 1;
+							Zodiac_Config.vlan_list[v].uVlanID = vlID;
+							sprintf(Zodiac_Config.vlan_list[v].cVlanName, vlName, strlen(vlName));
+							Zodiac_Config.vlan_list[v].uVlanType = vlType;
+							TRACE("http.c: added VLAN %d '%s', type %d",Zodiac_Config.vlan_list[v].uVlanID, Zodiac_Config.vlan_list[v].cVlanName, Zodiac_Config.vlan_list[v].uVlanType);
+							done = 1;
+						}
+						v++;
+					}
+					if(!done)
+					{
+						TRACE("http.c: maximum VLAN limit reached");
+					}
 				}
 				else
 				{
 					TRACE("http.c: unhandled button in Config: VLANs")
+				}
+				
+				// Save configuration to EEPROM
+				eeprom_write();
+				TRACE("http.c: config written to EEPROM");
+				
+				// Send updated config page
+				if(interfaceCreate_Config_VLANs())
+				{
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 				}
 			}
 			else
@@ -1736,7 +1859,10 @@ uint8_t interfaceCreate_Config_VLANs(void)
 							"<input type=\"text\" name=\"wi_vlName\" size=\"5\">"\
 						"</td>"\
 						"<td>"\
-							"<input type=\"text\" name=\"wi_vlType\" size=\"5\">"\
+							"<select name=\"wi_vlType\">"\
+								"<option value=\"1\">OpenFlow</option>"\
+								"<option value=\"2\">Native</option>"\
+							"</select>"\
 						"</td>"\
 						"<td>"\
 							"<button style=\"width:65px\" name=\"btn\" value=\"btn_add\" size=\"10\">Add</button>"\
