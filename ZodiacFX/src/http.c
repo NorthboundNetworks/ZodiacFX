@@ -41,6 +41,7 @@
 #include "openflow/openflow.h"
 #include "eeprom.h"
 #include "flash.h"
+#include "switch.h"
 
 // External Variables
 extern int totaltime;
@@ -131,7 +132,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			http_msg[i] = http_payload[i];
 			i++;
 		}
-		TRACE("http.c: %s method received", http_msg)
+		TRACE("http.c: %s method received", http_msg);
 	
 		if(strcmp(http_msg,"GET") == 0)
 		{			
@@ -362,7 +363,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					if(pdat[i+1] == 'w')	// Check that the next parameter directly follows the "&" at end of data
 					{
 						uint8_t namelen = strlen(http_msg);
-						if (namelen > 15 ) namelen = 15; // Make sure name is less then 16 characters
+						if (namelen > 15 ) namelen = 15; // Make sure name is less than 16 characters
 						sprintf(Zodiac_Config.device_name, http_msg, namelen);
 						TRACE("http.c: device name set to '%s'",Zodiac_Config.device_name);
 					}
@@ -813,6 +814,171 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 				}
 			}
+			else if(strcmp(http_msg,"save_of") == 0)
+			{
+				// Controller IP Address
+				memset(&http_msg, 0, sizeof(http_msg));
+				pdat = strstr(http_payload, "wi_ofIP");
+				if(pdat != NULL)	// Check that element exists
+				{
+					pdat += (strlen("wi_ofIP")+1);	// Data format: wi_ofIP=(IP)
+									
+					i = 0;
+					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+					{
+						http_msg[i] = pdat[i];	// Store value of element
+						i++;
+					}
+					if(pdat[i+1] == 'w')
+					{
+						int oc1,oc2,oc3,oc4;
+						if (strlen(http_msg) > 15 )
+						{
+							TRACE("http.c: incorrect IP format");
+							return;
+						}
+						sscanf(http_msg, "%d.%d.%d.%d", &oc1,&oc2,&oc3,&oc4);
+						Zodiac_Config.OFIP_address[0] = oc1;
+						Zodiac_Config.OFIP_address[1] = oc2;
+						Zodiac_Config.OFIP_address[2] = oc3;
+						Zodiac_Config.OFIP_address[3] = oc4;
+						TRACE("http.c: openflow server address set to %d.%d.%d.%d" ,\
+							Zodiac_Config.OFIP_address[0], Zodiac_Config.OFIP_address[1],\
+							Zodiac_Config.OFIP_address[2], Zodiac_Config.OFIP_address[3]\
+								);
+					}
+					else
+					{
+						TRACE("http.c: \"&\" cannot be used in form");
+					}
+				}
+				
+				// Controller Port
+				memset(&http_msg, 0, sizeof(http_msg));
+				pdat = strstr(http_payload, "wi_ofPort");
+				if(pdat != NULL)	// Check that element exists
+				{
+					pdat += (strlen("wi_ofPort")+1);	// Data format: wi_ofPort=(Port)
+					
+					i = 0;
+					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+					{
+						http_msg[i] = pdat[i];	// Store value of element
+						i++;
+					}
+					if(pdat[i+1] == 'w')
+					{
+						Zodiac_Config.OFPort = atoi(http_msg);
+						TRACE("OpenFlow Port set to %d" , Zodiac_Config.OFPort);
+					}
+					else
+					{
+						TRACE("http.c: \"&\" cannot be used in form");
+					}
+				}
+				
+				// OpenFlow Status
+				memset(&http_msg, 0, sizeof(http_msg));
+				pdat = strstr(http_payload, "wi_ofStatus");
+				if(pdat != NULL)	// Check that element exists
+				{
+					pdat += (strlen("wi_ofStatus")+1);	// Data format: wi_ofPort=(Port)
+					
+					i = 0;
+					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+					{
+						http_msg[i] = pdat[i];	// Store value of element
+						i++;
+					}
+					
+					if(strcmp(http_msg,"Enable") == 0)
+					{
+						Zodiac_Config.OFEnabled = OF_ENABLED;
+						enableOF();
+						TRACE("http.c: openflow enabled");
+					}
+					else if(strcmp(http_msg,"Disable") == 0)
+					{
+						Zodiac_Config.OFEnabled = OF_DISABLED;
+						disableOF();
+						TRACE("http.c: openflow disabled");
+					}
+					else
+					{
+						TRACE("http.c: unhandled openflow status");
+					}
+				}
+				
+				// OpenFlow Status
+				pdat = strstr(http_payload, "wi_failstate");
+				if(pdat != NULL)	// Check that element exists
+				{
+					pdat += (strlen("wi_failstate")+1);	// Data format: wi_failstate=(state)
+					
+					int failstate = 0;
+					failstate = pdat[0] - '0';	// Convert single char element to int
+					
+					if(failstate == 0)
+					{
+						Zodiac_Config.failstate = 0;
+						TRACE("http.c: failstate set to Secure (0)");
+					}
+					else if(failstate == 1)
+					{
+						Zodiac_Config.failstate = 1;
+						TRACE("http.c: failstate set to Safe (1)");
+					}
+					else
+					{
+						TRACE("http.c: unhandled failstate");
+					}
+				}
+				
+				// OpenFlow Force Version
+				pdat = strstr(http_payload, "wi_ofVer");
+				if(pdat != NULL)	// Check that element exists
+				{
+					pdat += (strlen("wi_ofVer")+1);	// Data format: wi_ofVer=(version)
+					
+					int forceVer = 0;
+					forceVer = pdat[0] - '0';	// Convert single char element to int
+					
+					if(forceVer == 0)
+					{
+						Zodiac_Config.of_version = 0;
+						TRACE("http.c: force openflow version set to auto (0)");
+					}
+					else if(forceVer == 1)
+					{
+						Zodiac_Config.of_version = 1;
+						TRACE("http.c: force openflow version set to 1.0 (1)");
+					}
+					else if(forceVer == 4)
+					{
+						Zodiac_Config.of_version = 4;
+						TRACE("http.c: force openflow version set to 1.3 (4)");
+					}
+					else
+					{
+						TRACE("http.c: unhandled openflow version");
+					}
+				}
+				
+				// Save configuration to EEPROM
+				eeprom_write();
+				TRACE("http.c: config written to EEPROM");
+				
+				// Send updated config page
+				if(interfaceCreate_Config_OpenFlow())
+				{
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+				}
+			}
 			else
 			{
 				TRACE("http.c: unknown request: \"%s\"", http_msg);
@@ -820,7 +986,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		}
 		else
 		{
-			TRACE("http.c: WARNING: unknown HTTP method received")
+			TRACE("http.c: WARNING: unknown HTTP method received");
 		}
 				
 	}
@@ -860,7 +1026,7 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 		// Check if more data needs to be written
 		if(out == true)
 		{
-			TRACE("http.c: calling tcp_output & closing connection")
+			TRACE("http.c: calling tcp_output & closing connection");
 			if (err == ERR_OK) tcp_output(pcb);
 			tcp_close(pcb);
 		}
@@ -1720,7 +1886,7 @@ uint8_t interfaceCreate_Config_Network(void)
 			"overflow: auto;"\
 			"font-family:Sans-serif;"\
 			"line-height: 1.2em;"\
-			"font-size: 18px;"\
+			"font-size: 17px;"\
 			"margin-left: 20px;"\
 		"}"\
 		"</style>"\
@@ -1890,8 +2056,8 @@ uint8_t interfaceCreate_Config_VLANs(void)
 *
 */
 uint8_t interfaceCreate_Config_OpenFlow(void)
-{
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+{	
+	snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -1913,41 +2079,108 @@ uint8_t interfaceCreate_Config_OpenFlow(void)
 					"<fieldset>"\
 						"<legend>OpenFlow</legend>"\
 						"Controller IP:<br>"\
-						"<input type=\"text\" name=\"wi_ofIP\" value=\"%%s\"><br><br>"\
+						"<input type=\"text\" name=\"wi_ofIP\" value=\"%d.%d.%d.%d\"><br><br>"\
 						"Controller Port:<br>"\
-						"<input type=\"text\" name=\"wi_ofPort\" value=\"%%s\"><br><br>"\
+						"<input type=\"text\" name=\"wi_ofPort\" value=\"%d\"><br><br>"\
+			, Zodiac_Config.OFIP_address[0], Zodiac_Config.OFIP_address[1]
+			, Zodiac_Config.OFIP_address[2], Zodiac_Config.OFIP_address[3]
+			, Zodiac_Config.OFPort
+		);
+		
+		if(Zodiac_Config.OFEnabled == OF_ENABLED)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 						"OpenFlow Status:<br>"\
 						"<select name=\"wi_ofStatus\">"\
-							"<option          value=\"Enable\">Enabled</option>"\
-							"<option          value=\"Disable\">Disabled</option>"\
+							"<option value=\"Enable\">Enabled</option>"\
+							"<option value=\"Disable\">Disabled</option>"\
 						"</select><br><br>"\
+			);
+		}
+		else
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+						"OpenFlow Status:<br>"\
+						"<select name=\"wi_ofStatus\">"\
+							"<option value=\"Enable\">Enabled</option>"\
+							"<option selected value=\"Disable\">Disabled</option>"\
+						"</select><br><br>"\
+					);
+		}
+		
+		if(Zodiac_Config.failstate == 0)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 						"Failstate:<br>"\
 						"<select name=\"wi_failstate\">"\
-							"<option          value=\"0\">Secure</option>"\
-							"<option          value=\"1\">Safe</option>"\
+							"<option value=\"0\">Secure</option>"\
+							"<option value=\"1\">Safe</option>"\
 						"</select><br><br>"\
+			);
+		}
+		else
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+						"Failstate:<br>"\
+						"<select name=\"wi_failstate\">"\
+							"<option value=\"0\">Secure</option>"\
+							"<option selected value=\"1\">Safe</option>"\
+						"</select><br><br>"\
+					);
+		}
+
+		if(Zodiac_Config.of_version == 1)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+						"OpenFlow Version:<br>"\
+						"<select name=\"wi_ofVer\">"\
+							"<option value=\"0\">Auto</option>"\
+							"<option selected value=\"1\">1.0</option>"\
+							"<option value=\"4\">1.3</option>"\
+						"</select><br><br>"\
+					);
+		}
+		else if(Zodiac_Config.of_version == 4)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+						"OpenFlow Version:<br>"\
+						"<select name=\"wi_ofVer\">"\
+							"<option value=\"0\">Auto</option>"\
+							"<option value=\"1\">1.0</option>"\
+							"<option selected value=\"4\">1.3</option>"\
+						"</select><br><br>"\
+					);
+		}
+		else
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 						"OpenFlow Version:<br>"\
 						"<select name=\"wi_ofVer\">"\
 							"<option value=\"0\">Auto</option>"\
 							"<option value=\"1\">1.0</option>"\
 							"<option value=\"4\">1.3</option>"\
 						"</select><br><br>"\
+					);
+		}
+		
+		// Final row (input form buttons), and closing tags
+		if(snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 						"<input type=\"submit\" value=\"Save\">"\
 						"<input type=\"reset\" value=\"Cancel\">"\
 					"</fieldset>"\
 				"</form>"\
 			"</body>"\
 		"</html>"\
-			) < SHARED_BUFFER_LEN)
-	{
-		TRACE("http.c: html written to buffer");
-		return 1;
-	}
-	else
-	{
-		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
-		return 0;
-	}
+		) < SHARED_BUFFER_LEN)
+		{
+			TRACE("http.c: OpenFlow Config page written to buffer");
+			return 1;
+		}
+		else
+		{
+			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+			return 0;
+		}
 }
 
 /*
