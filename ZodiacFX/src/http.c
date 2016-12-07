@@ -30,6 +30,7 @@
 
 #include <asf.h>
 #include <string.h>
+#include <inttypes.h>
 #include "http.h"
 #include "lwip/ip_addr.h"
 #include "lwip/tcp.h"
@@ -49,11 +50,20 @@ extern int32_t ul_temp;
 extern struct zodiac_config Zodiac_Config;
 extern uint8_t port_status[4];
 extern uint32_t uid_buf[4];	// Unique identifier
-extern struct table_counter table_counters[MAX_TABLES];
-extern int iLastFlow;
 extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
+
+extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
+extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
+extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
+extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
+extern struct flows_counter flow_counters[MAX_FLOWS_13];
+extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_13];
+extern int iLastFlow;
+extern struct ofp10_port_stats phys10_port_stats[4];
+extern struct ofp13_port_stats phys13_port_stats[4];
+extern struct table_counter table_counters[MAX_TABLES];
 
 // Local Variables
 struct tcp_pcb *http_pcb;
@@ -79,6 +89,17 @@ uint8_t interfaceCreate_Config_OpenFlow(void);
 uint8_t interfaceCreate_About(void);
 
 bool reset_required;
+
+/*
+*	Converts a 64bit value from host to network format
+*
+*	@param n - value to convert
+*
+*/
+static inline uint64_t (htonll)(uint64_t n)
+{
+	return HTONL(1) == 1 ? n : ((uint64_t) HTONL(n) << 32) | HTONL(n >> 32);
+}
 
 /*
 *	HTTP initialization function
@@ -641,6 +662,31 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				udc_detach();	// Detach the USB device before restart
 				rstc_start_software_reset(RSTC);	// Software reset
 				while (1);
+			}
+			else if(strcmp(http_msg,"btn_ofNext") == 0)
+			{
+				
+			}
+			else if(strcmp(http_msg,"btn_ofPrev") == 0)
+			{
+				
+			}
+			else if(strcmp(http_msg,"btn_ofClear") == 0)
+			{
+				// Clear the flow table
+				TRACE("http.c: clearing flow table, %d flow deleted.\r\n", iLastFlow);
+				clear_flows();
+
+				// Send updated page
+				if(interfaceCreate_Display_Flows())
+				{
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+				}
 			}
 			else if(strcmp(http_msg,"save_vlan") == 0)
 			{
@@ -1337,7 +1383,6 @@ uint8_t interfaceCreate_Home(void)
 */
 uint8_t interfaceCreate_Display_Home(void)
 {
-	
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
 		"<html>"\
@@ -1767,7 +1812,7 @@ uint8_t interfaceCreate_Display_OpenFlow(void)
 */
 uint8_t interfaceCreate_Display_Flows(void)
 {
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -1786,26 +1831,439 @@ uint8_t interfaceCreate_Display_Flows(void)
 					"<h2>Flows</h2>"\
 				"</p>"\
 				"<pre>"\
-		"Flow 1\n"\
-		"Match:\n"\
-		"Attributes :\n"\
-		"Priority :  Duration :  secs\n"\
-		"Hard Timeout :  secs Idle Timeout :  secs\n"\
-		"Byte Count :  Packet Count : \n"\
-		"Instructions :\n"\
-		"Apply Actions :\n"\
-		"Output : CONTROLLER\n"\
-		"Flow 2\n"\
-		"...\n"\
-		"Flow 3\n"\
-		"...\n"\
+			);
+
+// Begin Flow formatting
+
+int i;
+uint8_t flowLimit;
+struct ofp_action_header * act_hdr;
+
+// Limit flows to fit in shared_buffer
+if(iLastFlow < 6)
+{
+	flowLimit = iLastFlow;
+}
+else
+{
+	flowLimit = 6;
+}
+
+if (iLastFlow > 0)
+{
+	// OpenFlow v1.0 (0x01) Flow Table
+	if( OF_Version == 1)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------------------------------------------------------------------------\r\n");
+		for (i=0;i<flowLimit;i++)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\nFlow %d\r\n",i+1);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer)," Match:\r\n");
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Incoming Port: %d\t\t\tEthernet Type: 0x%.4X\r\n",ntohs(flow_match10[i]->match.in_port), ntohs(flow_match10[i]->match.dl_type));
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t\tDestination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",flow_match10[i]->match.dl_src[0], flow_match10[i]->match.dl_src[1], flow_match10[i]->match.dl_src[2], flow_match10[i]->match.dl_src[3], flow_match10[i]->match.dl_src[4], flow_match10[i]->match.dl_src[5] \
+			, flow_match10[i]->match.dl_dst[0], flow_match10[i]->match.dl_dst[1], flow_match10[i]->match.dl_dst[2], flow_match10[i]->match.dl_dst[3], flow_match10[i]->match.dl_dst[4], flow_match10[i]->match.dl_dst[5]);
+			if (ntohs(flow_match10[i]->match.dl_vlan) == 0xffff)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  VLAN ID: N/A\t\t\t\tVLAN Priority: N/A\r\n");
+				} else {
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  VLAN ID: %d\t\t\t\tVLAN Priority: 0x%x\r\n",ntohs(flow_match10[i]->match.dl_vlan), flow_match10[i]->match.dl_vlan_pcp);
+			}
+			if ((ntohs(flow_match10[i]->match.dl_type) == 0x0800) || (ntohs(flow_match10[i]->match.dl_type) == 0x8100)) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  IP Protocol: %d\t\t\tIP ToS Bits: 0x%.2X\r\n",flow_match10[i]->match.nw_proto, flow_match10[i]->match.nw_tos);
+			if (flow_match10[i]->match.nw_proto == 7 || flow_match10[i]->match.nw_proto == 16)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  TCP Source Address: %d.%d.%d.%d\r\n",ip4_addr1(&flow_match10[i]->match.nw_src), ip4_addr2(&flow_match10[i]->match.nw_src), ip4_addr3(&flow_match10[i]->match.nw_src), ip4_addr4(&flow_match10[i]->match.nw_src));
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  TCP Destination Address: %d.%d.%d.%d\r\n", ip4_addr1(&flow_match10[i]->match.nw_dst), ip4_addr2(&flow_match10[i]->match.nw_dst), ip4_addr3(&flow_match10[i]->match.nw_dst), ip4_addr4(&flow_match10[i]->match.nw_dst));
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  TCP/UDP Source Port: %d\t\tTCP/UDP Destination Port: %d\r\n",ntohs(flow_match10[i]->match.tp_src), ntohs(flow_match10[i]->match.tp_dst));
+			}
+			if (flow_match10[i]->match.nw_proto == 1)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ICMP Type: %d\t\t\t\tICMP Code: %d\r\n",ntohs(flow_match10[i]->match.tp_src), ntohs(flow_match10[i]->match.tp_dst));
+			}
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Wildcards: 0x%.8x\t\t\tCookie: 0x%" PRIx64 "\r\n",ntohl(flow_match10[i]->match.wildcards), htonll(flow_match10[i]->cookie));
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r Attributes:\r\n");
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Priority: %d\t\t\tDuration: %d secs\r\n",ntohs(flow_match10[i]->priority), (totaltime/2) - flow_counters[i].duration);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match10[i]->hard_timeout), ntohs(flow_match10[i]->idle_timeout));
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n Actions:\r\n");
+			for(int q=0;q<4;q++)
+			{
+				if(q == 0) act_hdr = flow_actions10[i]->action1;
+				if(q == 1) act_hdr = flow_actions10[i]->action2;
+				if(q == 2) act_hdr = flow_actions10[i]->action3;
+				if(q == 3) act_hdr = flow_actions10[i]->action4;
+
+				if(act_hdr->len == 0 && q == 0) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   DROP\r\n"); // No actions = DROP
+
+				if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_OUTPUT) // Output to port action
+				{
+					struct ofp_action_output * action_out = act_hdr;
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Action %d:\r\n",q+1);
+					if (ntohs(action_out->port) <= 255) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Output: %d\r\n", ntohs(action_out->port));
+					if (ntohs(action_out->port) == OFPP_IN_PORT) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Output: IN_PORT\r\n");
+					if (ntohs(action_out->port) == OFPP_FLOOD) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Output: FLOOD\r\n");
+					if (ntohs(action_out->port) == OFPP_ALL) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Output: ALL\r\n");
+					if (ntohs(action_out->port) == OFPP_CONTROLLER) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Output: CONTROLLER\r\n");
+				}
+				if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_VLAN_VID) //
+				{
+					struct ofp_action_vlan_vid *action_vlanid = act_hdr;
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Action %d:\r\n",q+1);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set VLAN ID: %d\r\n", ntohs(action_vlanid->vlan_vid));
+				}
+
+				if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_DL_DST) //
+				{
+					struct ofp_action_dl_addr *action_setdl = act_hdr;
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Action %d:\r\n",q+1);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set Destination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", action_setdl->dl_addr[0],action_setdl->dl_addr[1],action_setdl->dl_addr[2],action_setdl->dl_addr[3],action_setdl->dl_addr[4],action_setdl->dl_addr[5]);
+				}
+				if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_SET_DL_SRC) //
+				{
+					struct ofp_action_dl_addr *action_setdl = act_hdr;
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Action %d:\r\n",q+1);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", action_setdl->dl_addr[0],action_setdl->dl_addr[1],action_setdl->dl_addr[2],action_setdl->dl_addr[3],action_setdl->dl_addr[4],action_setdl->dl_addr[5]);
+				}
+				if(act_hdr->len != 0 && ntohs(act_hdr->type) == OFPAT10_STRIP_VLAN) //
+				{
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Action %d:\r\n",q+1);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Strip VLAN tag\r\n");
+				}
+			}
+		}
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------------------------------------------------------------------------\r\n\n");
+	}
+	// OpenFlow v1.3 (0x04) Flow Table
+	if( OF_Version == 4)
+	{
+		int match_size;
+		int inst_size;
+		int act_size;
+		struct ofp13_instruction *inst_ptr;
+		struct ofp13_instruction_actions *inst_actions;
+		struct oxm_header13 oxm_header;
+		uint8_t oxm_value8;
+		uint16_t oxm_value16;
+		uint32_t oxm_value32;
+		uint8_t oxm_eth[6];
+		uint8_t oxm_ipv4[4];
+		uint16_t oxm_ipv6[8];
+
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------------------------------------------------------------------------\r\n");
+		for (i=0;i<flowLimit;i++)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\nFlow %d\r\n",i+1);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer)," Match:\r\n");
+			match_size = 0;
+
+			while (match_size < (ntohs(flow_match13[i]->match.length)-4))
+			{
+				memcpy(&oxm_header, ofp13_oxm_match[i] + match_size,4);
+				bool has_mask = oxm_header.oxm_field & 1;
+				oxm_header.oxm_field = oxm_header.oxm_field >> 1;
+				switch(oxm_header.oxm_field)
+				{
+					case OFPXMT_OFB_IN_PORT:
+					memcpy(&oxm_value32, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  In Port: %d\r\n",ntohl(oxm_value32));
+					break;
+
+					case OFPXMT_OFB_ETH_DST:
+					memcpy(&oxm_eth, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 6);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Destination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
+					break;
+
+					case OFPXMT_OFB_ETH_SRC:
+					memcpy(&oxm_eth, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 6);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
+					break;
+
+					case OFPXMT_OFB_ETH_TYPE:
+					memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+					if (ntohs(oxm_value16) == 0x0806)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: ARP\r\n");
+					if (ntohs(oxm_value16) == 0x0800)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: IPv4\r\n");
+					if (ntohs(oxm_value16) == 0x86dd)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: IPv6\r\n");
+					if (ntohs(oxm_value16) == 0x8100)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: VLAN\r\n");
+					break;
+
+					case OFPXMT_OFB_IP_PROTO:
+					memcpy(&oxm_value8, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 1);
+					if (oxm_value8 == 1)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  IP Protocol: ICMP\r\n");
+					if (oxm_value8 == 6)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  IP Protocol: TCP\r\n");
+					if (oxm_value8 == 17)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  IP Protocol: UDP\r\n");
+					break;
+
+					case OFPXMT_OFB_IPV4_SRC:
+					if (has_mask)
+					{
+						memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 8);
+						snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Source IP:  %d.%d.%d.%d / %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3], oxm_ipv4[4], oxm_ipv4[5], oxm_ipv4[6], oxm_ipv4[7]);
+						} else {
+						memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+						snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Source IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+					}
+					break;
+
+					case OFPXMT_OFB_IPV4_DST:
+					if (has_mask)
+					{
+						memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 8);
+						snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Destination IP:  %d.%d.%d.%d / %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3], oxm_ipv4[4], oxm_ipv4[5], oxm_ipv4[6], oxm_ipv4[7]);
+						} else {
+						memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+						snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Destination IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+					}
+					break;
+
+					case OFPXMT_OFB_IPV6_SRC:
+					memcpy(&oxm_ipv6, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 16);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Source IP: %.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X\r\n", oxm_ipv6[0], oxm_ipv6[1], oxm_ipv6[2], oxm_ipv6[3], oxm_ipv6[4], oxm_ipv6[5], oxm_ipv6[6], oxm_ipv6[7]);
+					break;
+
+					case OFPXMT_OFB_IPV6_DST:
+					memcpy(&oxm_ipv6, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 16);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Destination IP:  %.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%.4X\r\n", oxm_ipv6[0], oxm_ipv6[1], oxm_ipv6[2], oxm_ipv6[3], oxm_ipv6[4], oxm_ipv6[5], oxm_ipv6[6], oxm_ipv6[7]);
+					break;
+
+					case OFPXMT_OFB_TCP_SRC:
+					memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Source TCP Port: %d\r\n",ntohs(oxm_value16));
+					break;
+
+					case OFPXMT_OFB_TCP_DST:
+					memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Destination TCP Port: %d\r\n",ntohs(oxm_value16));
+					break;
+
+					case OFPXMT_OFB_UDP_SRC:
+					memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Source UDP Port: %d\r\n",ntohs(oxm_value16));
+					break;
+
+					case OFPXMT_OFB_UDP_DST:
+					memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Destination UDP Port: %d\r\n",ntohs(oxm_value16));
+					break;
+
+					case OFPXMT_OFB_VLAN_VID:
+					memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+					if (oxm_value16 != 0) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  VLAN ID: %d\r\n",(ntohs(oxm_value16) - OFPVID_PRESENT));
+					break;
+
+				};
+				match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
+			}
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r Attributes:\r\n");
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Table ID: %d\t\t\t\tCookie:0x%" PRIx64 "\r\n",flow_match13[i]->table_id, htonll(flow_match13[i]->cookie));
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Priority: %d\t\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i]->priority), (totaltime/2) - flow_counters[i].duration);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match13[i]->hard_timeout), ntohs(flow_match13[i]->idle_timeout));
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
+			int lm = (totaltime/2) - flow_counters[i].lastmatch;
+			int hr = lm/3600;
+			int t = lm%3600;
+			int min = t/60;
+			int sec = t%60;
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Last Match: %02d:%02d:%02d\r\n", hr, min, sec);
+			// Print instruction list
+			if (ofp13_oxm_inst[i] != NULL)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r Instructions:\r\n");
+				inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
+				inst_size = ntohs(inst_ptr->len);
+				if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
+				{
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Apply Actions:\r\n");
+					struct ofp13_action_header *act_hdr;
+					act_size = 0;
+					if (inst_size == sizeof(struct ofp13_instruction_actions)) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   DROP \r\n");	// No actions
+					while (act_size < (inst_size - sizeof(struct ofp13_instruction_actions)))
+					{
+						inst_actions  = ofp13_oxm_inst[i] + act_size;
+						act_hdr = &inst_actions->actions;
+						if (htons(act_hdr->type) == OFPAT13_OUTPUT)
+						{
+							struct ofp13_action_output *act_output = act_hdr;
+							if (htonl(act_output->port) < OFPP13_MAX)
+							{
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Output Port: %d\r\n", htonl(act_output->port));
+							} else if (htonl(act_output->port) == OFPP13_IN_PORT)
+							{
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Output: IN_PORT \r\n");
+							} else if (htonl(act_output->port) == OFPP13_FLOOD)
+							{
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Output: FLOOD \r\n");
+							} else if (htonl(act_output->port) == OFPP13_ALL)
+							{
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Output: ALL \r\n");
+							} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
+							{
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Output: CONTROLLER \r\n");
+							}
+							act_output = NULL;
+						}
+
+						if (htons(act_hdr->type) == OFPAT13_SET_FIELD)
+						{
+							struct ofp13_action_set_field *act_set_field = act_hdr;
+							memcpy(&oxm_header, act_set_field->field,4);
+							oxm_header.oxm_field = oxm_header.oxm_field >> 1;
+							switch(oxm_header.oxm_field)
+							{
+								case OFPXMT_OFB_VLAN_VID:
+								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set VLAN ID: %d\r\n",(ntohs(oxm_value16) - OFPVID_PRESENT));
+								break;
+
+								case OFPXMT_OFB_ETH_SRC:
+								memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
+								break;
+
+								case OFPXMT_OFB_ETH_DST:
+								memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set Destination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
+								break;
+
+								case OFPXMT_OFB_ETH_TYPE:
+								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+								if (ntohs(oxm_value16) == 0x0806 )snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set ETH Type: ARP\r\n");
+								if (ntohs(oxm_value16) == 0x0800 )snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set ETH Type: IPv4\r\n");
+								if (ntohs(oxm_value16) == 0x86dd )snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set ETH Type: IPv6\r\n");
+								if (ntohs(oxm_value16) == 0x8100 )snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set ETH Type: VLAN\r\n");
+								break;
+
+								case OFPXMT_OFB_IPV4_SRC:
+								memcpy(&oxm_ipv4, act_set_field->field + sizeof(struct oxm_header13), 4);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set Source IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+								break;
+
+								case OFPXMT_OFB_IP_PROTO:
+								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+								if (oxm_value16 == 1)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set IP Protocol: ICMP\r\n");
+								if (oxm_value16 == 6)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set IP Protocol: TCP\r\n");
+								if (oxm_value16 == 17)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set IP Protocol: UDP\r\n");
+								break;
+
+								case OFPXMT_OFB_IPV4_DST:
+								memcpy(&oxm_ipv4, act_set_field->field + sizeof(struct oxm_header13), 4);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set Destination IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+								break;
+
+								case OFPXMT_OFB_TCP_SRC:
+								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set TCP Source Port:  %d\r\n", ntohs(oxm_value16));
+								break;
+
+								case OFPXMT_OFB_TCP_DST:
+								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set TCP Destination Port:  %d\r\n", ntohs(oxm_value16));
+								break;
+
+								case OFPXMT_OFB_UDP_SRC:
+								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set UDP Source Port:  %d\r\n", ntohs(oxm_value16));
+								break;
+
+								case OFPXMT_OFB_UDP_DST:
+								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set UDP Destination Port:  %d\r\n", ntohs(oxm_value16));
+								break;
+
+								case OFPXMT_OFB_ICMPV4_TYPE:
+								memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set ICMP Type:  %d\r\n", oxm_value8);
+								break;
+
+								case OFPXMT_OFB_ICMPV4_CODE:
+								memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set ICMP Code:  %d\r\n", oxm_value8);
+								break;
+
+								case OFPXMT_OFB_ARP_OP:
+								memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set ARP OP Code:  %d\r\n", ntohs(oxm_value16));
+								break;
+
+								case OFPXMT_OFB_ARP_SPA:
+								memcpy(&oxm_ipv4, act_set_field->field + sizeof(struct oxm_header13), 4);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set ARP Source IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+								break;
+
+								case OFPXMT_OFB_ARP_TPA:
+								memcpy(&oxm_ipv4, act_set_field->field + sizeof(struct oxm_header13), 4);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set ARP Target IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+								break;
+
+								case OFPXMT_OFB_ARP_SHA:
+								memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set ARP Source HA: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
+								break;
+
+								case OFPXMT_OFB_ARP_THA:
+								memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set ARP Target HA: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
+								break;
+
+							};
+						}
+
+						if (htons(act_hdr->type) == OFPAT13_PUSH_VLAN)
+						{
+							struct ofp13_action_push *act_push = act_hdr;
+							snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Push VLAN tag\r\n");
+						}
+
+						if (htons(act_hdr->type) == OFPAT13_POP_VLAN)
+						{
+							snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Pop VLAN tag\r\n");
+						}
+
+						act_size += htons(act_hdr->len);
+					}
+				}
+				// Print goto table instruction
+				if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
+				{
+					struct ofp13_instruction_goto_table *inst_goto_ptr;
+					inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Goto Table: %d\r\n", inst_goto_ptr->table_id);
+					continue;
+				}
+				// Is there more then one instruction?
+				if (ofp13_oxm_inst_size[i] > inst_size)
+				{
+					uint8_t *nxt_inst;
+					nxt_inst = ofp13_oxm_inst[i] + inst_size;
+					inst_ptr = (struct ofp13_instruction *) nxt_inst;
+					inst_size = ntohs(inst_ptr->len);
+					if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
+					{
+						struct ofp13_instruction_goto_table *inst_goto_ptr;
+						inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
+						snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Goto Table: %d\r\n", inst_goto_ptr->table_id);
+					}
+				}
+				} else {
+				// No instructions
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r Instructions:\r\n");
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   DROP \r\n");
+			}
+		}
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------------------------------------------------------------------------\r\n\n");
+	}
+	} else {
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"No Flows installed!\r\n");
+	}
+	
+// End Flow formatting
+
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</pre>"\
-				"<form action=\"btn_ofNext\" method=\"post\">"\
+				/*"<form action=\"btn_ofNext\" method=\"post\">"\
 						"<br><button name=\"btn\" value=\"btn_ofNext\">Next</button>"\
 				"</form>"\
 				"<form action=\"btn_ofPrev\" method=\"post\">"\
 						"<button name=\"btn\" value=\"btn_ofPrev\">Previous</button>"\
-				"</form>"\
+				"</form>"\*/
 				"<form action=\"btn_ofClear\" method=\"post\"  onsubmit=\"return confirm('All flows will be cleared. Do you wish to proceed?');\">"\
 						"<br><button name=\"btn\" value=\"btn_ofClear\">Clear Flows</button>"\
 				"</form>"\
