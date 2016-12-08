@@ -663,7 +663,110 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			}
 			else if(strcmp(http_msg,"save_ports") == 0)
 			{
-			
+				// Save VLAN port associations
+				
+				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+				int port = 0;
+				int x, y;
+				int vlanid;
+				char portID[10];
+				
+				// Search for "wi_pxID"
+				for (x=0;x<MAX_VLANS;x++)
+				{
+					port = x+1;
+					snprintf(portID, 10, "wi_p%dID=", port);
+					pdat = strstr(http_payload, portID);	// Search for element
+					if(pdat != NULL)	// Check that the element exists
+					{
+						pdat += (strlen(portID));	// Data format: wi_p1ID=(VLAN ID)
+					
+						i = 0;
+						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+						{
+							http_msg[i] = pdat[i];	// Store value of element
+							i++;
+						}
+						
+						vlanid = atoi(http_msg);
+						
+						if(vlanid == 0)
+						{
+							// Not a valid selection
+							
+							//for (y=0;y<MAX_VLANS;y++)
+							//{
+								//// User wants to disassociate the VLAN with the port
+								//if(Zodiac_Config.vlan_list[y].portmap[port-1] == 1)
+								//{
+									//Zodiac_Config.vlan_list[y].portmap[port-1] = 0;
+									//Zodiac_Config.of_port[port-1] = 0;
+									//TRACE("http.c: port %d has been removed from VLAN %d", port, Zodiac_Config.vlan_list[y].uVlanID);
+								//}
+							//}
+						}
+						else
+						{
+							// User wants to change the port VLAN
+							// Delete previous assigned VLAN
+							for (y=0;y<MAX_VLANS;y++)
+							{
+								// User wants to disassociate the VLAN with the port
+								if(Zodiac_Config.vlan_list[y].portmap[port-1] == 1)
+								{
+									Zodiac_Config.vlan_list[y].portmap[port-1] = 0;
+									Zodiac_Config.of_port[port-1] = 0;
+									TRACE("http.c: port %d has been removed from VLAN %d", port, Zodiac_Config.vlan_list[y].uVlanID);
+								}
+							}
+
+							// Assign the port to the requested VLAN
+							for (y=0;y<MAX_VLANS;y++)
+							{
+								if(Zodiac_Config.vlan_list[y].uVlanID == vlanid)
+								{
+									if(Zodiac_Config.vlan_list[y].portmap[port-1] == 0  || Zodiac_Config.vlan_list[x].portmap[port-1] > 1 )
+									{
+										Zodiac_Config.vlan_list[y].portmap[port-1] = 1;
+										Zodiac_Config.of_port[port-1] = Zodiac_Config.vlan_list[y].uVlanType;
+										TRACE("http.c: port %d is now assigned to VLAN %d", port, vlanid);
+									}
+								}
+							}
+						}
+					}
+					else
+					{
+						TRACE("http.c: port VLAN ID not found in Display: Ports response")
+					}
+				}
+				
+				// Save configuration to EEPROM
+				eeprom_write();
+				TRACE("http.c: config written to EEPROM");
+				
+				// Send updated page
+				if(interfaceCreate_Display_Ports(0))
+				{
+					// Only write to buffer - don't send
+					http_send(&shared_buffer, pcb, 0);
+					TRACE("http.c: updated ports page sent successfully (1/2) - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+				}
+				
+				if(interfaceCreate_Display_Ports(1))
+				{
+					// Call TCP output & close the connection
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: updated ports page sent successfully (2/2) - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+				}
 			}
 			else if(strcmp(http_msg,"btn_ofNext") == 0)
 			{
@@ -1626,77 +1729,169 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 	}
 	else if(step == 1)
 	{
-		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
-						"<tr>"\
-						"<td id=\"row\">RX Bytes:</td>"\
-						"<td>97701</td>"\
-						"<td>97701</td>"\
-						"<td>97701</td>"\
-						"<td>97701</td>"\
-					  "</tr>"\
-					  "<tr>"\
-						"<td id=\"row\">TX Bytes:</td>"\
-						"<td>69865</td>"\
-						"<td>69865</td>"\
-						"<td>69865</td>"\
-						"<td>etc</td>"\
-					  "</tr>"\
-					  "<tr>"\
-						"<td id=\"row\">RX Packets:</td>"\
-						"<td>1016</td>"\
-						"<td>1016</td>"\
-						"<td>1016</td>"\
-						"<td>1016</td>"\
-					  "</tr>"\
-					  "<tr>"\
-						"<td id=\"row\">TX Packets:</td>"\
-						"<td>724</td>"\
-						"<td>724</td>"\
-						"<td>724</td>"\
-						"<td>724</td>"\
-					  "</tr>"\
-					  "<tr>"\
-						"<td id=\"row\">RX Dropped Packets:</td>"\
-						"<td>0</td>"\
-						"<td>0</td>"\
-						"<td>0</td>"\
-						"<td>0</td>"\
-					  "</tr>"\
-					  "<tr>"\
-						"<td id=\"row\">TX Dropped Packets:</td>"\
-						"<td>0</td>"\
-						"<td>0</td>"\
-						"<td>0</td>"\
-						"<td>0</td>"\
-					  "</tr>"\
-					  "<tr>"\
-						"<td id=\"row\">RX CRC Errors:</td>"\
-						"<td>0</td>"\
-						"<td>0</td>"\
-						"<td>0</td>"\
-						"<td>0</td>"\
-					  "</tr>"\
-					"</table>"\
-					"<br>"\
-						"<input type=\"submit\" value=\"Save\">"\
-						"<input type=\"reset\" value=\"Cancel\"><br>"\
-					"</fieldset>"\
-					"</form>"\
-				"</body>"\
-			"</html>"\
-		) < SHARED_BUFFER_LEN)
+		if(OF_Version == 1)
 		{
-			TRACE("http.c: html (2/2) written to buffer");
-			return 1;
+			// of v1.0
+			if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+							"<tr>"\
+							"<td id=\"row\">RX Bytes:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">TX Bytes:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">RX Packets:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">TX Packets:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">RX Dropped Packets:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">TX Dropped Packets:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">RX CRC Errors:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						"</table>"\
+						"<br>"\
+							"<input type=\"submit\" value=\"Save\">"\
+							"<input type=\"reset\" value=\"Cancel\"><br>"\
+						"</fieldset>"\
+						"</form>"\
+					"</body>"\
+				"</html>"\
+				, phys10_port_stats[0].rx_bytes, phys10_port_stats[1].rx_bytes, phys10_port_stats[2].rx_bytes, phys10_port_stats[3].rx_bytes
+				, phys10_port_stats[0].tx_bytes, phys10_port_stats[1].tx_bytes, phys10_port_stats[2].tx_bytes, phys10_port_stats[3].tx_bytes
+				, phys10_port_stats[0].rx_packets, phys10_port_stats[1].rx_packets, phys10_port_stats[2].rx_packets, phys10_port_stats[3].rx_packets
+				, phys10_port_stats[0].tx_packets, phys10_port_stats[1].tx_packets, phys10_port_stats[2].tx_packets, phys10_port_stats[3].tx_packets
+				, phys10_port_stats[0].rx_dropped, phys10_port_stats[1].rx_dropped, phys10_port_stats[2].rx_dropped, phys10_port_stats[3].rx_dropped
+				, phys10_port_stats[0].tx_dropped, phys10_port_stats[1].tx_dropped, phys10_port_stats[2].tx_dropped, phys10_port_stats[3].tx_dropped
+				, phys10_port_stats[0].rx_crc_err, phys10_port_stats[1].rx_crc_err, phys10_port_stats[2].rx_crc_err, phys10_port_stats[3].rx_crc_err
+			) < SHARED_BUFFER_LEN)
+			{
+				TRACE("http.c: html (2/2) written to buffer");
+				return 1;
+			}
+			else
+			{
+				TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+				return 0;
+			}
 		}
 		else
 		{
-			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
-			return 0;
+			// of v1.3
+			if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+							"<tr>"\
+							"<td id=\"row\">RX Bytes:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">TX Bytes:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">RX Packets:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">TX Packets:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">RX Dropped Packets:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">TX Dropped Packets:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">RX CRC Errors:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						"</table>"\
+						"<br>"\
+							"<input type=\"submit\" value=\"Save\">"\
+							"<input type=\"reset\" value=\"Cancel\"><br>"\
+						"</fieldset>"\
+						"</form>"\
+					"</body>"\
+				"</html>"\
+				, phys13_port_stats[0].rx_bytes, phys13_port_stats[1].rx_bytes, phys13_port_stats[2].rx_bytes, phys13_port_stats[3].rx_bytes
+				, phys13_port_stats[0].tx_bytes, phys13_port_stats[1].tx_bytes, phys13_port_stats[2].tx_bytes, phys13_port_stats[3].tx_bytes
+				, phys13_port_stats[0].rx_packets, phys13_port_stats[1].rx_packets, phys13_port_stats[2].rx_packets, phys13_port_stats[3].rx_packets
+				, phys13_port_stats[0].tx_packets, phys13_port_stats[1].tx_packets, phys13_port_stats[2].tx_packets, phys13_port_stats[3].tx_packets
+				, phys13_port_stats[0].rx_dropped, phys13_port_stats[1].rx_dropped, phys13_port_stats[2].rx_dropped, phys13_port_stats[3].rx_dropped
+				, phys13_port_stats[0].tx_dropped, phys13_port_stats[1].tx_dropped, phys13_port_stats[2].tx_dropped, phys13_port_stats[3].tx_dropped
+				, phys13_port_stats[0].rx_crc_err, phys13_port_stats[1].rx_crc_err, phys13_port_stats[2].rx_crc_err, phys13_port_stats[3].rx_crc_err
+			) < SHARED_BUFFER_LEN)
+			{
+				TRACE("http.c: html (2/2) written to buffer");
+				return 1;
+			}
+			else
+			{
+				TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+				return 0;
+			}
 		}
-
 	}
-
+	else
+	{
+		TRACE:("http.c: Display: Ports step error");
+	}
 }
 
 
