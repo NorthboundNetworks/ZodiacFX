@@ -239,27 +239,25 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			}
 			else if(strcmp(http_msg,"d_ports.htm") == 0)
 			{
-				i = 0;
-				for(i;i<4;i++)
+				if(interfaceCreate_Display_Ports(0))
 				{
-					if(interfaceCreate_Display_Ports(i))
-					{
-						if(i < 3)
-						{
-							// Only write to buffer - don't send
-							http_send(&shared_buffer, pcb, 0);
-						}
-						else
-						{
-							// Call TCP output & close the connection
-							http_send(&shared_buffer, pcb, 1);
-							TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-						}
-					}
-					else
-					{
-						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-					}
+					// Only write to buffer - don't send
+					http_send(&shared_buffer, pcb, 0);
+				}
+				else
+				{
+					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+				}
+					
+				if(interfaceCreate_Display_Ports(1))
+				{
+					// Call TCP output & close the connection
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
 				}
 			}
       		else if(strcmp(http_msg,"d_of.htm") == 0)
@@ -662,6 +660,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				udc_detach();	// Detach the USB device before restart
 				rstc_start_software_reset(RSTC);	// Software reset
 				while (1);
+			}
+			else if(strcmp(http_msg,"save_ports") == 0)
+			{
+			
 			}
 			else if(strcmp(http_msg,"btn_ofNext") == 0)
 			{
@@ -1431,21 +1433,36 @@ uint8_t interfaceCreate_Display_Home(void)
 */
 uint8_t interfaceCreate_Display_Ports(uint8_t step)
 {
-	// Check port status
-	char portStatusch[5];
-	
-	if(port_status[step] == 1)
-	{
-		snprintf(portStatusch, 5, "UP");			
-	}
-	else
-	{
-		snprintf(portStatusch, 5, "DOWN");
-	}
-	
 	if(step == 0)
 	{
-		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		// Create status strings
+		char portStatusch[2][5];
+		snprintf(portStatusch[0], 5, "DOWN");
+		snprintf(portStatusch[1], 5, "UP");
+		
+		// Create VLAN type strings
+		char portvlType[3][11];
+		snprintf(portvlType[0], 11, "Unassigned");
+		snprintf(portvlType[1], 11, "OpenFlow");
+		snprintf(portvlType[2], 11, "Native");
+		
+		// Create
+		int vlArr[4] = { 0 };
+		
+		// Count active VLANs
+		int x;
+		uint8_t vlCtr = 0;
+		for (x=0;x<MAX_VLANS;x++)
+		{
+			if (Zodiac_Config.vlan_list[x].uActive == 1)
+			{
+				vlArr[vlCtr] = x;
+				
+				vlCtr++;
+			}
+		}
+
+		snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 			"<!DOCTYPE html>"\
 			"<html>"\
 				"<head>"\
@@ -1457,25 +1474,19 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						"font-size: 17px;"\
 						"margin-left: 20px;"\
 					"}"\
-					"#p1 {"\
-						"position: fixed;"\
-						"top: 60px;"\
-						"left: 20px;"\
+					""\
+					"table {"\
+						"border-collapse: collapse;"\
+						"border: 1px solid black;"\
 					"}"\
-					"#p2 {"\
-						"position: fixed;"\
-						"top: 60px;"\
-						"left: 230px;"\
+					"td, th {"\
+						"height: 27px;"\
+						"padding-left: 7px;"\
+						"padding-right: 10px;"\
+						"border: 1px solid black;"\
 					"}"\
-					"#p3 {"\
-						"position: fixed;"\
-						"top: 60px;"\
-						"left: 440px;"\
-					"}"\
-					"#p4 {"\
-						"position: fixed;"\
-						"top: 60px;"\
-						"left: 650px;"\
+					"#row {"\
+						"font-weight: bold;"\
 					"}"\
 					"</style>"\
 				"</head>"\
@@ -1483,92 +1494,141 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 					"<p>"\
 						"<h2>Port Information</h2>"\
 					"</p>"\
-					"<div id=p1>"\
-					  "<br>"\
-					  "<form action=\"save_port1\" method=\"post\">"\
-							"<fieldset>"\
-								"<legend>Port 1</legend>"\
-								"Status:<br>"\
-								"<input type=\"text\" name=\"wi_portStatus\" value=\"UP\" readonly><br><br>"\
-								"VLAN Type:<br>"\
-								"<input type=\"text\" name=\"wi_vlanType\" value=\"OpenFlow\" readonly><br><br>"\
-								"VLAN ID:<br>"\
-								"<select name=\"wi_vlanID\">"\
-									"<option          value=\"0\">100</option>"\
-									"<option          value=\"1\">200</option>"\
-								"</select>"\
-								"<input type=\"submit\" value=\"Save\">"\
-								"<input type=\"reset\" value=\"Cancel\"><br><br>"\
-								"RX Bytes<br>"\
-								"<input type=\"text\" name=\"wi_rxB\" value=\"97701\" readonly><br><br>"\
-								"TX Bytes<br>"\
-								"<input type=\"text\" name=\"wi_txB\" value=\"69865\" readonly><br><br>"\
-								"RX Packets<br>"\
-								"<input type=\"text\" name=\"wi_rxP\" value=\"1016\" readonly><br><br>"\
-								"TX Packets<br>"\
-								"<input type=\"text\" name=\"wi_txP\" value=\"724\" readonly><br><br>"\
-								"RX Dropped Packets<br>"\
-								"<input type=\"text\" name=\"wi_rxDP\" value=\"0\" readonly><br><br>"\
-								"TX Dropped Packets<br>"\
-								"<input type=\"text\" name=\"wi_txDP\" value=\"0\" readonly><br><br>"\
-								"RX CRC Errors<br>"\
-								"<input type=\"text\" name=\"wi_rxCRC\" value=\"0\" readonly><br>"\
-							"</fieldset>"\
-						"</form>"\
-					"</div>"\
-				//, portStatusch
-				//, Zodiac_Config.vlan_list[step].cVlanName
-				//, Zodiac_Config.vlan_list[step].uVlanID
-		) < SHARED_BUFFER_LEN)
-		{
-			TRACE("http.c: html written to buffer");
-			return 1;
-		}
-		else
-		{
-			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
-			return 0;
-		}
+					"<form style=\"width: 620px\" action=\"save_ports\" method=\"post\">"\
+					"<fieldset>"\
+						"<legend>Ports</legend>"\
+					"<table>"\
+					  "<tr>"\
+						"<th></th>"\
+						"<th>Port 1</th>"\
+						"<th>Port 2</th>"\
+						"<th>Port 3</th>"\
+						"<th>Port 4</th>"\
+					  "</tr>"\
+					  "<tr>"\
+						"<td id=\"row\">Status:</td>"\
+						"<td>%s</td>"\
+						"<td>%s</td>"\
+						"<td>%s</td>"\
+						"<td>%s</td>"\
+					  "</tr>"\
+					  "<tr>"\
+						"<td id=\"row\">VLAN Type:</td>"\
+						"<td>%s</td>"\
+						"<td>%s</td>"\
+						"<td>%s</td>"\
+						"<td>%s</td>"\
+					  "</tr>"\
+					, portStatusch[port_status[0]], portStatusch[port_status[1]], portStatusch[port_status[2]], portStatusch[port_status[3]]\
+					, portvlType[] , portvlType[] , portvlType[] , portvlType[]\
+				);
+		
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),
+						"<tr>"\
+						"<td id=\"row\">VLAN ID:</td>"\
+						"<td>"\
+							"<select name=\"wi_p1ID\">"\
+								"<option value=\"0\">100</option>"\
+								"<option value=\"1\">200</option>"\
+								"<option value=\"1\">-</option>"\
+							"</select>"\
+						"</td>"\
+						"<td>"\
+							"<select name=\"wi_p2ID\">"\
+								"<option value=\"0\">100</option>"\
+								"<option value=\"1\">200</option>"\
+								"<option value=\"1\">-</option>"\
+							"</select>"\
+						"</td>"\
+						"<td>"\
+							"<select name=\"wi_p3ID\">"\
+								"<option value=\"0\">100</option>"\
+								"<option value=\"1\">-</option>"\
+							"</select>"\
+						"</td>"\
+						"<td>"\
+							"<select name=\"wi_p4ID\">"\
+								"<option value=\"0\">100</option>"\
+								"<option selected value=\"1\">200</option>"\
+								"<option value=\"1\">-</option>"\
+							"</select>"\
+						"</td>"\
+					  "</tr>"\
+				);
+			
+		//if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+			//"test"	\	  
+		//) < SHARED_BUFFER_LEN)
+		//{
+			//TRACE("http.c: html written to buffer");
+			//return 1;
+		//}
+		//else
+		//{
+			//TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+			//return 0;
+		//}
 	}
 	else if(step == 1)
 	{
 		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
-			"<div id=p2>"\
-			"<br>"\
-			  "<form action=\"save_port2\" method=\"post\">"\
-					"<fieldset>"\
-						"<legend>Port 2</legend>"\
-						"Status:<br>"\
-						"<input type=\"text\" name=\"wi_portStatus\" value=\"DOWN\" readonly><br><br>"\
-						"VLAN Type:<br>"\
-						"<input type=\"text\" name=\"wi_vlanType\" value=\"OpenFlow\" readonly><br><br>"\
-						"VLAN ID:<br>"\
-						"<select name=\"wi_vlanID\">"\
-							"<option          value=\"0\">100</option>"\
-							"<option          value=\"1\">200</option>"\
-						"</select>"\
+						"<tr>"\
+						"<td id=\"row\">RX Bytes:</td>"\
+						"<td>97701</td>"\
+						"<td>97701</td>"\
+						"<td>97701</td>"\
+						"<td>97701</td>"\
+					  "</tr>"\
+					  "<tr>"\
+						"<td id=\"row\">TX Bytes:</td>"\
+						"<td>69865</td>"\
+						"<td>69865</td>"\
+						"<td>69865</td>"\
+						"<td>etc</td>"\
+					  "</tr>"\
+					  "<tr>"\
+						"<td id=\"row\">RX Packets:</td>"\
+						"<td>1016</td>"\
+						"<td>1016</td>"\
+						"<td>1016</td>"\
+						"<td>1016</td>"\
+					  "</tr>"\
+					  "<tr>"\
+						"<td id=\"row\">TX Packets:</td>"\
+						"<td>724</td>"\
+						"<td>724</td>"\
+						"<td>724</td>"\
+						"<td>724</td>"\
+					  "</tr>"\
+					  "<tr>"\
+						"<td id=\"row\">RX Dropped Packets:</td>"\
+						"<td>0</td>"\
+						"<td>0</td>"\
+						"<td>0</td>"\
+						"<td>0</td>"\
+					  "</tr>"\
+					  "<tr>"\
+						"<td id=\"row\">TX Dropped Packets:</td>"\
+						"<td>0</td>"\
+						"<td>0</td>"\
+						"<td>0</td>"\
+						"<td>0</td>"\
+					  "</tr>"\
+					  "<tr>"\
+						"<td id=\"row\">RX CRC Errors:</td>"\
+						"<td>0</td>"\
+						"<td>0</td>"\
+						"<td>0</td>"\
+						"<td>0</td>"\
+					  "</tr>"\
+					"</table>"\
+					"<br>"\
 						"<input type=\"submit\" value=\"Save\">"\
-						"<input type=\"reset\" value=\"Cancel\"><br><br>"\
-						"RX Bytes<br>"\
-						"<input type=\"text\" name=\"wi_rxB\" value=\"97701\" readonly><br><br>"\
-						"TX Bytes<br>"\
-						"<input type=\"text\" name=\"wi_txB\" value=\"69865\" readonly><br><br>"\
-						"RX Packets<br>"\
-						"<input type=\"text\" name=\"wi_rxP\" value=\"1016\" readonly><br><br>"\
-						"TX Packets<br>"\
-						"<input type=\"text\" name=\"wi_txP\" value=\"724\" readonly><br><br>"\
-						"RX Dropped Packets<br>"\
-						"<input type=\"text\" name=\"wi_rxDP\" value=\"0\" readonly><br><br>"\
-						"TX Dropped Packets<br>"\
-						"<input type=\"text\" name=\"wi_txDP\" value=\"0\" readonly><br><br>"\
-						"RX CRC Errors<br>"\
-						"<input type=\"text\" name=\"wi_rxCRC\" value=\"0\" readonly><br>"\
+						"<input type=\"reset\" value=\"Cancel\"><br>"\
 					"</fieldset>"\
-				"</form>"\
-			"</div>"\
-				//, portStatusch
-				//, Zodiac_Config.vlan_list[step].cVlanName
-				//, Zodiac_Config.vlan_list[step].uVlanID
+					"</form>"\
+				"</body>"\
+			"</html>"\
 		) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html written to buffer");
@@ -1579,109 +1639,9 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
 			return 0;
 		}
+
 	}
-	else if(step == 2)
-	{
-		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
-			"<div id=p3>"\
-			"<br>"\
-			  "<form action=\"save_port3\" method=\"post\">"\
-					"<fieldset>"\
-						"<legend>Port 3</legend>"\
-						"Status:<br>"\
-						"<input type=\"text\" name=\"wi_portStatus\" value=\"DOWN\" readonly><br><br>"\
-						"VLAN Type:<br>"\
-						"<input type=\"text\" name=\"wi_vlanType\" value=\"Native\" readonly><br><br>"\
-						"VLAN ID:<br>"\
-						"<select name=\"wi_vlanID\">"\
-							"<option          value=\"0\">100</option>"\
-							"<option          value=\"1\">200</option>"\
-						"</select>"\
-						"<input type=\"submit\" value=\"Save\">"\
-						"<input type=\"reset\" value=\"Cancel\"><br><br>"\
-						"RX Bytes<br>"\
-						"<input type=\"text\" name=\"wi_rxB\" value=\"97701\" readonly><br><br>"\
-						"TX Bytes<br>"\
-						"<input type=\"text\" name=\"wi_txB\" value=\"69865\" readonly><br><br>"\
-						"RX Packets<br>"\
-						"<input type=\"text\" name=\"wi_rxP\" value=\"1016\" readonly><br><br>"\
-						"TX Packets<br>"\
-						"<input type=\"text\" name=\"wi_txP\" value=\"724\" readonly><br><br>"\
-						"RX Dropped Packets<br>"\
-						"<input type=\"text\" name=\"wi_rxDP\" value=\"0\" readonly><br><br>"\
-						"TX Dropped Packets<br>"\
-						"<input type=\"text\" name=\"wi_txDP\" value=\"0\" readonly><br><br>"\
-						"RX CRC Errors<br>"\
-						"<input type=\"text\" name=\"wi_rxCRC\" value=\"0\" readonly><br>"\
-					"</fieldset>"\
-				"</form>"\
-			"</div>"\
-				//, portStatusch
-				//, Zodiac_Config.vlan_list[step].cVlanName
-				//, Zodiac_Config.vlan_list[step].uVlanID
-		) < SHARED_BUFFER_LEN)
-		{
-			TRACE("http.c: html written to buffer");
-			return 1;
-		}
-		else
-		{
-			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
-			return 0;
-		}
-	}
-	else if(step == 3)
-	{
-		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
-					"<div id=p4>"\
-						"<br>"\
-						  "<form action=\"save_port1\" method=\"post\">"\
-								"<fieldset>"\
-									"<legend>Port 4</legend>"\
-									"Status:<br>"\
-									"<input type=\"text\" name=\"wi_portStatus\" value=\"UP\" readonly><br><br>"\
-									"VLAN Type:<br>"\
-									"<input type=\"text\" name=\"wi_vlanType\" value=\"Native\" readonly><br><br>"\
-									"VLAN ID:<br>"\
-									"<select name=\"wi_vlanID\">"\
-										"<option          value=\"0\">100</option>"\
-										"<option          value=\"1\">200</option>"\
-									"</select>"\
-									"<input type=\"submit\" value=\"Save\">"\
-									"<input type=\"reset\" value=\"Cancel\"><br><br>"\
-									"RX Bytes<br>"\
-									"<input type=\"text\" name=\"wi_rxB\" value=\"97701\" readonly><br><br>"\
-									"TX Bytes<br>"\
-									"<input type=\"text\" name=\"wi_txB\" value=\"69865\" readonly><br><br>"\
-									"RX Packets<br>"\
-									"<input type=\"text\" name=\"wi_rxP\" value=\"1016\" readonly><br><br>"\
-									"TX Packets<br>"\
-									"<input type=\"text\" name=\"wi_txP\" value=\"724\" readonly><br><br>"\
-									"RX Dropped Packets<br>"\
-									"<input type=\"text\" name=\"wi_rxDP\" value=\"0\" readonly><br><br>"\
-									"TX Dropped Packets<br>"\
-									"<input type=\"text\" name=\"wi_txDP\" value=\"0\" readonly><br><br>"\
-									"RX CRC Errors<br>"\
-									"<input type=\"text\" name=\"wi_rxCRC\" value=\"0\" readonly><br>"\
-								"</fieldset>"\
-							"</form>"\
-						"</div>"\
-					"</body>"\
-				"</html>"\
-			//, portStatusch
-			//, Zodiac_Config.vlan_list[step].cVlanName
-			//, Zodiac_Config.vlan_list[step].uVlanID
-		) < SHARED_BUFFER_LEN)
-		{
-			TRACE("http.c: html written to buffer");
-			return 1;
-		}
-		else
-		{
-			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
-			return 0;
-		}
-	}
+
 }
 
 
