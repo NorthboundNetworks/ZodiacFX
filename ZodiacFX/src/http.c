@@ -1515,17 +1515,59 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						"<td>%s</td>"\
 					"</tr>"\
 					"<tr>"\
-						"<td id=\"row\">VLAN Type:</td>"\
-						"<td>%%s</td>"\
-						"<td>%%s</td>"\
-						"<td>%%s</td>"\
-						"<td>%%s</td>"\
-					"</tr>"\
-					"<tr>"\
-						"<td id=\"row\">VLAN ID:</td>"\
+							"<td id=\"row\">VLAN Type:</td>"\
 					, portStatusch[port_status[0]], portStatusch[port_status[1]], portStatusch[port_status[2]], portStatusch[port_status[3]]\
-					/*, portvlType[] , portvlType[] , portvlType[] , portvlType[]\*/
 				);
+				
+		// Create VLAN type for each port
+		for(x=0;x<4;x++)
+		{
+			currPort = x+1;		// Store port
+			
+			int y = 0;
+			uint8_t done = 0;
+			if(vlCtr > 0)
+			{
+				// Active VLANs exist
+				
+				// Loop to go through each active VLAN and view port mappings
+				while(y<vlCtr && !done)
+				{
+					// Check if the VLAN is assigned to the current port
+					if(Zodiac_Config.vlan_list[vlArr[y]].portmap[currPort-1] == 1)
+					{
+						snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+							"<td>%s</td>"\
+								, portvlType[Zodiac_Config.vlan_list[vlArr[y]].uVlanType]\
+							);
+						done = 1;
+					}
+					y++;	
+				}
+				
+				if(!done)
+				{
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+							"<td>%s</td>"\
+					, portvlType[0]\
+					);
+				}
+			}
+			else
+			{
+				// No active VLANs
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+							"<td>%s</td>"\
+						, portvlType[0]\
+					);
+			}
+		}
+		
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+						"</tr>"\
+						"<tr>"\
+							"<td id=\"row\">VLAN ID:</td>"\
+			);
 		
 		// Create VLAN dropdown for each port
 		for(x=0;x<4;x++)
@@ -1554,10 +1596,10 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 					}
 					else
 					{
-							snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-									"<option value=\"%d\">%d</option>"\
-								, Zodiac_Config.vlan_list[vlArr[y]].uVlanID, Zodiac_Config.vlan_list[vlArr[y]].uVlanID\
-							);
+						snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+								"<option value=\"%d\">%d</option>"\
+							, Zodiac_Config.vlan_list[vlArr[y]].uVlanID, Zodiac_Config.vlan_list[vlArr[y]].uVlanID\
+						);
 					}
 					
 				}
