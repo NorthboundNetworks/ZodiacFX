@@ -1435,6 +1435,8 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 {
 	if(step == 0)
 	{
+		int currPort;
+		
 		// Create status strings
 		char portStatusch[2][5];
 		snprintf(portStatusch[0], 5, "DOWN");
@@ -1449,7 +1451,7 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 		// Create
 		int vlArr[4] = { 0 };
 		
-		// Count active VLANs
+		// Count active VLANs, store list value in vlArr
 		int x;
 		uint8_t vlCtr = 0;
 		for (x=0;x<MAX_VLANS;x++)
@@ -1511,63 +1513,74 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						"<td>%s</td>"\
 						"<td>%s</td>"\
 						"<td>%s</td>"\
-					  "</tr>"\
-					  "<tr>"\
+					"</tr>"\
+					"<tr>"\
 						"<td id=\"row\">VLAN Type:</td>"\
-						"<td>%s</td>"\
-						"<td>%s</td>"\
-						"<td>%s</td>"\
-						"<td>%s</td>"\
-					  "</tr>"\
+						"<td>%%s</td>"\
+						"<td>%%s</td>"\
+						"<td>%%s</td>"\
+						"<td>%%s</td>"\
+					"</tr>"\
+					"<tr>"\
+						"<td id=\"row\">VLAN ID:</td>"\
 					, portStatusch[port_status[0]], portStatusch[port_status[1]], portStatusch[port_status[2]], portStatusch[port_status[3]]\
-					, portvlType[] , portvlType[] , portvlType[] , portvlType[]\
+					/*, portvlType[] , portvlType[] , portvlType[] , portvlType[]\*/
 				);
 		
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),
-						"<tr>"\
-						"<td id=\"row\">VLAN ID:</td>"\
-						"<td>"\
-							"<select name=\"wi_p1ID\">"\
-								"<option value=\"0\">100</option>"\
-								"<option value=\"1\">200</option>"\
-								"<option value=\"1\">-</option>"\
-							"</select>"\
-						"</td>"\
-						"<td>"\
-							"<select name=\"wi_p2ID\">"\
-								"<option value=\"0\">100</option>"\
-								"<option value=\"1\">200</option>"\
-								"<option value=\"1\">-</option>"\
-							"</select>"\
-						"</td>"\
-						"<td>"\
-							"<select name=\"wi_p3ID\">"\
-								"<option value=\"0\">100</option>"\
-								"<option value=\"1\">-</option>"\
-							"</select>"\
-						"</td>"\
-						"<td>"\
-							"<select name=\"wi_p4ID\">"\
-								"<option value=\"0\">100</option>"\
-								"<option selected value=\"1\">200</option>"\
-								"<option value=\"1\">-</option>"\
-							"</select>"\
-						"</td>"\
-					  "</tr>"\
-				);
+		// Create VLAN dropdown for each port
+		for(x=0;x<4;x++)
+		{
+			currPort = x+1;		// Store port
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+							"<td>"\
+								"<select name=\"wi_p%dID\">"\
+								"<option value=\"0\">-</option>"\
+						, currPort\
+					);
 			
-		//if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-			//"test"	\	  
-		//) < SHARED_BUFFER_LEN)
-		//{
-			//TRACE("http.c: html written to buffer");
-			//return 1;
-		//}
-		//else
-		//{
-			//TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
-			//return 0;
-		//}
+			int y;
+			if(vlCtr > 0)
+			{
+				// Loop to write each VLAN option
+				for(y=0;y<vlCtr;y++)
+				{
+					// Check if the VLAN is assigned to the current port
+					if(Zodiac_Config.vlan_list[vlArr[y]].portmap[currPort-1] == 1)
+					{
+						snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+									"<option selected value=\"%d\">%d</option>"\
+								, Zodiac_Config.vlan_list[vlArr[y]].uVlanID, Zodiac_Config.vlan_list[vlArr[y]].uVlanID\
+							);
+					}
+					else
+					{
+							snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+									"<option value=\"%d\">%d</option>"\
+								, Zodiac_Config.vlan_list[vlArr[y]].uVlanID, Zodiac_Config.vlan_list[vlArr[y]].uVlanID\
+							);
+					}
+					
+				}
+			}
+				
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+								"</select>"\
+							"</td>"\
+					);
+		}
+				
+		if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+					"</tr>"\		
+				) < SHARED_BUFFER_LEN)
+		{
+			TRACE("http.c: html (1/2) written to buffer");
+			return 1;
+		}
+		else
+		{
+			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+			return 0;
+		}
 	}
 	else if(step == 1)
 	{
@@ -1631,7 +1644,7 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 			"</html>"\
 		) < SHARED_BUFFER_LEN)
 		{
-			TRACE("http.c: html written to buffer");
+			TRACE("http.c: html (2/2) written to buffer");
 			return 1;
 		}
 		else
