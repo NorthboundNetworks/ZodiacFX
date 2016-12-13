@@ -31,17 +31,21 @@
 #include <asf.h>
 #include <inttypes.h>
 #include <string.h>
+#include "flash.h"
 #include "config_zodiac.h"
 #include "openflow/openflow.h"
 
 // Global variables
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 
+// Static variables
+static uint32_t page_addr;
+static uint32_t ul_rc;
+
 // Internal Functions
 void xmodem_xfer(void);
 void xmodem_clear_padding(uint8_t *buff);
-void flash_write_page(uint8_t *flash_page);
-
+int flash_write_page(uint8_t *flash_page);
 
 /*
 *	Get the unique serial number from the CPU
@@ -59,9 +63,26 @@ void get_serial(uint32_t *uid_buf)
 */
 void firmware_update(void)
 {
-	xmodem_xfer();	// Receive new firmware image vie XModem
-	// TODO: Update main firmware image
+	// Clear shared_buffer
+	memset(&shared_buffer, 0, sizeof(shared_buffer));
+	
+	// Initialise page_addr variable
+	page_addr = (IFLASH_ADDR + (3*IFLASH_SIZE/4) ); // Start at location 3/4 of internal flash
+	
+	/* Initialize flash: 6 wait states for flash writing. */
+	ul_rc = flash_init(FLASH_ACCESS_MODE_128, 6);
+	if (ul_rc != FLASH_RC_OK) {
+		printf("flash.c: flash service initialisation error", (unsigned long)ul_rc);
+		return 0;
+	}
+	
 
+	
+	
+	xmodem_xfer();	// Receive new firmware image vie XModem
+	
+	/*TODO: Update main firmware image*/
+	// Copy new firmware image to program location
 }
 
 /*
@@ -87,15 +108,29 @@ xmodem_xfer(void)
 			{
 				printf("%c",6);	// Send final <ACK>
 				xmodem_clear_padding(&shared_buffer); // strip the 0x1A fill bytes from the end of the last block
-				flash_write_page(&shared_buffer);	// TODO: Testing a image < 512 bytes, will change this to allow the full image size
+				
+				// Check that buffer will fit into page size (NULL not required)
+				if(strlen(shared_buffer) <= 512)
+				{
+					if(!flash_write_page(&shared_buffer))	// TODO: Testing a image < 512 bytes, will change this to allow the full image size
+					{
+						printf("flash.c: page written successfully");
+					}
+					else
+					{
+						printf("flash.c: page write failed");
+						return 0;
+					}
+				}
 			}
 			
-			if (block_count == 132)	// End of block?
+			// Check for end of block
+			if (block_count == 132)
 			{
 				if (xmodem_crc == ch)	// Check CRC
 				{
 					printf("%c",6);		// If the CRC is OK then send a <ACK>
-					// TODO: Write a page to flash is 4 blocks received
+					// TODO: Write a page to flash if 4 blocks received
 					block_count = 0;	// Start a new block
 					} else {
 					printf("%c",21);	// If the CRC is incorrect then send a <NACK>
@@ -127,12 +162,41 @@ xmodem_xfer(void)
 *	Write a page to flash memory
 *
 */
-void flash_write_page(uint8_t *flash_page)
+int flash_write_page(uint8_t *flash_page)
 {
-	// Write received blocks to unused memory region
+	/* Unlock page */
+	printf("flash.c: unlocking f/w page at 0x%08x\r\n", page_addr);
+	ul_rc = flash_unlock(page_addr,
+			page_addr + IFLASH_PAGE_SIZE - 1, 0, 0);
+	if (ul_rc != FLASH_RC_OK) {
+		printf("flash.c: flash unlock error %lu", (unsigned long)ul_rc);
+		return 0;
+	}
+
+	// Erase sector first
+	ul_rc = flash_erase_sector(page_addr);
+	if (ul_rc != FLASH_RC_OK) {
+		printf("flash.c: flash erase error %lu\n\r", (unsigned long)ul_rc);
+		return 0;
+	}
+
+	// Write to sector
+	ul_rc = flash_write(page_addr, shared_buffer,
+			IFLASH_PAGE_SIZE, 0);
+
+	if (ul_rc != FLASH_RC_OK) {
+		printf("flash.c: flash write error %lu\n\r", (unsigned long)ul_rc);
+		return 0;
+	}
 	
 	
-	while(1);
+	// Clear shared_buffer
+	memset(&shared_buffer, 0, sizeof(shared_buffer));
+	
+	// Increment page address by 512 (go to next page)
+	page_addr += 512;
+	
+	return 1;
 }
 
 /*
