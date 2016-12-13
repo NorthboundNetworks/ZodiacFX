@@ -34,4 +34,8 @@
 void firmware_update(void);
 void get_serial(uint32_t *uid_buf);
 
+#define X_EOT 0x04
+#define X_ACK 0x06
+#define X_NAK 0x15
+
 #endif /* FLASH_H_ */

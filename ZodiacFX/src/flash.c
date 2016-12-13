@@ -99,14 +99,15 @@ xmodem_xfer(void)
 	
 	while(1)
 	{
-		while(udi_cdc_is_rx_ready()){
+		while(udi_cdc_is_rx_ready())
+		{
 			ch = udi_cdc_getc();
 			timeout_clock = 0;	// reset timeout clock
 			
 			// Check for <EOT>
-			if (block_count == 1 && ch == 4)	// Note: block_count is cleared to 0 and incremented at the last block
+			if (block_count == 1 && ch == X_EOT)	// Note: block_count is cleared to 0 and incremented at the last block
 			{
-				printf("%c",6);	// Send final <ACK>
+				printf("%c",X_ACK);	// Send final <ACK>
 				xmodem_clear_padding(&shared_buffer); // strip the 0x1A fill bytes from the end of the last block
 				
 				// Check that buffer will fit into page size (NULL not required)
@@ -129,11 +130,11 @@ xmodem_xfer(void)
 			{
 				if (xmodem_crc == ch)	// Check CRC
 				{
-					printf("%c",6);		// If the CRC is OK then send a <ACK>
+					printf("%c",X_ACK);		// If the CRC is OK then send a <ACK>
 					// TODO: Write a page to flash if 4 blocks received
 					block_count = 0;	// Start a new block
 					} else {
-					printf("%c",21);	// If the CRC is incorrect then send a <NACK>
+					printf("%c",X_NAK);	// If the CRC is incorrect then send a <NAK>
 					block_count = 0;	// Start a new block
 					byte_count -= 128;
 				}
@@ -147,12 +148,13 @@ xmodem_xfer(void)
 				byte_count++;
 				xmodem_crc += ch;
 			}
+			
 			block_count++;
 		}
 		timeout_clock++;
 		if (timeout_clock > 1000000)	// Timeout, send <NAK>
 		{
-			printf("%c",21);
+			printf("%c",X_NAK);
 			timeout_clock = 0;
 		}
 	}
