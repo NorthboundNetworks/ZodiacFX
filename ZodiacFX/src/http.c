@@ -78,6 +78,7 @@ uint8_t interfaceCreate_Frames(void);
 uint8_t interfaceCreate_Header(void);
 uint8_t interfaceCreate_Menu(void);
 uint8_t interfaceCreate_Home(void);
+uint8_t interfaceCreate_Upload(void);
 uint8_t interfaceCreate_Display_Home(void);
 uint8_t interfaceCreate_Display_Ports(uint8_t step);
 uint8_t interfaceCreate_Display_OpenFlow(void);
@@ -225,6 +226,18 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
 				}
 			}
+			else if(strcmp(http_msg,"upload.htm") == 0)
+			{
+				if(interfaceCreate_Upload())
+				{
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+				}
+			}
       		else if(strcmp(http_msg,"d_home.htm") == 0)
 			{
 				if(interfaceCreate_Display_Home())
@@ -363,7 +376,11 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						
 			TRACE("http.c: request for %s", http_msg);
 			
-			if(strcmp(http_msg,"save_config") == 0)
+			if(strcmp(http_msg,"upload") == 0)
+			{
+				
+			}
+			else if(strcmp(http_msg,"save_config") == 0)
 			{
 				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 				
@@ -1407,6 +1424,7 @@ uint8_t interfaceCreate_Menu(void)
 				"<body>"\
 					"<ul>"\
 						"<li><a href=\"home.htm\" target=\"page\">Status</a></li>"\
+						"<li id=\"sub\"><a href=\"upload.htm\" target=\"page\">Update f/w</a></li>"
 						"<li><a href=\"d_home.htm\" target=\"page\">Display</a></li>"\
 						"<li id=\"sub\"><a href=\"d_ports.htm\" target=\"page\">Ports</a></li>"\
 						"<li id=\"sub\"><a href=\"d_of.htm\" target=\"page\">OpenFlow</a></li>"\
@@ -1471,6 +1489,49 @@ uint8_t interfaceCreate_Home(void)
 		"</html>"\
 				, uid_buf[0], uid_buf[1], uid_buf[2], uid_buf[3]\
 				, VERSION, (int)ul_temp, hr, min) < SHARED_BUFFER_LEN)
+	{
+		TRACE("http.c: html written to buffer");
+		return 1;
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}
+}
+
+/*
+*	Create and format HTML for firmware update page
+*
+*/
+uint8_t interfaceCreate_Upload(void)
+{
+	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		"<!DOCTYPE html>"\
+		"<html>"\
+			"<head>"\
+				"<style>"\
+				"body {"\
+					"overflow: auto;"\
+					"font-family:Sans-serif;"\
+					"line-height: 1.2em;"\
+					"font-size: 17px;"\
+					"margin-left: 20px;"\
+				"}"\
+				"</style>"\
+			"</head>"\
+			"<body>"\
+				"<p>"\
+					"<h2>Firmware Upload</h2>"\
+				"</p>"\
+			"<body>"\
+				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\">"\
+					"<input type=\"file\" name =\"file\"><br><br>"\
+					"<input type=\"submit\" value=\"Upload File\"/>"\
+				"</form>"\
+			"</body>"\
+		"</html>"\
+	) < SHARED_BUFFER_LEN)
 	{
 		TRACE("http.c: html written to buffer");
 		return 1;
