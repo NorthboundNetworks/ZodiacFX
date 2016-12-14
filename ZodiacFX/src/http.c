@@ -2126,13 +2126,13 @@ uint8_t flowLimit;
 struct ofp_action_header * act_hdr;
 
 // Limit flows to fit in shared_buffer
-if(iLastFlow < 6)
+if(iLastFlow < 5)
 {
 	flowLimit = iLastFlow;
 }
 else
 {
-	flowLimit = 6;
+	flowLimit = 5;
 }
 
 if (iLastFlow > 0)
