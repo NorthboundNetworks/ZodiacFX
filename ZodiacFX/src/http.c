@@ -2140,7 +2140,7 @@ if (iLastFlow > 0)
 	// OpenFlow v1.0 (0x01) Flow Table
 	if( OF_Version == 1)
 	{
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------------------------------------------------------------------------\r\n");
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------\r\n");
 		for (i=0;i<flowLimit;i++)
 		{
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\nFlow %d\r\n",i+1);
@@ -2216,7 +2216,7 @@ if (iLastFlow > 0)
 				}
 			}
 		}
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------------------------------------------------------------------------\r\n\n");
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------\r\n\n");
 	}
 	// OpenFlow v1.3 (0x04) Flow Table
 	if( OF_Version == 4)
@@ -2234,7 +2234,7 @@ if (iLastFlow > 0)
 		uint8_t oxm_ipv4[4];
 		uint16_t oxm_ipv6[8];
 
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------------------------------------------------------------------------\r\n");
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------\r\n");
 		for (i=0;i<flowLimit;i++)
 		{
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\nFlow %d\r\n",i+1);
@@ -2534,7 +2534,7 @@ if (iLastFlow > 0)
 				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   DROP \r\n");
 			}
 		}
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------------------------------------------------------------------------\r\n\n");
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------\r\n\n");
 	}
 	} else {
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"No Flows installed!\r\n");
