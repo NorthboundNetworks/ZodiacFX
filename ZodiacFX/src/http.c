@@ -52,6 +52,7 @@ extern uint8_t port_status[4];
 extern uint32_t uid_buf[4];	// Unique identifier
 extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
+extern uint8_t shared_buffer[SHARED_BUFFER_LEN];	// SHARED_BUFFER_LEN must never be reduced below 2048
 
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
@@ -68,28 +69,30 @@ extern struct table_counter table_counters[MAX_TABLES];
 // Local Variables
 struct tcp_pcb *http_pcb;
 char http_msg[64];			// Buffer for HTTP message filtering
-extern uint8_t shared_buffer[SHARED_BUFFER_LEN];	// SHARED_BUFFER_LEN must never be reduced below 2048
+static bool file_upload = false;	// Multi-part firmware file upload flag
+bool reset_required;
 
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
 void http_send(char *buffer, struct tcp_pcb *pcb, bool out);
 
-uint8_t interfaceCreate_Frames(void);
-uint8_t interfaceCreate_Header(void);
-uint8_t interfaceCreate_Menu(void);
-uint8_t interfaceCreate_Home(void);
-uint8_t interfaceCreate_Upload(void);
-uint8_t interfaceCreate_Display_Home(void);
-uint8_t interfaceCreate_Display_Ports(uint8_t step);
-uint8_t interfaceCreate_Display_OpenFlow(void);
-uint8_t interfaceCreate_Display_Flows(void);
-uint8_t interfaceCreate_Config_Home(void);
-uint8_t interfaceCreate_Config_Network(void);
-uint8_t interfaceCreate_Config_VLANs(void);
-uint8_t interfaceCreate_Config_OpenFlow(void);
-uint8_t interfaceCreate_About(void);
+static uint8_t interfaceCreate_Frames(void);
+static uint8_t interfaceCreate_Header(void);
+static uint8_t interfaceCreate_Menu(void);
+static uint8_t interfaceCreate_Home(void);
+static uint8_t interfaceCreate_Upload(void);
+static uint8_t interfaceCreate_Display_Home(void);
+static uint8_t interfaceCreate_Display_Ports(uint8_t step);
+static uint8_t interfaceCreate_Display_OpenFlow(void);
+static uint8_t interfaceCreate_Display_Flows(void);
+static uint8_t interfaceCreate_Config_Home(void);
+static uint8_t interfaceCreate_Config_Network(void);
+static uint8_t interfaceCreate_Config_VLANs(void);
+static uint8_t interfaceCreate_Config_OpenFlow(void);
+static uint8_t interfaceCreate_About(void);
 
-bool reset_required;
+static uint8_t file_handler(char *ppart, int len);
+
 
 /*
 *	Converts a 64bit value from host to network format
@@ -146,6 +149,12 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		tcp_recved(pcb, p->tot_len);
 		http_payload = (char*)p->payload;
 		len = p->tot_len;
+		
+		if(file_upload == true)
+		{
+			// Handle multi-part file data
+			file_handler(http_payload, len);
+		}
 		
 		// Check HTTP method
 		i = 0;
@@ -373,12 +382,13 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				http_msg[i] = http_payload[i+6];	// Offset http_payload to isolate resource
 				i++;
 			}
-						
+
 			TRACE("http.c: request for %s", http_msg);
-			
+
 			if(strcmp(http_msg,"upload") == 0)
 			{
-				
+				// All following packets will contain multi-part file data
+				file_upload = true;
 			}
 			else if(strcmp(http_msg,"save_config") == 0)
 			{
@@ -1203,11 +1213,16 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 	return;
 }
 
+static uint8_t file_handler(char *ppart, int len)
+{
+	//
+}
+
 /*
 *	Create and format HTTP/HTML for frames
 *
 */
-uint8_t interfaceCreate_Frames(void)
+static uint8_t interfaceCreate_Frames(void)
 {
 	// Format HTTP response
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
@@ -1255,7 +1270,7 @@ uint8_t interfaceCreate_Frames(void)
 *	Create and format HTML for header
 *
 */
-uint8_t interfaceCreate_Header(void)
+static uint8_t interfaceCreate_Header(void)
 {
 	reset_required = true;	// ***** Placeholder until frame refresh targeting is implemented
 	
@@ -1387,7 +1402,7 @@ uint8_t interfaceCreate_Header(void)
 *	Create and format HTML for menu page
 *
 */
-uint8_t interfaceCreate_Menu(void)
+static uint8_t interfaceCreate_Menu(void)
 {
 	// Send menu
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
@@ -1453,7 +1468,7 @@ uint8_t interfaceCreate_Menu(void)
 *	Create and format HTML for home page
 *
 */
-uint8_t interfaceCreate_Home(void)
+static uint8_t interfaceCreate_Home(void)
 {	
 	int hr = (totaltime/2)/3600;
 	int t = (totaltime/2)%3600;
@@ -1504,7 +1519,7 @@ uint8_t interfaceCreate_Home(void)
 *	Create and format HTML for firmware update page
 *
 */
-uint8_t interfaceCreate_Upload(void)
+static uint8_t interfaceCreate_Upload(void)
 {
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
@@ -1547,7 +1562,7 @@ uint8_t interfaceCreate_Upload(void)
 *	Create and format HTML for display help page
 *
 */
-uint8_t interfaceCreate_Display_Home(void)
+static uint8_t interfaceCreate_Display_Home(void)
 {
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
@@ -1595,7 +1610,7 @@ uint8_t interfaceCreate_Display_Home(void)
 *	Create and format HTML for display ports page
 *
 */
-uint8_t interfaceCreate_Display_Ports(uint8_t step)
+static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 {
 	if(step == 0)
 	{
@@ -1960,7 +1975,7 @@ uint8_t interfaceCreate_Display_Ports(uint8_t step)
 *	Create and format HTML for display openflow page
 *
 */
-uint8_t interfaceCreate_Display_OpenFlow(void)
+static uint8_t interfaceCreate_Display_OpenFlow(void)
 {
 	
 	// Status
@@ -2081,7 +2096,7 @@ uint8_t interfaceCreate_Display_OpenFlow(void)
 *	Create and format HTML for display flows page
 *
 */
-uint8_t interfaceCreate_Display_Flows(void)
+static uint8_t interfaceCreate_Display_Flows(void)
 {
 	snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
@@ -2556,7 +2571,7 @@ if (iLastFlow > 0)
 *	Create and format HTML for config help page
 *
 */
-uint8_t interfaceCreate_Config_Home(void)
+static uint8_t interfaceCreate_Config_Home(void)
 {
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
@@ -2604,7 +2619,7 @@ uint8_t interfaceCreate_Config_Home(void)
 *	Create and format HTML for config network page
 *
 */
-uint8_t interfaceCreate_Config_Network(void)
+static uint8_t interfaceCreate_Config_Network(void)
 {
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
@@ -2664,7 +2679,7 @@ uint8_t interfaceCreate_Config_Network(void)
 *	Create and format HTML for config vlans page
 *
 */
-uint8_t interfaceCreate_Config_VLANs(void)
+static uint8_t interfaceCreate_Config_VLANs(void)
 {
 	int x;
 	int delRow = 0;
@@ -2784,7 +2799,7 @@ uint8_t interfaceCreate_Config_VLANs(void)
 *	Create and format HTML for openflow page
 *
 */
-uint8_t interfaceCreate_Config_OpenFlow(void)
+static uint8_t interfaceCreate_Config_OpenFlow(void)
 {	
 	snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
@@ -2916,7 +2931,7 @@ uint8_t interfaceCreate_Config_OpenFlow(void)
 *	Create and format HTML for about page
 *
 */
-uint8_t interfaceCreate_About(void)
+static uint8_t interfaceCreate_About(void)
 {
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
