@@ -40,7 +40,14 @@ extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 
 // Static variables
 static uint32_t page_addr;
-static uint32_t ul_rc;
+//static uint32_t ul_rc;
+
+static	uint32_t ul_test_page_addr = (IFLASH_ADDR + IFLASH_SIZE - IFLASH_PAGE_SIZE * 4);
+static	uint32_t ul_rc;
+static	uint32_t ul_idx;
+static	uint32_t ul_page_buffer[IFLASH_PAGE_SIZE / sizeof(uint32_t)];
+
+static int testctr = 0;
 
 // Internal Functions
 void xmodem_xfer(void);
@@ -66,18 +73,55 @@ void firmware_update(void)
 	// Clear shared_buffer
 	memset(&shared_buffer, 0, sizeof(shared_buffer));
 	
-	// Initialise page_addr variable
-	page_addr = (IFLASH_ADDR + (3*IFLASH_SIZE/4) ); // Start at location 3/4 of internal flash
+	//// Initialise page_addr variable
+	//page_addr = (IFLASH_ADDR + (3*IFLASH_SIZE/4) ); // Start at location 3/4 of internal flash
+	//
+	///* Initialize flash: 6 wait states for flash writing. */
+	//ul_rc = flash_init(FLASH_ACCESS_MODE_128, 6);
+	//if (ul_rc != FLASH_RC_OK) {
+		//printf("flash.c: flash service initialisation error", (unsigned long)ul_rc);
+		//return 0;
+	//}
+	
 	
 	/* Initialize flash: 6 wait states for flash writing. */
 	ul_rc = flash_init(FLASH_ACCESS_MODE_128, 6);
 	if (ul_rc != FLASH_RC_OK) {
-		printf("flash.c: flash service initialisation error", (unsigned long)ul_rc);
+		printf("-F- Initialization error %lu\n\r", (unsigned long)ul_rc);
 		return 0;
 	}
 	
+	/* Unlock page */
+	printf("-I- Unlocking test page: 0x%08x\r\n", ul_test_page_addr);
+	ul_rc = flash_unlock(ul_test_page_addr,
+	ul_test_page_addr + (4*IFLASH_PAGE_SIZE) - 1, 0, 0);
+	if (ul_rc != FLASH_RC_OK)
+	{
+		printf("-F- Unlock error %lu\n\r", (unsigned long)ul_rc);
+		return 0;
+	}
 
+	/* The EWP command is not supported for non-8KByte sectors in all devices
+	 *  SAM4 series, so an erase command is required before the write operation.
+	 */
+	ul_rc = flash_erase_sector(ul_test_page_addr);
+	if (ul_rc != FLASH_RC_OK)
+	{
+		printf("-F- Flash programming error %lu\n\r", (unsigned long)ul_rc);
+		return 0;
+	}
 	
+	
+	flash_write_page(&shared_buffer);
+	flash_write_page(&shared_buffer);
+	
+	unsigned long* tstptr1 = (unsigned long*)0x0047F804;
+	unsigned long* tstptr2 = (unsigned long*)0x0047F820;
+	unsigned long* tstptr3 = (unsigned long*)0x0047fa04;
+	printf("Flash: 0x%l08x 0x%l08x 0x%l08x\n\r ", *tstptr1, *tstptr2, *tstptr3);
+	
+	int tstst;
+	for(tstst=0;tstst<10000;tstst++);
 	
 	xmodem_xfer();	// Receive new firmware image vie XModem
 	
@@ -166,37 +210,82 @@ xmodem_xfer(void)
 */
 int flash_write_page(uint8_t *flash_page)
 {
-	/* Unlock page */
-	printf("flash.c: unlocking f/w page at 0x%08x\r\n", page_addr);
-	ul_rc = flash_unlock(page_addr,
-			page_addr + IFLASH_PAGE_SIZE - 1, 0, 0);
-	if (ul_rc != FLASH_RC_OK) {
-		printf("flash.c: flash unlock error %lu", (unsigned long)ul_rc);
-		return 0;
+	if(testctr == 0)
+	{
+		testctr++;
 	}
-
-	// Erase sector first
-	ul_rc = flash_erase_sector(page_addr);
-	if (ul_rc != FLASH_RC_OK) {
-		printf("flash.c: flash erase error %lu\n\r", (unsigned long)ul_rc);
-		return 0;
+	else
+	{
+		ul_test_page_addr += 512;
 	}
+	uint32_t *pul_test_page = (uint32_t *) ul_test_page_addr;
 
-	// Write to sector
-	ul_rc = flash_write(page_addr, shared_buffer,
+
+	/* Write page */
+	printf("-I- Writing test page with walking bit pattern\n\r");
+	for (ul_idx = 0; ul_idx < (IFLASH_PAGE_SIZE / 4); ul_idx++)
+	{
+		ul_page_buffer[ul_idx] = 1 << (ul_idx % 32);
+	}
+		
+
+	ul_rc = flash_write(ul_test_page_addr, ul_page_buffer,
 			IFLASH_PAGE_SIZE, 0);
 
-	if (ul_rc != FLASH_RC_OK) {
-		printf("flash.c: flash write error %lu\n\r", (unsigned long)ul_rc);
+	if (ul_rc != FLASH_RC_OK)
+	{
+		printf("-F- Flash programming error %lu\n\r", (unsigned long)ul_rc);
 		return 0;
 	}
+
+	/* Validate page */
+	printf("-I- Checking page contents \n\r");
+	for (ul_idx = 0; ul_idx < (IFLASH_PAGE_SIZE / 4); ul_idx++)
+	{
+		if (pul_test_page[ul_idx] != ul_page_buffer[ul_idx])
+		{
+			printf("\n\r-F- data error\n\r");
+			return 0;
+		}
+		else
+		{
+			printf("Flash: 0x%l08x at 0x%l08x\n\r ", (unsigned long)pul_test_page[ul_idx], (unsigned long)&pul_test_page[ul_idx]);
+			printf("Buffr: 0x%l08x\n\r ", (unsigned long)ul_page_buffer[ul_idx]);
+		}
+	}
+	printf("OK\n\r");
+	
+	///* Unlock page */
+	//printf("flash.c: unlocking f/w page at 0x%08x\r\n", page_addr);
+	//ul_rc = flash_unlock(page_addr,
+			//page_addr + IFLASH_PAGE_SIZE - 1, 0, 0);
+	//if (ul_rc != FLASH_RC_OK) {
+		//printf("flash.c: flash unlock error %lu", (unsigned long)ul_rc);
+		//return 0;
+	//}
+//
+	//// Erase sector first
+	//ul_rc = flash_erase_sector(page_addr);
+	//if (ul_rc != FLASH_RC_OK) {
+		//printf("flash.c: flash erase error %lu\n\r", (unsigned long)ul_rc);
+		//return 0;
+	//}
+//
+	//// Write to sector
+	//ul_rc = flash_write(page_addr, shared_buffer,
+			//IFLASH_PAGE_SIZE, 0);
+//
+	//if (ul_rc != FLASH_RC_OK) {
+		//printf("flash.c: flash write error %lu\n\r", (unsigned long)ul_rc);
+		//return 0;
+	//}
 	
 	
-	// Clear shared_buffer
-	memset(&shared_buffer, 0, sizeof(shared_buffer));
-	
-	// Increment page address by 512 (go to next page)
-	page_addr += 512;
+	//// Clear shared_buffer
+	//memset(&shared_buffer, 0, sizeof(shared_buffer));
+	//
+	//// Increment page address by 512 (go to next page)
+	//page_addr += 512;
 	
 	return 1;
 }
