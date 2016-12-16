@@ -137,7 +137,9 @@ CPPFLAGS += -I./src/ASF/common/services/ioport
 CPPFLAGS += -I./src/ASF/common/services/spi/sam_usart_spi
 CPPFLAGS += -I./src/ASF/common/services/spi
 CPPFLAGS += -I./src/ASF/common/services/twi
+CPPFLAGS += -I./src/ASF/sam/services/flash_efc
 CPPFLAGS += -I./src/ASF/sam/drivers/twi
+CPPFLAGS += -I./src/ASF/sam/drivers/efc
 CPPFLAGS += -I./src/ASF/sam/drivers/usart
 CPPFLAGS += -I./src/ASF/sam/drivers/gmac
 CPPFLAGS += -I./src/ASF/sam/drivers/matrix
@@ -183,6 +185,9 @@ CFLAGS += -Wall
 CFLAGS += -pipe -fno-strict-aliasing -Wall -Wstrict-prototypes -Wmissing-prototypes -Werror-implicit-function-declaration -Wpointer-arith -std=gnu99 -ffunction-sections -fdata-sections -Wchar-subscripts -Wcomment -Wformat=2 -Wimplicit-int -Wmain -Wparentheses -Wsequence-point -Wreturn-type -Wswitch -Wtrigraphs -Wunused -Wuninitialized -Wunknown-pragmas -Wfloat-equal -Wundef -Wshadow -Wbad-function-cast -Wwrite-strings -Wsign-compare -Waggregate-return -Wmissing-declarations -Wformat -Wmissing-format-attribute -Wno-deprecated-declarations -Wpacked -Wredundant-decls -Wnested-externs -Wlong-long -Wunreachable-code -Wcast-align --param max-inline-insns-single=500 -mfloat-abi=softfp -mfpu=fpv4-sp-d16
 
 # ARM/GNU Linker -- General
+
+# Limit stack size
+LDFLAGS += -Wl,--defsym,__stack_size__=0x1400
 # Generate map file
 # This will have a .map extension
 LDFLAGS += -Wl,-Map=$(addsuffix .map,$(basename $@))
@@ -297,7 +302,8 @@ $(PROJECT).elf: \
  src/openflow/openflow_13.o \
  src/openflow/openflow.o \
  src/switch.o \
- src/telnet.o \
+ src/http.o \
+ src/flash.o \
  src/timers.o \
  src/ksz8795clx/ethernet_phy.o \
  src/ASF/common/boards/user_board/init.o \
@@ -312,7 +318,9 @@ $(PROJECT).elf: \
  src/ASF/common/utils/stdio/read.o \
  src/ASF/common/utils/stdio/stdio_usb/stdio_usb.o \
  src/ASF/common/utils/stdio/write.o \
+ src/ASF/sam/services/flash_efc/flash_efc.o \
  src/ASF/sam/drivers/afec/afec.o \
+ src/ASF/sam/drivers/efc/efc.o \
  src/ASF/sam/drivers/gmac/gmac_phy.o \
  src/ASF/sam/drivers/gmac/gmac_raw.o \
  src/ASF/sam/drivers/matrix/matrix.o \
@@ -413,7 +421,6 @@ src/main.c: \
  src/eeprom.h \
  src/switch.h \
  src/openflow/openflow.h \
- src/telnet.h \
  src/ksz8795clx/ethernet_phy.h
 
 src/openflow/of_helper.o: src/openflow/of_helper.c
@@ -461,19 +468,17 @@ src/switch.c: \
  src/command.h \
  src/ksz8795clx/ethernet_phy.h
 
-src/telnet.c: \
- src/command.h \
- src/eeprom.h \
- src/switch.h \
- src/openflow/openflow.h \
- src/openflow/of_helper.h \
- src/timers.h \
- src/config/conf_eth.h \
- src/config/config_zodiac.h \
- src/lwip/include/lwip/def.h \
+src/http.c: \
+ src/http.h \
  src/lwip/include/lwip/tcp.h \
- src/lwip/include/ipv4/lwip/ip_addr.h
-
+ src/lwip/include/lwip/err.h \
+ src/timers.h \
+ src/command.h \
+ src/trace.h \
+ src/config/config_zodiac.h \
+ src/openflow/openflow.h \
+ src/eeprom.h \
+ src/flash.h
 
 src/timers.o: src/timers.c
 
