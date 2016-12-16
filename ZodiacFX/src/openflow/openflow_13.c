@@ -1275,7 +1275,7 @@ void flow_delete13(struct ofp_header *msg)
 			continue;
 		}
 
-		if (ptr_fm->flags & OFPFF13_SEND_FLOW_REM) flowrem_notif13(q,OFPRR13_DELETE);
+		if (ntohs(ptr_fm->flags) & OFPFF13_SEND_FLOW_REM || ntohs(flow_match13[q]->flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(q,OFPRR13_DELETE);
 		TRACE("openflow_13.c: Flow %d removed", q+1);
 		// Remove the flow entry
 		remove_flow13(q);
@@ -1393,7 +1393,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 			}
 		}
 
-		if (ptr_fm->flags & OFPFF13_SEND_FLOW_REM) flowrem_notif13(q,OFPRR13_DELETE);
+		if (ntohs(ptr_fm->flags) & OFPFF13_SEND_FLOW_REM || ntohs(flow_match13[q]->flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(q,OFPRR13_DELETE);
 		TRACE("openflow_13.c: Flow %d removed", q+1);
 		// Remove the flow entry
 		remove_flow13(q);
@@ -1560,5 +1560,46 @@ void flowrem_notif13(int flowid, uint8_t reason)
 	}
 	sendtcp(&flow_rem, htons(ofr.header.length));
 	TRACE("openflow_13.c: Flow removed notification sent");
+	return;
+}
+
+/*
+*	OpenFlow Port Status message function
+*
+*	@param port - port number that has changed.
+*
+*/
+void port_status_message13(uint8_t port)
+{
+	char portname[8];
+	uint8_t mac[] = {0x00,0x00,0x00,0x00,0x00,0x00};
+	struct ofp13_port_status ofps;
+	
+	ofps.header.type = OFPT13_PORT_STATUS;
+	ofps.header.version = OF_Version;
+	ofps.header.length = htons(sizeof(struct ofp13_port_status));
+	ofps.header.xid = 0;
+	ofps.reason = OFPPR13_MODIFY;
+	ofps.desc.port_no = htonl(port+1);
+	for(int k = 0; k<6; k++)            // Generate random MAC address
+	{
+		int r = rand() % 255;
+		memset(mac + k,r,1);
+	}
+	memcpy(&ofps.desc.hw_addr, mac, sizeof(mac));
+	memset(ofps.desc.name, 0, OFP13_MAX_PORT_NAME_LEN);	// Zero out the name string
+	sprintf(portname, "eth%d",port);
+	strcpy(ofps.desc.name, portname);
+	ofps.desc.config = 0;
+	if (port_status[port] == 1) ofps.desc.state = htonl(OFPPS13_LIVE);
+	if (port_status[port] == 0) ofps.desc.state = htonl(OFPPS13_LINK_DOWN);
+	ofps.desc.curr = htonl(OFPPF13_100MB_FD + OFPPF13_COPPER);
+	ofps.desc.advertised = 0;
+	ofps.desc.supported = 0;
+	ofps.desc.peer = 0;
+	ofps.desc.curr_speed = 0;
+	ofps.desc.max_speed = 0;
+	sendtcp(&ofps, htons(ofps.header.length));
+	TRACE("openflow_13.c: Port Status change notification sent");
 	return;
 }

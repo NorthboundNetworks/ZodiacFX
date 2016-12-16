@@ -77,6 +77,8 @@ void barrier13_reply(uint32_t xid);
 void sendtcp(const void *buffer, u16_t len);
 void flowrem_notif10(int flowid, uint8_t reason);
 void flowrem_notif13(int flowid, uint8_t reason);
+void port_status_message10(uint8_t port);
+void port_status_message13(uint8_t port);
 
 #define HTONS(x) ((((x) & 0xff) << 8) | (((x) & 0xff00) >> 8))
 #define NTOHS(x) HTONS(x)

@@ -34,6 +34,7 @@
 #include "config_zodiac.h"
 #include "openflow.h"
 #include "of_helper.h"
+#include "command.h"
 #include "lwip/tcp.h"
 #include "ipv4/lwip/ip.h"
 #include "ipv4/lwip/inet_chksum.h"
@@ -45,9 +46,12 @@
 #define ALIGN8(x) (x+7)/8*8
 
 // Global variables
+extern struct zodiac_config Zodiac_Config;
 extern int iLastFlow;
 extern int OF_Version;
 extern int totaltime;
+extern uint8_t last_port_status[4];
+extern uint8_t port_status[4];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct table_counter table_counters[MAX_TABLES];
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
@@ -131,6 +135,12 @@ void nnOF_timer(void)
 		timer_alt = 1;
 	} else if (timer_alt == 1){
 		update_port_status();
+		// If port status has changed send a port status message
+		for (int x=0;x<4;x++)
+		{
+			if (last_port_status[x] != port_status[x] && OF_Version == 1 && Zodiac_Config.of_port[x] == 1) port_status_message10(x);
+			if (last_port_status[x] != port_status[x] && OF_Version == 4 && Zodiac_Config.of_port[x] == 1) port_status_message13(x);
+		}
 		timer_alt = 2;
 	} else if (timer_alt == 2){
 		flow_timeouts();
@@ -987,8 +997,14 @@ void remove_flow13(int flow_id)
 	ofp13_oxm_match[flow_id] = ofp13_oxm_match[iLastFlow-1];
 	ofp13_oxm_inst[flow_id] = ofp13_oxm_inst[iLastFlow-1];
 	ofp13_oxm_inst_size[flow_id] = ofp13_oxm_inst_size[iLastFlow - 1];
+	// Clear the values from the counters that moved
+	flow_match13[iLastFlow-1] = NULL;
+	ofp13_oxm_match[iLastFlow-1] = NULL;
+	ofp13_oxm_inst[iLastFlow-1] = NULL;
+	ofp13_oxm_inst_size[iLastFlow - 1] = 0;
+	// Move counters
 	memcpy(&flow_counters[flow_id], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-	// Clear the counters and action from the last flow that was moved
+	// Clear the counters from the last flow that was moved
 	memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
 	iLastFlow --;
 	return;
@@ -997,28 +1013,25 @@ void remove_flow13(int flow_id)
 /*
 *	Remove a flow entry from the flow table (OF 1.3)
 *
-*	@param flow_id - the idex number of the flow to remove
+*	@param flow_id - the index number of the flow to remove
 *
 */
 void remove_flow10(int flow_id)
 {
 	// Clear flow counters and actions
 	memset(&flow_counters[flow_id], 0, sizeof(struct flows_counter));
-	
+	membag_free(flow_match10[flow_id]);
+	membag_free(flow_actions10[flow_id]);
 	// Copy the last flow to here to fill the gap
 	flow_match10[flow_id] = flow_match10[iLastFlow-1];
 	flow_actions10[flow_id] = flow_actions10[iLastFlow-1];
-	membag_free(flow_match10[iLastFlow-1]);
-	membag_free(flow_actions10[iLastFlow-1]);
+	// Clear the pointers to the flows that moved
 	flow_match10[iLastFlow-1] = NULL;
 	flow_actions10[iLastFlow-1] = NULL;
-	
 	// Move the counters
 	memcpy(&flow_counters[flow_id], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-	
 	// Clear the counters and action from the last flow that was moved
 	memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-	
 	iLastFlow --;
 	return;
 
@@ -1099,8 +1112,11 @@ void clear_flows(void)
 	{
 		for(int q=0;q<MAX_FLOWS_13;q++)
 		{
+			memset(&flow_counters[q], 0, sizeof(struct flows_counter));
 			if (ofp13_oxm_match[q] != NULL) ofp13_oxm_match[q] = NULL;
 			if (ofp13_oxm_inst[q] != NULL) ofp13_oxm_inst[q] = NULL;
+			if (flow_match13[q] != NULL) flow_match13[q] = NULL;
+			ofp13_oxm_inst_size[q] = 0;
 		}
 	}
 	
