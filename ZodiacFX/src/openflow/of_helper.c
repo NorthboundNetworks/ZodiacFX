@@ -997,8 +997,14 @@ void remove_flow13(int flow_id)
 	ofp13_oxm_match[flow_id] = ofp13_oxm_match[iLastFlow-1];
 	ofp13_oxm_inst[flow_id] = ofp13_oxm_inst[iLastFlow-1];
 	ofp13_oxm_inst_size[flow_id] = ofp13_oxm_inst_size[iLastFlow - 1];
+	// Clear the values from the counters that moved
+	flow_match13[iLastFlow-1] = NULL;
+	ofp13_oxm_match[iLastFlow-1] = NULL;
+	ofp13_oxm_inst[iLastFlow-1] = NULL;
+	ofp13_oxm_inst_size[iLastFlow - 1] = 0;
+	// Move counters
 	memcpy(&flow_counters[flow_id], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-	// Clear the counters and action from the last flow that was moved
+	// Clear the counters from the last flow that was moved
 	memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
 	iLastFlow --;
 	return;
@@ -1007,28 +1013,25 @@ void remove_flow13(int flow_id)
 /*
 *	Remove a flow entry from the flow table (OF 1.3)
 *
-*	@param flow_id - the idex number of the flow to remove
+*	@param flow_id - the index number of the flow to remove
 *
 */
 void remove_flow10(int flow_id)
 {
 	// Clear flow counters and actions
 	memset(&flow_counters[flow_id], 0, sizeof(struct flows_counter));
-	
+	membag_free(flow_match10[flow_id]);
+	membag_free(flow_actions10[flow_id]);
 	// Copy the last flow to here to fill the gap
 	flow_match10[flow_id] = flow_match10[iLastFlow-1];
 	flow_actions10[flow_id] = flow_actions10[iLastFlow-1];
-	membag_free(flow_match10[iLastFlow-1]);
-	membag_free(flow_actions10[iLastFlow-1]);
+	// Clear the pointers to the flows that moved
 	flow_match10[iLastFlow-1] = NULL;
 	flow_actions10[iLastFlow-1] = NULL;
-	
 	// Move the counters
 	memcpy(&flow_counters[flow_id], &flow_counters[iLastFlow-1], sizeof(struct flows_counter));
-	
 	// Clear the counters and action from the last flow that was moved
 	memset(&flow_counters[iLastFlow-1], 0, sizeof(struct flows_counter));
-	
 	iLastFlow --;
 	return;
 
@@ -1109,8 +1112,11 @@ void clear_flows(void)
 	{
 		for(int q=0;q<MAX_FLOWS_13;q++)
 		{
+			memset(&flow_counters[q], 0, sizeof(struct flows_counter));
 			if (ofp13_oxm_match[q] != NULL) ofp13_oxm_match[q] = NULL;
 			if (ofp13_oxm_inst[q] != NULL) ofp13_oxm_inst[q] = NULL;
+			if (flow_match13[q] != NULL) flow_match13[q] = NULL;
+			ofp13_oxm_inst_size[q] = 0;
 		}
 	}
 	
