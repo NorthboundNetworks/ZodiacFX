@@ -250,9 +250,9 @@ struct ofp10_switch_features {
 
 /* What changed about the physical port */
 enum ofp_port_reason {
-    OFPPR_ADD,              /* The port was added. */
-    OFPPR_DELETE,           /* The port was removed. */
-    OFPPR_MODIFY            /* Some attribute of the port has changed. */
+    OFPPR10_ADD,              /* The port was added. */
+    OFPPR10_DELETE,           /* The port was removed. */
+    OFPPR10_MODIFY            /* Some attribute of the port has changed. */
 };
 
 /* A physical port has changed in the datapath */

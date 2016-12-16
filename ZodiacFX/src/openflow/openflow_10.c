@@ -1165,3 +1165,42 @@ void flowrem_notif10(int flowid, uint8_t reason)
 	sendtcp(&ofr, sizeof(struct ofp_flow_removed));
 	return;
 }
+
+/*
+*	OpenFlow Port Status message function
+*
+*	@param port - port number that has changed.
+*
+*/
+void port_status_message10(uint8_t port)
+{
+	char portname[8];
+	uint8_t mac[] = {0x00,0x00,0x00,0x00,0x00,0x00};
+	struct ofp_port_status ofps;
+	
+	ofps.header.type = OFPT10_PORT_STATUS;
+	ofps.header.version = OF_Version;
+	ofps.header.length = htons(sizeof(struct ofp_port_status));
+	ofps.header.xid = 0;
+	ofps.reason = OFPPR10_MODIFY;
+	ofps.desc.port_no = htons(port+1);
+	for(int k = 0; k<6; k++)            // Generate random MAC address
+	{
+		int r = rand() % 255;
+		memset(mac + k,r,1);
+	}
+	memcpy(&ofps.desc.hw_addr, mac, sizeof(mac));
+	memset(ofps.desc.name, 0, OFP10_MAX_PORT_NAME_LEN);	// Zero out the name string
+	sprintf(portname, "eth%d",port);
+	strcpy(ofps.desc.name, portname);
+	ofps.desc.config = 0;
+	if (port_status[port] == 1) ofps.desc.state = htonl(OFPPS10_STP_LISTEN);
+	if (port_status[port] == 0) ofps.desc.state = htonl(OFPPS10_LINK_DOWN);
+	ofps.desc.curr = htonl(OFPPF10_100MB_FD + OFPPF10_COPPER);
+	ofps.desc.advertised = 0;
+	ofps.desc.supported = 0;
+	ofps.desc.peer = 0;
+	sendtcp(&ofps, htons(ofps.header.length));
+	TRACE("openflow_10.c: Port Status change notification sent");
+	return;
+}
