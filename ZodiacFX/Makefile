@@ -187,6 +187,7 @@ CFLAGS += -pipe -fno-strict-aliasing -Wall -Wstrict-prototypes -Wmissing-prototy
 # ARM/GNU Linker -- General
 
 # Limit stack size
+LDFLAGS += -Wl,--defsym,__stack_size__=0x1400
 # Generate map file
 # This will have a .map extension
 LDFLAGS += -Wl,-Map=$(addsuffix .map,$(basename $@))
