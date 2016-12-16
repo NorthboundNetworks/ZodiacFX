@@ -390,7 +390,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		memset(&reset_config.vlan_list, 0, sizeof(struct virtlan)* MAX_VLANS); // Clear vlan array
 
 		// Config VLAN 100
-		sprintf(&reset_config.vlan_list[0].cVlanName, "Openflow");	// Vlan name
+		sprintf(&reset_config.vlan_list[0].cVlanName, "OpenFlow");	// Vlan name
 		reset_config.vlan_list[0].portmap[0] = 1;		// Assign port 1 to this vlan
 		reset_config.vlan_list[0].portmap[1] = 1;		// Assign port 2 to this vlan
 		reset_config.vlan_list[0].portmap[2] = 1;		// Assign port 3 to this vlan
@@ -516,7 +516,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
-	// Display Config
+	// Display VLANs
 	if (strcmp(command, "show")==0 && strcmp(param1, "vlans")==0){
 		int x;
 		printf("\r\n\tVLAN ID\t\tName\t\t\tType\r\n");
@@ -1563,7 +1563,7 @@ void printhelp(void)
 	printf(" set failstate <secure|safe>\r\n");
 	printf(" add vlan <vlan id> <vlan name>\r\n");
 	printf(" delete vlan <vlan id>\r\n");
-	printf(" set vlan-type <openflow|native>\r\n");
+	printf(" set vlan-type <vlan id> <openflow|native>\r\n");
 	printf(" add vlan-port <vlan id> <port>\r\n");
 	printf(" delete vlan-port <port>\r\n");
 	printf(" factory reset\r\n");

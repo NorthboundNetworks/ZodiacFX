@@ -23,12 +23,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- * Author: Paul Zanna <paul@northboundnetworks.com>
+ * Authors: Paul Zanna <paul@northboundnetworks.com>
+ *		  & Kristopher Chen <Kristopher@northboundnetworks.com>
  *
  */
 
 #include <asf.h>
 #include <inttypes.h>
+#include <string.h>
 #include "config_zodiac.h"
 #include "openflow/openflow.h"
 
@@ -37,6 +39,7 @@ extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 
 // Internal Functions
 void xmodem_xfer(void);
+void xmodem_clear_padding(uint8_t *buff);
 void flash_write_page(uint8_t *flash_page);
 
 
@@ -79,11 +82,11 @@ xmodem_xfer(void)
 			ch = udi_cdc_getc();
 			timeout_clock = 0;	// reset timeout clock
 			
-			
-			if (block_count == 1 && ch == 4)	// Did we receive an <EOT>
+			// Check for <EOT>
+			if (block_count == 1 && ch == 4)	// Note: block_count is cleared to 0 and incremented at the last block
 			{
 				printf("%c",6);	// Send final <ACK>
-				/* TODO: Add function to strip the 01Ah fill bytes from the end of the last block */
+				xmodem_clear_padding(&shared_buffer); // strip the 0x1A fill bytes from the end of the last block
 				flash_write_page(&shared_buffer);	// TODO: Testing a image < 512 bytes, will change this to allow the full image size
 			}
 			
@@ -126,8 +129,29 @@ xmodem_xfer(void)
 */
 void flash_write_page(uint8_t *flash_page)
 {
-	// TODO: Write a page to flash
+	// Write received blocks to unused memory region
+	
+	
 	while(1);
 }
 
-
+/*
+*	Remove XMODEM 0x1A padding at end of data
+*
+*/
+xmodem_clear_padding(uint8_t *buff)
+{
+	// Find length of buffer
+	int len = strlen(buff);
+	
+	// Overwrite the padding element in the buffer (zero-indexed)
+	while(len > 0 && buff[len-1] == 0x1A)	// Check if current element is a padding character
+	{
+		// Write null
+		buff[len-1] = '\0';
+		
+		len--;
+	}
+	
+	return;	// Padding characters removed
+}

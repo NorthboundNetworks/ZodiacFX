@@ -765,7 +765,20 @@ struct ofp13_table_stats {
     uint64_t matched_count;  /* Number of packets that hit table. */
 };
 
+/* What changed about the physical port */
+enum ofp13_port_reason {
+	OFPPR13_ADD     = 0,         /* The port was added. */
+	OFPPR13_DELETE  = 1,         /* The port was removed. */
+	OFPPR13_MODIFY  = 2,         /* Some attribute of the port has changed. */
+};
 
+/* A physical port has changed in the datapath */
+struct ofp13_port_status {
+	struct ofp_header header;
+	uint8_t reason;          /* One of OFPPR_*. */
+	uint8_t pad[7];          /* Align to 64-bits. */
+	struct ofp13_port desc;
+};
 
 
 /* ## -------------------------- ## */

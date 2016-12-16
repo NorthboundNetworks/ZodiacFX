@@ -49,6 +49,7 @@ uint8_t spibuffer[1];
 struct ofp10_port_stats phys10_port_stats[4];
 struct ofp13_port_stats phys13_port_stats[4];
 uint8_t port_status[4];
+uint8_t last_port_status[4];
 extern uint8_t NativePortMatrix;
 extern bool masterselect;
 extern bool stackenabled;
@@ -630,6 +631,12 @@ int readtxdrop(int port)
 */
 void update_port_status(void)
 {
+	// Copy out the old status so we know if it has changed
+	last_port_status[0] = port_status[0];
+	last_port_status[1] = port_status[1];
+	last_port_status[2] = port_status[2];
+	last_port_status[3] = port_status[2];
+	// Update port status
 	port_status[0] = (switch_read(30) & 32) >> 5;
 	port_status[1] = (switch_read(46) & 32) >> 5;
 	port_status[2] = (switch_read(62) & 32) >> 5;
