@@ -42,15 +42,11 @@ extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 static uint32_t page_addr;
 //static uint32_t ul_rc;
 
-static	uint32_t ul_test_page_addr = (IFLASH_ADDR + (5*IFLASH_NB_OF_PAGES/8)*IFLASH_PAGE_SIZE);
+static	uint32_t ul_test_page_addr;
 static	uint32_t ul_rc;
 static	uint32_t ul_idx;
 static	uint32_t ul_page_buffer[IFLASH_PAGE_SIZE / sizeof(uint32_t)];
 
-// Internal Functions
-void xmodem_xfer(void);
-void xmodem_clear_padding(uint8_t *buff);
-int flash_write_page(uint8_t *flash_page);
 
 /*
 *	Get the unique serial number from the CPU
@@ -66,21 +62,9 @@ void get_serial(uint32_t *uid_buf)
 *	Firmware update function
 *
 */
-void firmware_update(void)
-{
-	// Clear shared_buffer
-	memset(&shared_buffer, 0, sizeof(shared_buffer));
-	
-	//// Initialise page_addr variable
-	//page_addr = (IFLASH_ADDR + (3*IFLASH_SIZE/4) ); // Start at location 3/4 of internal flash
-	//
-	///* Initialize flash: 6 wait states for flash writing. */
-	//ul_rc = flash_init(FLASH_ACCESS_MODE_128, 6);
-	//if (ul_rc != FLASH_RC_OK) {
-		//printf("flash.c: flash service initialisation error", (unsigned long)ul_rc);
-		//return 0;
-	//}
-	
+void firmware_update_init(void)
+{	
+	ul_test_page_addr = (IFLASH_ADDR + (5*IFLASH_NB_OF_PAGES/8)*IFLASH_PAGE_SIZE);
 	
 	/* Initialize flash: 6 wait states for flash writing. */
 	ul_rc = flash_init(FLASH_ACCESS_MODE_128, 6);
@@ -89,7 +73,7 @@ void firmware_update(void)
 		return 0;
 	}
 	
-	/* Unlock flash region */	// (Flash sectors should not be locked by default)
+	// Unlock 8k lock regions (these should be unlocked by default)
 	uint32_t unlock_address = ul_test_page_addr;
 	while(unlock_address < IFLASH_ADDR + IFLASH_SIZE - (IFLASH_LOCK_REGION_SIZE - 1))
 	{
@@ -105,9 +89,7 @@ void firmware_update(void)
 		unlock_address += IFLASH_LOCK_REGION_SIZE;
 	}
 
-	/* The EWP command is not supported for non-8KByte sectors in all devices
-	 *  SAM4 series, so an erase command is required before the write operation.
-	 */
+	// Erase 3 64k sectors
 	uint32_t erase_address = ul_test_page_addr;
 	while(erase_address < IFLASH_ADDR + IFLASH_SIZE - (ERASE_SECTOR_SIZE - 1))
 	{
@@ -121,38 +103,80 @@ void firmware_update(void)
 		
 		erase_address += ERASE_SECTOR_SIZE;
 	}
-		
-	while(ul_test_page_addr < IFLASH_ADDR + IFLASH_SIZE)
+	
+	return;
+}
+
+/*
+*	Write a page to flash memory
+*
+*/
+int flash_write_page(uint8_t *flash_page)
+{
+	if(ul_test_page_addr <= IFLASH_ADDR + IFLASH_SIZE - IFLASH_PAGE_SIZE)
 	{
-		flash_write_page(&shared_buffer);
+		ul_rc = flash_write(ul_test_page_addr, flash_page,
+		IFLASH_PAGE_SIZE, 0);
+	}
+	else
+	{
+		// Out of flash range
+		return 0;
 	}
 
-		
-	unsigned long* tstptr1 = (unsigned long*)0x0047F804;
-	unsigned long* tstptr2 = (unsigned long*)0x0047F820;
-	unsigned long* tstptr3 = (unsigned long*)0x0047fa04;
-	printf("Flash: 0x%l08x 0x%l08x 0x%l08x\n\r ", *tstptr1, *tstptr2, *tstptr3);
+	if (ul_rc != FLASH_RC_OK)
+	{
+		return 0;
+	}	
 	
-	int tstst;
-	for(tstst=0;tstst<10000;tstst++);
+	ul_test_page_addr += 512;
 	
-	xmodem_xfer();	// Receive new firmware image vie XModem
+	return 1;
+}
+
+/*
+*	Overwrite existing firmware
+*
+*/
+void firmware_update(void)
+{
+	// call IAP functions
+	// restart
+}
+
+/*
+*	Handle firmware update through CLI
+*
+*/
+void cli_update(void)
+{
+	firmware_update_init();
+	if(!xmodem_xfer())	// Receive new firmware image via XModem
+	{
+		printf("Error: failed to write firmware to memory\r\n");
+	}
+	firmware_update();
 	
-	/*TODO: Update main firmware image*/
-	// Copy new firmware image to program location
+	// Zodiac should have restarted by this point
+	printf("Firmware update unsuccessful. Please try again.\r\n");
+	return;
 }
 
 /*
 *	XModem transfer
 *
 */
-xmodem_xfer(void)
+int xmodem_xfer(void)
 {
 	char ch;
 	int timeout_clock = 0;
-	int byte_count = 1;
-	int block_count = 1;
+	int buff_ctr = 1;
+	int byte_ctr = 1;
+	int block_ctr = 0;
 	uint8_t xmodem_crc = 0;
+	
+	// Prepare shared_buffer for storing each page of data
+	memset(&shared_buffer, 0xFF, IFLASH_PAGE_SIZE);
 	
 	while(1)
 	{
@@ -162,139 +186,73 @@ xmodem_xfer(void)
 			timeout_clock = 0;	// reset timeout clock
 			
 			// Check for <EOT>
-			if (block_count == 1 && ch == X_EOT)	// Note: block_count is cleared to 0 and incremented at the last block
+			if (byte_ctr == 1 && ch == X_EOT)	// Note: byte_ctr is cleared to 0 and incremented in the previous loop
 			{
-				printf("%c",X_ACK);	// Send final <ACK>
-				xmodem_clear_padding(&shared_buffer); // strip the 0x1A fill bytes from the end of the last block
+				printf("%c", X_ACK);	// Send final <ACK>
+				xmodem_clear_padding(&shared_buffer);	// strip the 0x1A fill bytes from the end of the last block
 				
-				// Check that buffer will fit into page size (NULL not required)
-				if(strlen(shared_buffer) <= 512)
+				// Send remaining data in buffer
+				if(!flash_write_page(&shared_buffer))
 				{
-					if(!flash_write_page(&shared_buffer))	// TODO: Testing a image < 512 bytes, will change this to allow the full image size
-					{
-						printf("flash.c: page written successfully");
-					}
-					else
-					{
-						printf("flash.c: page write failed");
-						return 0;
-					}
+					return 0;
 				}
+				
+				return 1;
+			}
+			else if(block_ctr == 4)
+			{
+				// Write the previous page of data
+				if(!flash_write_page(&shared_buffer))
+				{
+					return 0;
+				}
+				
+				// Reset block counter
+				block_ctr = 0;
+				
+				// Reset buffer counter
+				buff_ctr = 1;
+				
+				// Clear buffer to 0xFF for next page of data
+				memset(&shared_buffer, 0xFF, IFLASH_PAGE_SIZE);
 			}
 			
 			// Check for end of block
-			if (block_count == 132)
+			if (byte_ctr == 132)
 			{
-				if (xmodem_crc == ch)	// Check CRC
+				if (xmodem_crc == ch)		// Check CRC
 				{
-					printf("%c",X_ACK);		// If the CRC is OK then send a <ACK>
-					// TODO: Write a page to flash if 4 blocks received
-					block_count = 0;	// Start a new block
-					} else {
-					printf("%c",X_NAK);	// If the CRC is incorrect then send a <NAK>
-					block_count = 0;	// Start a new block
-					byte_count -= 128;
+					printf("%c", X_ACK);	// If the CRC is OK then send a <ACK>
+					block_ctr++;			// Increment block count
+					byte_ctr = 0;			// Start a new 128-byte block
 				}
-				xmodem_crc = 0;		// Reset CRC
+				else
+				{
+					printf("%c", X_NAK);	// If the CRC is incorrect then send a <NAK>
+					byte_ctr = 0;			// Start a new 128-byte block
+					buff_ctr -= 128;		// Overwrite previous data
+				}
+				
+				xmodem_crc = 0;				// Reset CRC
 			}
 
 			// Don't store the first 3 bytes <SOH>, <###>, <255-###>
-			if (block_count > 3)
+			if (byte_ctr > 3)
 			{
-				shared_buffer[byte_count-1] = ch;	// Testing only, need to find a place to store firmware image
-				byte_count++;
+				shared_buffer[buff_ctr-1] = ch;	// Store received data
+				buff_ctr++;
 				xmodem_crc += ch;
 			}
 			
-			block_count++;
+			byte_ctr++;
 		}
 		timeout_clock++;
 		if (timeout_clock > 1000000)	// Timeout, send <NAK>
 		{
-			printf("%c",X_NAK);
+			printf("%c", X_NAK);
 			timeout_clock = 0;
 		}
 	}
-}
-
-/*
-*	Write a page to flash memory
-*
-*/
-int flash_write_page(uint8_t *flash_page)
-{
-	uint32_t *pul_test_page = (uint32_t *) ul_test_page_addr;
-
-
-	/* Write page */
-	printf("-I- Writing test page with walking bit pattern\n\r");
-	for (ul_idx = 0; ul_idx < (IFLASH_PAGE_SIZE / 4); ul_idx++)
-	{
-		ul_page_buffer[ul_idx] = 1 << (ul_idx % 32);
-	}
-		
-
-	ul_rc = flash_write(ul_test_page_addr, ul_page_buffer,
-			IFLASH_PAGE_SIZE, 0);
-
-	if (ul_rc != FLASH_RC_OK)
-	{
-		printf("-F- Flash programming error %lu\n\r", (unsigned long)ul_rc);
-		return 0;
-	}
-
-	/* Validate page */
-	printf("-I- Checking page contents \n\r");
-	for (ul_idx = 0; ul_idx < (IFLASH_PAGE_SIZE / 4); ul_idx++)
-	{
-		if (pul_test_page[ul_idx] != ul_page_buffer[ul_idx])
-		{
-			printf("\n\r-F- data error\n\r");
-			return 0;
-		}
-		else
-		{
-			printf("Flash: 0x%l08x at 0x%l08x\n\r ", (unsigned long)pul_test_page[ul_idx], (unsigned long)&pul_test_page[ul_idx]);
-			printf("Buffr: 0x%l08x\n\r ", (unsigned long)ul_page_buffer[ul_idx]);
-		}
-	}
-	printf("OK\n\r");
-	
-	ul_test_page_addr += 512;
-	
-	///* Unlock page */
-	//printf("flash.c: unlocking f/w page at 0x%08x\r\n", page_addr);
-	//ul_rc = flash_unlock(page_addr,
-			//page_addr + IFLASH_PAGE_SIZE - 1, 0, 0);
-	//if (ul_rc != FLASH_RC_OK) {
-		//printf("flash.c: flash unlock error %lu", (unsigned long)ul_rc);
-		//return 0;
-	//}
-//
-	//// Erase sector first
-	//ul_rc = flash_erase_sector(page_addr);
-	//if (ul_rc != FLASH_RC_OK) {
-		//printf("flash.c: flash erase error %lu\n\r", (unsigned long)ul_rc);
-		//return 0;
-	//}
-//
-	//// Write to sector
-	//ul_rc = flash_write(page_addr, shared_buffer,
-			//IFLASH_PAGE_SIZE, 0);
-//
-	//if (ul_rc != FLASH_RC_OK) {
-		//printf("flash.c: flash write error %lu\n\r", (unsigned long)ul_rc);
-		//return 0;
-	//}
-	
-	
-	//// Clear shared_buffer
-	//memset(&shared_buffer, 0, sizeof(shared_buffer));
-	//
-	//// Increment page address by 512 (go to next page)
-	//page_addr += 512;
-	
-	return 1;
 }
 
 /*
@@ -303,17 +261,31 @@ int flash_write_page(uint8_t *flash_page)
 */
 xmodem_clear_padding(uint8_t *buff)
 {
-	// Find length of buffer
-	int len = strlen(buff);
+	int len = IFLASH_PAGE_SIZE;
 	
 	// Overwrite the padding element in the buffer (zero-indexed)
-	while(len > 0 && buff[len-1] == 0x1A)	// Check if current element is a padding character
+	while(len > 0)	// Move from end of buffer to beginning
 	{
-		// Write null
-		buff[len-1] = '\0';
+		if(buff[len-1] != 0xFF && buff[len-1] != 0x1A)
+		{
+			return;
+		}
+		else if(buff[len-1] == 0x1A)
+		{
+			// Latch onto 0x1A
+			while(len > 0 && buff[len-1] == 0x1A)
+			{
+				// Write erase value
+				buff[len-1] = 0xFF;
+				len--;
+			}
+			
+			return;
+		}
 		
 		len--;
 	}
 	
 	return;	// Padding characters removed
 }
+
