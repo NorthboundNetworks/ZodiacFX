@@ -24,6 +24,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: Paul Zanna <paul@northboundnetworks.com>
+ *		 & Kristopher Chen <Kristopher@northboundnetworks.com>
  *
  */
 
@@ -37,5 +38,7 @@ void get_serial(uint32_t *uid_buf);
 #define X_EOT 0x04
 #define X_ACK 0x06
 #define X_NAK 0x15
+
+#define ERASE_SECTOR_SIZE 65536
 
 #endif /* FLASH_H_ */

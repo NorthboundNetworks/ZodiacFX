@@ -1506,6 +1506,20 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 	
+	if (strcmp(command, "check_flash")==0)
+	{
+		// Display contents of firmware update region
+		unsigned long* pmem = (unsigned long*)0x00450000;
+		while(pmem <= 0x00480000)
+		{
+			printf("Addr: %p  Val: 0x%l08x\n\r", (void *)pmem, *pmem);
+			pmem++;			
+		}
+		return;
+	}
+	
+
+	
 	// Unknown Command response
 	printf("Unknown command\r\n");
 	return;

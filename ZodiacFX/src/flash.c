@@ -42,12 +42,10 @@ extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 static uint32_t page_addr;
 //static uint32_t ul_rc;
 
-static	uint32_t ul_test_page_addr = (IFLASH_ADDR + IFLASH_SIZE - IFLASH_PAGE_SIZE * 4);
+static	uint32_t ul_test_page_addr = (IFLASH_ADDR + (5*IFLASH_NB_OF_PAGES/8)*IFLASH_PAGE_SIZE);
 static	uint32_t ul_rc;
 static	uint32_t ul_idx;
 static	uint32_t ul_page_buffer[IFLASH_PAGE_SIZE / sizeof(uint32_t)];
-
-static int testctr = 0;
 
 // Internal Functions
 void xmodem_xfer(void);
@@ -91,30 +89,45 @@ void firmware_update(void)
 		return 0;
 	}
 	
-	/* Unlock page */
-	printf("-I- Unlocking test page: 0x%08x\r\n", ul_test_page_addr);
-	ul_rc = flash_unlock(ul_test_page_addr,
-	ul_test_page_addr + (4*IFLASH_PAGE_SIZE) - 1, 0, 0);
-	if (ul_rc != FLASH_RC_OK)
+	/* Unlock flash region */	// (Flash sectors should not be locked by default)
+	uint32_t unlock_address = ul_test_page_addr;
+	while(unlock_address < IFLASH_ADDR + IFLASH_SIZE - (IFLASH_LOCK_REGION_SIZE - 1))
 	{
-		printf("-F- Unlock error %lu\n\r", (unsigned long)ul_rc);
-		return 0;
+		printf("-I- Unlocking region start at: 0x%08x\r\n", unlock_address);
+		ul_rc = flash_unlock(unlock_address,
+		unlock_address + (4*IFLASH_PAGE_SIZE) - 1, 0, 0);
+		if (ul_rc != FLASH_RC_OK)
+		{
+			printf("-F- Unlock error %lu\n\r", (unsigned long)ul_rc);
+			return 0;
+		}
+		
+		unlock_address += IFLASH_LOCK_REGION_SIZE;
 	}
 
 	/* The EWP command is not supported for non-8KByte sectors in all devices
 	 *  SAM4 series, so an erase command is required before the write operation.
 	 */
-	ul_rc = flash_erase_sector(ul_test_page_addr);
-	if (ul_rc != FLASH_RC_OK)
+	uint32_t erase_address = ul_test_page_addr;
+	while(erase_address < IFLASH_ADDR + IFLASH_SIZE - (ERASE_SECTOR_SIZE - 1))
 	{
-		printf("-F- Flash programming error %lu\n\r", (unsigned long)ul_rc);
-		return 0;
+		printf("-I- Erasing sector with address: 0x%08x\r\n", erase_address);
+		ul_rc = flash_erase_sector(erase_address);
+		if (ul_rc != FLASH_RC_OK)
+		{
+			printf("-F- Flash programming error %lu\n\r", (unsigned long)ul_rc);
+			return 0;
+		}
+		
+		erase_address += ERASE_SECTOR_SIZE;
 	}
-	
-	
-	flash_write_page(&shared_buffer);
-	flash_write_page(&shared_buffer);
-	
+		
+	while(ul_test_page_addr < IFLASH_ADDR + IFLASH_SIZE)
+	{
+		flash_write_page(&shared_buffer);
+	}
+
+		
 	unsigned long* tstptr1 = (unsigned long*)0x0047F804;
 	unsigned long* tstptr2 = (unsigned long*)0x0047F820;
 	unsigned long* tstptr3 = (unsigned long*)0x0047fa04;
@@ -210,14 +223,6 @@ xmodem_xfer(void)
 */
 int flash_write_page(uint8_t *flash_page)
 {
-	if(testctr == 0)
-	{
-		testctr++;
-	}
-	else
-	{
-		ul_test_page_addr += 512;
-	}
 	uint32_t *pul_test_page = (uint32_t *) ul_test_page_addr;
 
 
@@ -254,6 +259,8 @@ int flash_write_page(uint8_t *flash_page)
 		}
 	}
 	printf("OK\n\r");
+	
+	ul_test_page_addr += 512;
 	
 	///* Unlock page */
 	//printf("flash.c: unlocking f/w page at 0x%08x\r\n", page_addr);
