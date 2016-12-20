@@ -24,6 +24,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: Paul Zanna <paul@northboundnetworks.com>
+ *		 & Kristopher Chen <Kristopher@northboundnetworks.com>
  *
  */
 
@@ -31,7 +32,18 @@
 #ifndef FLASH_H_
 #define FLASH_H_
 
-void firmware_update(void);
 void get_serial(uint32_t *uid_buf);
+void cli_update(void);
+int flash_write_page(uint8_t *flash_page);
+void firmware_update_init(void);
+void firmware_update(void);
+int xmodem_xfer(void);
+void xmodem_clear_padding(uint8_t *buff);
+
+#define X_EOT 0x04
+#define X_ACK 0x06
+#define X_NAK 0x15
+
+#define ERASE_SECTOR_SIZE 65536
 
 #endif /* FLASH_H_ */

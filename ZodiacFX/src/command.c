@@ -275,11 +275,12 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
-	// Display help
+	// Update firmware
 	if (strcmp(command, "update") == 0)
 	{
 		printf("Please begin firmware upload\r\n");
-		firmware_update();
+		cli_update();
+		
 		return;
 
 	}
@@ -1503,6 +1504,43 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 	{
 		trace = true;
 		printf("Starting trace...\r\n");
+		return;
+	}
+	
+	if (strcmp(command, "check_flash")==0)
+	{
+		// Display contents of firmware update region (ending @ first 0xFFFFFFFF)
+		unsigned long* pmem = (unsigned long*)0x00450000;
+		while(pmem <= 0x00480000)
+		{
+			if(*pmem == 0xFFFFFFFF)
+			{
+				return;
+			}
+			printf("Addr: %p  Val: 0x%l08x\n\r", (void *)pmem, *pmem);
+			pmem++;			
+		}
+		return;
+	}
+	
+	if (strcmp(command, "check_flash_all")==0)
+	{
+		// Display contents of firmware update region
+		unsigned long* pmem = (unsigned long*)0x00450000;
+		while(pmem <= 0x00480000)
+		{
+			printf("Addr: %p  Val: 0x%l08x\n\r", (void *)pmem, *pmem);
+			pmem++;
+		}
+		return;
+	}
+	
+	if (strcmp(command, "test_fw")==0)
+	{
+		// Jump to new firmware location in flash
+		asm("LDR R0,=0x00450000");
+		asm("BX R0");
+
 		return;
 	}
 	
