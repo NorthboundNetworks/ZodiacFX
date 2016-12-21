@@ -129,7 +129,7 @@ int flash_write_page(uint8_t *flash_page)
 		return 0;
 	}	
 	
-	ul_test_page_addr += 512;
+	ul_test_page_addr += IFLASH_PAGE_SIZE;
 	
 	return 1;
 }
@@ -140,37 +140,32 @@ int flash_write_page(uint8_t *flash_page)
 */
 __no_inline RAMFUNC void firmware_update(void)
 {
-	// Firmware update should have already been initialised
-	
-	// Disable interrupts
-	cpu_irq_disable();
-	
-	// Erase 4 64k sectors (current f/w)
-	uint32_t erase_address = IFLASH_ADDR;
-	while(erase_address < IFLASH_ADDR + (IFLASH_SIZE/2 - 1))
-	{
-		printf("-I- Erasing sector with address: 0x%08x\r\n", erase_address);
-		ul_rc = flash_erase_sector(erase_address);
-		if (ul_rc != FLASH_RC_OK)
-		{
-			printf("-F- Flash programming error %lu\n\r", (unsigned long)ul_rc);
-			return 0;
-		}
-			
-		erase_address += ERASE_SECTOR_SIZE;
-	}
-	
-	// Create pointer to new f/w
-	const void *new_fw = NEW_FW_BASE;
-	
-	// Copy upper firmware region to 0x0040 0000 base
-	ul_rc = flash_write(IFLASH_ADDR, new_fw, NEW_FW_MAX_SIZE, 0);
-	
-	if (ul_rc != FLASH_RC_OK)
-	{
-		printf("Error: firmware update failed");
-		while(1);
-	}
+	//// EFC should have already been initialised
+	//
+	//// Disable interrupts
+	//cpu_irq_disable();
+	//
+	//// Set flag to boot from ROM
+	//flash_clear_gpnvm(1);
+		//
+	//// Create pointer to new f/w
+	//void *new_fw = NEW_FW_BASE;
+	//
+	//// Copy upper firmware region to 0x0040 0000 base
+	//uint32_t current_address = IFLASH_ADDR;
+	//uint32_t end_address = IFLASH_ADDR + NEW_FW_MAX_SIZE - IFLASH_PAGE_SIZE;
+	//while(current_address <= end_address)
+	//{
+		//ul_rc = flash_write(current_address, new_fw, IFLASH_PAGE_SIZE, 0);
+		//
+		//if (ul_rc != FLASH_RC_OK)
+		//{
+			//while(1);
+		//}
+		//
+		//current_address += IFLASH_PAGE_SIZE;
+		//new_fw += IFLASH_PAGE_SIZE;
+	//}
 	
 	// restart
 	// TODO
