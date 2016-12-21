@@ -64,7 +64,7 @@ void get_serial(uint32_t *uid_buf)
 */
 void firmware_update_init(void)
 {	
-	ul_test_page_addr = (IFLASH_ADDR + (5*IFLASH_NB_OF_PAGES/8)*IFLASH_PAGE_SIZE);
+	ul_test_page_addr = NEW_FW_BASE;
 	
 	/* Initialize flash: 6 wait states for flash writing. */
 	ul_rc = flash_init(FLASH_ACCESS_MODE_128, 6);
@@ -136,12 +136,44 @@ int flash_write_page(uint8_t *flash_page)
 
 /*
 *	Overwrite existing firmware
-*
+*	(execute in RAM)
 */
-void firmware_update(void)
+__no_inline RAMFUNC void firmware_update(void)
 {
-	// call IAP functions
+	// Firmware update should have already been initialised
+	
+	// Disable interrupts
+	cpu_irq_disable();
+	
+	// Erase 4 64k sectors (current f/w)
+	uint32_t erase_address = IFLASH_ADDR;
+	while(erase_address < IFLASH_ADDR + (IFLASH_SIZE/2 - 1))
+	{
+		printf("-I- Erasing sector with address: 0x%08x\r\n", erase_address);
+		ul_rc = flash_erase_sector(erase_address);
+		if (ul_rc != FLASH_RC_OK)
+		{
+			printf("-F- Flash programming error %lu\n\r", (unsigned long)ul_rc);
+			return 0;
+		}
+			
+		erase_address += ERASE_SECTOR_SIZE;
+	}
+	
+	// Create pointer to new f/w
+	const void *new_fw = NEW_FW_BASE;
+	
+	// Copy upper firmware region to 0x0040 0000 base
+	ul_rc = flash_write(IFLASH_ADDR, new_fw, NEW_FW_MAX_SIZE, 0);
+	
+	if (ul_rc != FLASH_RC_OK)
+	{
+		printf("Error: firmware update failed");
+		while(1);
+	}
+	
 	// restart
+	// TODO
 }
 
 /*
