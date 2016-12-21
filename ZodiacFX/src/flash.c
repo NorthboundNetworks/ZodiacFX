@@ -64,7 +64,7 @@ void get_serial(uint32_t *uid_buf)
 */
 void firmware_update_init(void)
 {	
-	ul_test_page_addr = (IFLASH_ADDR + (5*IFLASH_NB_OF_PAGES/8)*IFLASH_PAGE_SIZE);
+	ul_test_page_addr = NEW_FW_BASE;
 	
 	/* Initialize flash: 6 wait states for flash writing. */
 	ul_rc = flash_init(FLASH_ACCESS_MODE_128, 6);
@@ -129,19 +129,46 @@ int flash_write_page(uint8_t *flash_page)
 		return 0;
 	}	
 	
-	ul_test_page_addr += 512;
+	ul_test_page_addr += IFLASH_PAGE_SIZE;
 	
 	return 1;
 }
 
 /*
 *	Overwrite existing firmware
-*
+*	(execute in RAM)
 */
-void firmware_update(void)
+__no_inline RAMFUNC void firmware_update(void)
 {
-	// call IAP functions
+	//// EFC should have already been initialised
+	//
+	//// Disable interrupts
+	//cpu_irq_disable();
+	//
+	//// Set flag to boot from ROM
+	//flash_clear_gpnvm(1);
+		//
+	//// Create pointer to new f/w
+	//void *new_fw = NEW_FW_BASE;
+	//
+	//// Copy upper firmware region to 0x0040 0000 base
+	//uint32_t current_address = IFLASH_ADDR;
+	//uint32_t end_address = IFLASH_ADDR + NEW_FW_MAX_SIZE - IFLASH_PAGE_SIZE;
+	//while(current_address <= end_address)
+	//{
+		//ul_rc = flash_write(current_address, new_fw, IFLASH_PAGE_SIZE, 0);
+		//
+		//if (ul_rc != FLASH_RC_OK)
+		//{
+			//while(1);
+		//}
+		//
+		//current_address += IFLASH_PAGE_SIZE;
+		//new_fw += IFLASH_PAGE_SIZE;
+	//}
+	
 	// restart
+	// TODO
 }
 
 /*
