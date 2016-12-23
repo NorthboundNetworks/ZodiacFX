@@ -95,6 +95,7 @@ static uint8_t interfaceCreate_Config_OpenFlow(void);
 static uint8_t interfaceCreate_About(void);
 
 static uint8_t upload_handler(char *ppart, int len);
+static int page_ctr = 1;
 
 
 /*
@@ -1296,7 +1297,18 @@ static uint8_t upload_handler(char *ppart, int len)
 		px++;
 		i++;
 	}
-		
+	
+	// Write data to page
+	if(flash_write_page(&shared_buffer))
+	{
+		TRACE("http.c: firmware page written successfully (%02d)", page_ctr);
+		page_ctr++;
+	}
+	else
+	{
+		TRACE("http.c: firmware page write FAILED (%02d)", page_ctr);
+	}
+	
 	return 1;
 }
 
