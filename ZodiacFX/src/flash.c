@@ -135,43 +135,6 @@ int flash_write_page(uint8_t *flash_page)
 }
 
 /*
-*	Overwrite existing firmware
-*	(execute in RAM)
-*/
-__no_inline RAMFUNC void firmware_update(void)
-{
-	//// EFC should have already been initialised
-	//
-	//// Disable interrupts
-	//cpu_irq_disable();
-	//
-	//// Set flag to boot from ROM
-	//flash_clear_gpnvm(1);
-		//
-	//// Create pointer to new f/w
-	//void *new_fw = NEW_FW_BASE;
-	//
-	//// Copy upper firmware region to 0x0040 0000 base
-	//uint32_t current_address = IFLASH_ADDR;
-	//uint32_t end_address = IFLASH_ADDR + NEW_FW_MAX_SIZE - IFLASH_PAGE_SIZE;
-	//while(current_address <= end_address)
-	//{
-		//ul_rc = flash_write(current_address, new_fw, IFLASH_PAGE_SIZE, 0);
-		//
-		//if (ul_rc != FLASH_RC_OK)
-		//{
-			//while(1);
-		//}
-		//
-		//current_address += IFLASH_PAGE_SIZE;
-		//new_fw += IFLASH_PAGE_SIZE;
-	//}
-	
-	// restart
-	// TODO
-}
-
-/*
 *	Handle firmware update through CLI
 *
 */
@@ -182,10 +145,10 @@ void cli_update(void)
 	{
 		printf("Error: failed to write firmware to memory\r\n");
 	}
-	firmware_update();
-	
-	// Zodiac should have restarted by this point
-	printf("Firmware update unsuccessful. Please try again.\r\n");
+	printf("Firmware upload complete - Restarting the Zodiac FX.\r\n");
+	for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
+	udc_detach();	// Detach the USB device before restart
+	rstc_start_software_reset(RSTC);	// Software reset
 	return;
 }
 

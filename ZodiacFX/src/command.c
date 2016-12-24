@@ -416,6 +416,9 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 
 		// Failstate
 		reset_config.failstate = 0;			// Failstate Secure
+		
+		// EtherType Filter
+		reset_config.ethtype_filter = 0;		// Ethertype Filter Disabled
 
 		// Force OpenFlow version
 		reset_config.of_version = 0;			// Force version disabled
@@ -513,6 +516,8 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		if (masterselect == false) printf(" Stacking Select: MASTER\r\n");
 		if (stackenabled == true) printf(" Stacking Status: Enabled\r\n");
 		if (stackenabled == false) printf(" Stacking Select: Disabled\r\n");
+		if (Zodiac_Config.ethtype_filter == 1) printf(" EtherType Filtering: Enabled\r\n");
+		if (Zodiac_Config.ethtype_filter != 1) printf(" EtherType Filtering: Disabled\r\n");
 		printf("\r\n-------------------------------------------------------------------------\r\n\n");
 		return;
 	}
@@ -879,6 +884,21 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
+	// Enable EtherType filtering
+	if (strcmp(command, "set")==0 && strcmp(param1, "ethertype-filter")==0)
+	{
+		if (strcmp(param2, "disable")==0){
+			Zodiac_Config.ethtype_filter = 0;
+			printf("EtherType Filtering Disabled\r\n");
+			} else if (strcmp(param2, "enable")==0){
+			Zodiac_Config.ethtype_filter = 1;
+			printf("EtherType Filtering Enabled\r\n");
+			} else {
+			printf("Invalid value\r\n");
+		}
+		return;
+	}
+	
 	// Unknown Command
 	printf("Unknown command\r\n");
 	return;
@@ -1442,7 +1462,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		clear_flows();
 		return;
 	}
-
+	
 	// Unknown Command
 	printf("Unknown command\r\n");
 	return;
@@ -1535,14 +1555,6 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 	
-	if (strcmp(command, "test_fw")==0)
-	{
-		// Jump to new firmware location in flash
-		asm("LDR R0,=0x00450000");
-		asm("BX R0");
-
-		return;
-	}
 	
 	// Unknown Command response
 	printf("Unknown command\r\n");
@@ -1606,6 +1618,7 @@ void printhelp(void)
 	printf(" delete vlan-port <port>\r\n");
 	printf(" factory reset\r\n");
 	printf(" set of-version <version(0|1|4)>\r\n");
+	printf(" set ethertype-filter <enable|disable>\r\n");
 	printf(" exit\r\n");
 	printf("\r\n");
 	printf("OpenFlow:\r\n");
