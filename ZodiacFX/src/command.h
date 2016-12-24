@@ -71,6 +71,7 @@ struct zodiac_config {
 	uint8_t of_port[4];		// If the port is assigned to a VLAN
 	uint8_t failstate;
 	uint8_t of_version;
+	uint8_t ethtype_filter;
 } PACK_STRUCT_STRUCT;
 PACK_STRUCT_END
 
