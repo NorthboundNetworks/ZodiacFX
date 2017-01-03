@@ -156,8 +156,15 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		
 		if(file_upload == true)
 		{
+			int ret = 0;
+			int tst = 3000;
 			// Handle multi-part file data
-			upload_handler(http_payload, len);
+			ret = upload_handler(http_payload, len);
+			while(tst)
+			{
+				tst--;
+			}
+			 tst = 0;		// _______________________________ for debug purposes
 		}
 		else
 		{
@@ -1232,24 +1239,56 @@ static uint8_t upload_handler(char *ppart, int len)
 {
 	// Current browser support: Chrome
 	
-	char *px;	// Data byte pointer
+	static char page[512] = {0};		// Storage for each page of data
+	static uint16_t saved_bytes = 0;	// Persistent counter of unwritten data
+	uint16_t handled_bytes = 0;			// Counter of handled data
+	
+	char *px;	// Start address pointer
 	char *py;	// End address pointer
-	int i;		// Counter
+	int i = 0;
+	int final = 0;
 	
-	px = strstr(ppart, "application/");	// Check for valid binary data
+	// Search for starting boundary
+	px = strstr(ppart, "application/");
 
-	if(px == NULL)	// Check that element exists
+	if(px == NULL)
 	{
-		TRACE("http.c: invalid request");
-		return 0;
+		TRACE("http.c: starting boundary not found - beginning data is valid");
+		px = ppart;	// Data begins at first value of array
 	}
-
-	px += (strlen("application/"));
+	else
+	{
+		TRACE("http.c: starting boundary found");
+		
+		// Data begins after boundary
+		px += (strlen("application/"));
+		
+		// Search for start of data
+		i = 0;
+		while(i<20)
+		{
+			px++;
+			if((*px) == '\x0a' && (*(px-1)) == '\x0d' && (*(px-2)) == '\x0a' && (*(px-3)) == '\x0d')
+			{
+				i = 20;
+				px++;
+				// 'i' will be incremented to 21 if this line is run
+			}
+			i++;
+		}
+		
+		if(i == 20)
+		{
+			TRACE("http.c: start of data part not found");
+			return 0;
+		}
+		
+		TRACE("http.c: pointer moved to start of data");
+	}
 	
-	// Find pointer to last element in payload
+	// Search for ending boundary
 	py = ppart + len;
 	
-	// Find end of data
 	i = 128;
 	while(i>0)
 	{
@@ -1264,52 +1303,126 @@ static uint8_t upload_handler(char *ppart, int len)
 	
 	if(i == 0)
 	{
-		TRACE("http.c: end of data part not found");
-		return 0;
-	}
-	
-	// Search for start of data
-	i = 0;
-	while(i<20)
-	{
-		px++;
-		if((*px) == '\x0a' && (*(px-1)) == '\x0d' && (*(px-2)) == '\x0a' && (*(px-3)) == '\x0d')
-		{
-			i = 20;
-			px++;
-			// 'i' will be incremented to 21 if this line is run
-		}
-		i++;
-	}
-	
-	if(i == 20)
-	{
-		TRACE("http.c: start of data part not found");
-		return 0;
-	}
-	
-	memset(&shared_buffer, 0, 513);	// Clear a 512-byte part + NULL for strstr operations
-
-	i = 0;
-	while(px < py && i < 512)
-	{
-		shared_buffer[i] = *px;	// Store value of element
-		px++;
-		i++;
-	}
-	
-	// Write data to page
-	if(flash_write_page(&shared_buffer))
-	{
-		TRACE("http.c: firmware page written successfully (%02d)", page_ctr);
-		page_ctr++;
+		TRACE("http.c: ending boundary not found - ending data is valid");
 	}
 	else
 	{
-		TRACE("http.c: firmware page write FAILED (%02d)", page_ctr);
+		TRACE("http.c: ending boundary found");
+		
+		// Return ending pointer to the end
+		py = ppart + len;
+		
+		final = 1;
 	}
 	
-	return 1;
+	// Write data
+	if(saved_bytes)
+	{
+		// Fill in unwritten page (if it exists)
+		if(final)
+		{
+			while(saved_bytes < 512 && handled_bytes < len)
+			{
+				page[saved_bytes] = *px;
+				px++;
+				saved_bytes++;
+				handled_bytes++;
+			}
+		}
+		else
+		{
+			while(saved_bytes < 512)
+			{
+				page[saved_bytes] = *px;
+				px++;
+				saved_bytes++;
+				handled_bytes++;
+			}
+		}
+		
+		// Write data to page
+		if(flash_write_page(&page))		// ___________________ CHECK
+		{
+			TRACE("http.c: firmware page written successfully (%02d)", page_ctr);
+			page_ctr++;
+		}
+		else
+		{
+			TRACE("http.c: firmware page write FAILED (%02d)", page_ctr);
+		}
+		
+		memset(&page, 0, 512);
+		saved_bytes = 0;
+	}
+	
+	if(handled_bytes < len)
+	{
+		int j;
+
+		// Check for final page of data		
+		if(final)
+		{
+			j = 0;
+			while(px < py)
+			{
+				page[j] = *px;
+				px++;
+				j++;
+				handled_bytes++;
+			}
+		}
+		
+		// Write full pages
+		while(len - handled_bytes >= 512)
+		{
+			j = 0;
+			while(j < 512)
+			{
+				page[j] = *px;	// Store value of element
+				px++;
+				j++;
+				handled_bytes++;
+			}
+					
+			// Write data to page
+			if(flash_write_page(&page))		// ___________________ CHECK
+			{
+				TRACE("http.c: firmware page written successfully (%02d)", page_ctr);
+				page_ctr++;
+			}
+			else
+			{
+				TRACE("http.c: firmware page write FAILED (%02d)", page_ctr);
+			}
+			
+			memset(&page, 0, 512);
+		}
+		
+		// Save unwritten data
+		j = 0;
+		while(handled_bytes < len)
+		{
+			page[j] = *px;	// Store value of element
+			px++;
+			j++;
+			handled_bytes++;
+		}
+		
+		if(px > py)
+		{
+			TRACE("http.c: ERROR - pointer has passed the data");
+			return 0;
+		}
+	}
+	
+	if(final)
+	{
+		return 2;
+	}
+	else
+	{
+		return 1;
+	}
 }
 
 /*
