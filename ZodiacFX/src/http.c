@@ -1226,8 +1226,8 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 		// Check if more data needs to be written
 		if(out == true)
 		{
-			TRACE("http.c: calling tcp_output & closing connection");
 			if (err == ERR_OK) tcp_output(pcb);
+			TRACE("http.c: calling tcp_output & closing connection");
 			tcp_close(pcb);
 		}
 	}
@@ -1646,7 +1646,7 @@ static uint8_t interfaceCreate_Menu(void)
 				"<body>"\
 					"<ul>"\
 						"<li><a href=\"home.htm\" target=\"page\">Status</a></li>"\
-						"<li id=\"sub\"><a href=\"upload.htm\" target=\"page\">Update f/w</a></li>"
+						//"<li id=\"sub\"><a href=\"upload.htm\" target=\"page\">Update f/w</a></li>"
 						"<li><a href=\"d_home.htm\" target=\"page\">Display</a></li>"\
 						"<li id=\"sub\"><a href=\"d_ports.htm\" target=\"page\">Ports</a></li>"\
 						"<li id=\"sub\"><a href=\"d_of.htm\" target=\"page\">OpenFlow</a></li>"\
@@ -1791,15 +1791,15 @@ static uint8_t interfaceCreate_Display_Home(void)
 				"<h2>Display Help</h2>"\
 				"<h3>Ports</h3>"\
 					"<p>"\
-						"Displays information for each of the Zodiac FX Ethernet ports, including its status, byte/packet statistics, and VLAN configuration."\
+						"View information for each of the Zodiac FX Ethernet ports, including its status, byte/packet statistics, and VLAN configuration."\
 					"</p>"\
 				"<h3>OpenFlow</h3>"\
 					"<p>"\
-						"Information about the OpenFlow status and configuration can be found in the OpenFlow display menu. The configured version, and details of the connected controller are also shown."\
+						"View the current OpenFlow status and statistics."\
 					"</p>"\
 				"<h3>Flows</h3>"\
 					"<p>"\
-						"Flow table contents can be viewed in the flows menu."\
+						"View the current flows in the flow table. This page is currently limited to displaying a maximum of 5 flows."\
 					"</p>"\
 			"</body>"\
 		"</html>"\
@@ -2800,15 +2800,15 @@ static uint8_t interfaceCreate_Config_Home(void)
 				"<h2>Config Help</h2>"\
 				"<h3>Network</h3>"\
 					"<p>"\
-						"The network settings of the Zodiac FX can be configured in this menu, including the device name, IP address, MAC address, netmask, and default gateway."\
+						"Configure the network settings of the Zodiac FX. This includes the device name, IP address, MAC address, netmask, and default gateway. After saving a configuration, a restart is required for changes to take effect."\
 					"</p>"\
 				"<h3>VLANs</h3>"\
 					"<p>"\
-						"Virtual LANs can be added or removed in the VLANs menu. These can be assigned in the Ports menu on the left."\
+						"Configure Virtual LANs. These can be added or deleted as required. To assign a port to a VLAN, go to the Display: Ports page. A restart is required for changes to take effect."\
 					"</p>"\
 				"<h3>OpenFlow</h3>"\
 					"<p>"\
-						"The OpenFlow configuration can be modified here. OpenFlow can be enabled or disabled, the version can be specified, and the failstate can be set. The OpenFlow controller's IP address and port can be configured based on your network."\
+						"Configure OpenFlow. Set the controller IP and port for your network configuration. OpenFlow failstate can be modified, and an OpenFlow version can be forced. Alternatively, OpenFlow may be disabled."\
 					"</p>"\
 			"</body>"\
 		"</html>"\
@@ -3031,15 +3031,8 @@ static uint8_t interfaceCreate_Config_OpenFlow(void)
 				"<form style=\"width: 200px\" action=\"save_of\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes.\n\nPress the restart button on the top right for your changes to take effect.');\">"\
 					"<fieldset>"\
 						"<legend>OpenFlow</legend>"\
-						"Controller IP:<br>"\
-						"<input type=\"text\" name=\"wi_ofIP\" value=\"%d.%d.%d.%d\"><br><br>"\
-						"Controller Port:<br>"\
-						"<input type=\"text\" name=\"wi_ofPort\" value=\"%d\"><br><br>"\
-			, Zodiac_Config.OFIP_address[0], Zodiac_Config.OFIP_address[1]
-			, Zodiac_Config.OFIP_address[2], Zodiac_Config.OFIP_address[3]
-			, Zodiac_Config.OFPort
 		);
-		
+				
 		if(Zodiac_Config.OFEnabled == OF_ENABLED)
 		{
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
@@ -3060,6 +3053,16 @@ static uint8_t interfaceCreate_Config_OpenFlow(void)
 						"</select><br><br>"\
 					);
 		}
+		
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+						"Controller IP:<br>"\
+						"<input type=\"text\" name=\"wi_ofIP\" value=\"%d.%d.%d.%d\"><br><br>"\
+						"Controller Port:<br>"\
+						"<input type=\"text\" name=\"wi_ofPort\" value=\"%d\"><br><br>"\
+				, Zodiac_Config.OFIP_address[0], Zodiac_Config.OFIP_address[1]
+				, Zodiac_Config.OFIP_address[2], Zodiac_Config.OFIP_address[3]
+				, Zodiac_Config.OFPort
+			);
 		
 		if(Zodiac_Config.failstate == 0)
 		{
@@ -3162,6 +3165,12 @@ static uint8_t interfaceCreate_About(void)
 					"<p>"\
 						"The Zodiac FX was created to allow the development of SDN applications on real hardware."\
 					"</p>"\
+/*				"<h3>What's new in v0.72</h3>"\
+					"<p>"\
+						"- Feature<br>"\
+						"- Feature<br>"\
+						"- Feature<br>"\
+					"</p>"\		*/
 			"</body>"\
 		"</html>"\
 				) < SHARED_BUFFER_LEN)
