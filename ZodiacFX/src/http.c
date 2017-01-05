@@ -1439,7 +1439,7 @@ static uint8_t interfaceCreate_Menu(void)
 				"<body>"\
 					"<ul>"\
 						"<li><a href=\"home.htm\" target=\"page\">Status</a></li>"\
-						/*"<li id=\"sub\"><a href=\"upload.htm\" target=\"page\">Update f/w</a></li>"*/
+						//"<li id=\"sub\"><a href=\"upload.htm\" target=\"page\">Update f/w</a></li>"
 						"<li><a href=\"d_home.htm\" target=\"page\">Display</a></li>"\
 						"<li id=\"sub\"><a href=\"d_ports.htm\" target=\"page\">Ports</a></li>"\
 						"<li id=\"sub\"><a href=\"d_of.htm\" target=\"page\">OpenFlow</a></li>"\
