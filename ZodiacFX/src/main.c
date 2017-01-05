@@ -178,7 +178,7 @@ int main (void)
 	sys_init_timing();
 	
 	/* Initialize HTTP server. */
-	//http_init();
+	http_init();
 	
 	// Create port map
 	int v,p;
