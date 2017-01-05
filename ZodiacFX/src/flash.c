@@ -42,7 +42,7 @@ extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 static uint32_t page_addr;
 //static uint32_t ul_rc;
 
-static	uint32_t ul_test_page_addr;
+static	uint32_t flash_page_addr;
 static	uint32_t ul_rc;
 static	uint32_t ul_idx;
 static	uint32_t ul_page_buffer[IFLASH_PAGE_SIZE / sizeof(uint32_t)];
@@ -62,49 +62,49 @@ void get_serial(uint32_t *uid_buf)
 *	Firmware update function
 *
 */
-void firmware_update_init(void)
+int firmware_update_init(void)
 {	
-	ul_test_page_addr = NEW_FW_BASE;
+	flash_page_addr = NEW_FW_BASE;
 	
 	/* Initialize flash: 6 wait states for flash writing. */
 	ul_rc = flash_init(FLASH_ACCESS_MODE_128, 6);
 	if (ul_rc != FLASH_RC_OK) {
-		printf("-F- Initialization error %lu\n\r", (unsigned long)ul_rc);
+		//printf("-F- Initialization error %lu\n\r", (unsigned long)ul_rc);
 		return 0;
 	}
 	
 	// Unlock 8k lock regions (these should be unlocked by default)
-	uint32_t unlock_address = ul_test_page_addr;
+	uint32_t unlock_address = flash_page_addr;
 	while(unlock_address < IFLASH_ADDR + IFLASH_SIZE - (IFLASH_LOCK_REGION_SIZE - 1))
 	{
-		printf("-I- Unlocking region start at: 0x%08x\r\n", unlock_address);
+		//printf("-I- Unlocking region start at: 0x%08x\r\n", unlock_address);
 		ul_rc = flash_unlock(unlock_address,
 		unlock_address + (4*IFLASH_PAGE_SIZE) - 1, 0, 0);
 		if (ul_rc != FLASH_RC_OK)
 		{
-			printf("-F- Unlock error %lu\n\r", (unsigned long)ul_rc);
+			//printf("-F- Unlock error %lu\n\r", (unsigned long)ul_rc);
 			return 0;
 		}
 		
 		unlock_address += IFLASH_LOCK_REGION_SIZE;
 	}
 
-	// Erase 3 64k sectors
-	uint32_t erase_address = ul_test_page_addr;
+	// Erase 192k
+	uint32_t erase_address = flash_page_addr;
 	while(erase_address < IFLASH_ADDR + IFLASH_SIZE - (ERASE_SECTOR_SIZE - 1))
 	{
-		printf("-I- Erasing sector with address: 0x%08x\r\n", erase_address);
+		//printf("-I- Erasing sector with address: 0x%08x\r\n", erase_address);
 		ul_rc = flash_erase_sector(erase_address);
 		if (ul_rc != FLASH_RC_OK)
 		{
-			printf("-F- Flash programming error %lu\n\r", (unsigned long)ul_rc);
+			//printf("-F- Flash programming error %lu\n\r", (unsigned long)ul_rc);
 			return 0;
 		}
 		
 		erase_address += ERASE_SECTOR_SIZE;
 	}
 	
-	return;
+	return 1;
 }
 
 /*
@@ -113,9 +113,9 @@ void firmware_update_init(void)
 */
 int flash_write_page(uint8_t *flash_page)
 {
-	if(ul_test_page_addr <= IFLASH_ADDR + IFLASH_SIZE - IFLASH_PAGE_SIZE)
+	if(flash_page_addr <= IFLASH_ADDR + IFLASH_SIZE - IFLASH_PAGE_SIZE)
 	{
-		ul_rc = flash_write(ul_test_page_addr, flash_page,
+		ul_rc = flash_write(flash_page_addr, flash_page,
 		IFLASH_PAGE_SIZE, 0);
 	}
 	else
@@ -129,7 +129,7 @@ int flash_write_page(uint8_t *flash_page)
 		return 0;
 	}	
 	
-	ul_test_page_addr += IFLASH_PAGE_SIZE;
+	flash_page_addr += IFLASH_PAGE_SIZE;
 	
 	return 1;
 }
