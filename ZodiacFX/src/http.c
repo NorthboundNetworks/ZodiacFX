@@ -8,7 +8,7 @@
 
 /*
  * This file is part of the Zodiac FX firmware.
- * Copyright (c) 2016 Northbound Networks.
+ * Copyright (c) 2016 Google Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -66,6 +66,9 @@ extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
 
+extern int firmware_update_init(void);
+extern int flash_write_page(uint8_t *flash_page);
+
 // Local Variables
 struct tcp_pcb *http_pcb;
 char http_msg[64];			// Buffer for HTTP message filtering
@@ -91,7 +94,8 @@ static uint8_t interfaceCreate_Config_VLANs(void);
 static uint8_t interfaceCreate_Config_OpenFlow(void);
 static uint8_t interfaceCreate_About(void);
 
-static uint8_t file_handler(char *ppart, int len);
+static uint8_t upload_handler(char *ppart, int len);
+static int page_ctr = 1;
 
 
 /*
@@ -152,561 +156,271 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		
 		if(file_upload == true)
 		{
+			int ret = 0;
+			int tst = 3000;
 			// Handle multi-part file data
-			file_handler(http_payload, len);
+			ret = upload_handler(http_payload, len);
+			while(tst)
+			{
+				tst--;
+			}
+			 tst = 0;		// _______________________________ for debug purposes
 		}
-		
-		// Check HTTP method
-		i = 0;
-		while(i < 63 && (http_payload[i] != ' '))
+		else
 		{
-			http_msg[i] = http_payload[i];
-			i++;
-		}
-		TRACE("http.c: %s method received", http_msg);
+			// Check HTTP method
+			i = 0;
+			while(i < 63 && (http_payload[i] != ' '))
+			{
+				http_msg[i] = http_payload[i];
+				i++;
+			}
+			TRACE("http.c: %s method received", http_msg);
 	
-		if(strcmp(http_msg,"GET") == 0)
-		{			
-			memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
-			
-			// Specified resource directly follows GET
-			i = 0;
-			while(i < 63 && (http_payload[i+5] != ' '))
-			{
-				http_msg[i] = http_payload[i+5];	// Offset http_payload to isolate resource
-				i++;
-			}
-			
-			if(http_msg[0] == '\0')
+			if(strcmp(http_msg,"GET") == 0)
 			{			
-				TRACE("http.c: resource request for page frames");
-			}
-			else
-			{
-				TRACE("http.c: resource request for %s", http_msg);
-			}
+				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 			
-			// Check resource & serve page
-			if(http_msg[0] == '\0')
-			{
-				if(interfaceCreate_Frames())
+				// Specified resource directly follows GET
+				i = 0;
+				while(i < 63 && (http_payload[i+5] != ' '))
 				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					http_msg[i] = http_payload[i+5];	// Offset http_payload to isolate resource
+					i++;
+				}
+			
+				if(http_msg[0] == '\0')
+				{			
+					TRACE("http.c: resource request for page frames");
 				}
 				else
 				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					TRACE("http.c: resource request for %s", http_msg);
 				}
-			}
-			else if(strcmp(http_msg,"header.htm") == 0)
-			{
-				if(interfaceCreate_Header())
+			
+				// Check resource & serve page
+				if(http_msg[0] == '\0')
 				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					if(interfaceCreate_Frames())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
 				}
-				else
+				else if(strcmp(http_msg,"header.htm") == 0)
 				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					if(interfaceCreate_Header())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
 				}
-			}
-			else if(strcmp(http_msg,"menu.htm") == 0)
-			{
-				if(interfaceCreate_Menu())
+				else if(strcmp(http_msg,"menu.htm") == 0)
 				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					if(interfaceCreate_Menu())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
 				}
-				else
+				else if(strcmp(http_msg,"home.htm") == 0)
 				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					if(interfaceCreate_Home())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
 				}
-			}
-			else if(strcmp(http_msg,"home.htm") == 0)
-			{
-				if(interfaceCreate_Home())
+				else if(strcmp(http_msg,"upload.htm") == 0)
 				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					if(interfaceCreate_Upload())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
 				}
-				else
+      			else if(strcmp(http_msg,"d_home.htm") == 0)
 				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					if(interfaceCreate_Display_Home())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
 				}
-			}
-			else if(strcmp(http_msg,"upload.htm") == 0)
-			{
-				if(interfaceCreate_Upload())
+				else if(strcmp(http_msg,"d_ports.htm") == 0)
 				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-				}
-			}
-      		else if(strcmp(http_msg,"d_home.htm") == 0)
-			{
-				if(interfaceCreate_Display_Home())
-				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-				}
-			}
-			else if(strcmp(http_msg,"d_ports.htm") == 0)
-			{
-				if(interfaceCreate_Display_Ports(0))
-				{
-					// Only write to buffer - don't send
-					http_send(&shared_buffer, pcb, 0);
-				}
-				else
-				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-				}
+					if(interfaceCreate_Display_Ports(0))
+					{
+						// Only write to buffer - don't send
+						http_send(&shared_buffer, pcb, 0);
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
 					
-				if(interfaceCreate_Display_Ports(1))
+					if(interfaceCreate_Display_Ports(1))
+					{
+						// Call TCP output & close the connection
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+      			else if(strcmp(http_msg,"d_of.htm") == 0)
 				{
-					// Call TCP output & close the connection
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					if(interfaceCreate_Display_OpenFlow())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+      			else if(strcmp(http_msg,"d_flo.htm") == 0)
+				{
+					if(interfaceCreate_Display_Flows())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+      			else if(strcmp(http_msg,"cfg_home.htm") == 0)
+				{
+					if(interfaceCreate_Config_Home())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+      			else if(strcmp(http_msg,"cfg_net.htm") == 0)
+				{
+					if(interfaceCreate_Config_Network())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+      			else if(strcmp(http_msg,"cfg_vlan.htm") == 0)
+				{
+					if(interfaceCreate_Config_VLANs())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+				else if(strcmp(http_msg,"cfg_of.htm") == 0)
+				{
+					if(interfaceCreate_Config_OpenFlow())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+				else if(strcmp(http_msg,"about.htm") == 0)
+				{
+					if(interfaceCreate_About())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
 				}
 				else
 				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					TRACE("http.c: resource doesn't exist:\"%s\"", http_msg);
 				}
 			}
-      		else if(strcmp(http_msg,"d_of.htm") == 0)
-			{
-				if(interfaceCreate_Display_OpenFlow())
-				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-				}
-			}
-      		else if(strcmp(http_msg,"d_flo.htm") == 0)
-			{
-				if(interfaceCreate_Display_Flows())
-				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-				}
-			}
-      		else if(strcmp(http_msg,"cfg_home.htm") == 0)
-			{
-				if(interfaceCreate_Config_Home())
-				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-				}
-			}
-      		else if(strcmp(http_msg,"cfg_net.htm") == 0)
-			{
-				if(interfaceCreate_Config_Network())
-				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-				}
-			}
-      		else if(strcmp(http_msg,"cfg_vlan.htm") == 0)
-			{
-				if(interfaceCreate_Config_VLANs())
-				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-				}
-			}
-			else if(strcmp(http_msg,"cfg_of.htm") == 0)
-			{
-				if(interfaceCreate_Config_OpenFlow())
-				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-				}
-			}
-			else if(strcmp(http_msg,"about.htm") == 0)
-			{
-				if(interfaceCreate_About())
-				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-				}
-			}
-			else
-			{
-				TRACE("http.c: resource doesn't exist:\"%s\"", http_msg);
-			}
-		}
-		else if(strcmp(http_msg,"POST") == 0)
-		{
-			memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
-
-			// Specified resource directly follows POST
-			i = 0;
-			while(i < 63 && (http_payload[i+6] != ' '))
-			{
-				http_msg[i] = http_payload[i+6];	// Offset http_payload to isolate resource
-				i++;
-			}
-
-			TRACE("http.c: request for %s", http_msg);
-
-			if(strcmp(http_msg,"upload") == 0)
-			{
-				// All following packets will contain multi-part file data
-				file_upload = true;
-			}
-			else if(strcmp(http_msg,"save_config") == 0)
+			else if(strcmp(http_msg,"POST") == 0)
 			{
 				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
-				
-				// Device Name
-				pdat = strstr(http_payload, "wi_deviceName");	// Search for element
-				if(pdat != NULL)	// Check that element exists
+
+				// Specified resource directly follows POST
+				i = 0;
+				while(i < 63 && (http_payload[i+6] != ' '))
 				{
-					pdat += (strlen("wi_deviceName")+1);	// Data format: wi_deviceName=(name)
-					
-					i = 0;
-					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+					http_msg[i] = http_payload[i+6];	// Offset http_payload to isolate resource
+					i++;
+				}
+
+				TRACE("http.c: request for %s", http_msg);
+
+				if(strcmp(http_msg,"upload") == 0)
+				{
+					// Initialise flash programming
+					if(firmware_update_init())
 					{
-						http_msg[i] = pdat[i];	// Store value of element
-						i++;
-					}
-					if(pdat[i+1] == 'w')	// Check that the next parameter directly follows the "&" at end of data
-					{
-						uint8_t namelen = strlen(http_msg);
-						if (namelen > 15 ) namelen = 15; // Make sure name is less than 16 characters
-						sprintf(Zodiac_Config.device_name, http_msg, namelen);
-						TRACE("http.c: device name set to '%s'",Zodiac_Config.device_name);
+						TRACE("http.c: firmware update initialisation successful");
 					}
 					else
 					{
-						TRACE("http.c: \"&\" cannot be used in device name");
-					}
-				}
-				else
-				{
-					TRACE("http.c: no device name found");
-				}
-				
-				memset(&http_msg, 0, sizeof(http_msg));
-								
-				// MAC Address
-				pdat = strstr(http_payload, "wi_macAddress");
-				if(pdat != NULL)	// Check that element exists
-				{
-					pdat += (strlen("wi_macAddress")+1);	// Data format: wi_deviceName=(name)
-					
-					i = 0;
-					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-					{
-						http_msg[i] = pdat[i];	// Store value of element
-						i++;
-					}
-					if(pdat[i+1] == 'w')
-					{
-						int mac1,mac2,mac3,mac4,mac5,mac6;
-						char decArr[18] = "";
-						int j, k;
-						
-						if (strlen(http_msg) != 27 )	// Accounting for ":" as "%3A"
-						{
-							TRACE("http.c: incorrect MAC address format");
-							return;
-						}
-						
-						// Decode http string
-						j = 0; k = 0;
-						while(j < strlen(http_msg) && k < 18)
-						{
-							if(http_msg[j] == '%' && http_msg[j+1] == '3' && http_msg[j+2] == 'A')
-							{
-								decArr[k] = ':';
-								j+=3; k++;
-							}
-							else
-							{
-								decArr[k] = http_msg[j];
-								j++; k++;
-							}
-						}
-						
-						sscanf(decArr, "%x:%x:%x:%x:%x:%x", &mac1, &mac2, &mac3, &mac4, &mac5, &mac6);
-						Zodiac_Config.MAC_address[0] = mac1;
-						Zodiac_Config.MAC_address[1] = mac2;
-						Zodiac_Config.MAC_address[2] = mac3;
-						Zodiac_Config.MAC_address[3] = mac4;
-						Zodiac_Config.MAC_address[4] = mac5;
-						Zodiac_Config.MAC_address[5] = mac6;
-						TRACE("http.c: MAC address set to %.2X:%.2X:%.2X:%.2X:%.2X:%.2X",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
-					}
-					else
-					{
-						TRACE("http.c: \"&\" cannot be used in form");
-					}
-				}
-				else
-				{
-					TRACE("http.c: no MAC address found");
-				}
-				
-				memset(&http_msg, 0, sizeof(http_msg));
-								
-				// IP Address
-				pdat = strstr(http_payload, "wi_ipAddress");
-				if(pdat != NULL)	// Check that element exists
-				{
-					pdat += (strlen("wi_ipAddress")+1);	// Data format: wi_deviceName=(name)
-									
-					i = 0;
-					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-					{
-						http_msg[i] = pdat[i];	// Store value of element
-						i++;
-					}
-					if(pdat[i+1] == 'w')
-					{
-						int ip1,ip2,ip3,ip4;
-						if (strlen(http_msg) > 15 )
-						{
-							TRACE("http.c: incorrect IP format");
-							return;
-						}
-						sscanf(http_msg, "%d.%d.%d.%d", &ip1, &ip2,&ip3,&ip4);
-						Zodiac_Config.IP_address[0] = ip1;
-						Zodiac_Config.IP_address[1] = ip2;
-						Zodiac_Config.IP_address[2] = ip3;
-						Zodiac_Config.IP_address[3] = ip4;
-						TRACE("http.c: IP address set to %d.%d.%d.%d" , Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1], Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]);
-					}
-					else
-					{
-						TRACE("http.c: \"&\" cannot be used in form");
-					}
-				}
-				else
-				{
-					TRACE("http.c: no IP address found");
-				}
-		
-				memset(&http_msg, 0, sizeof(http_msg));
-								
-				// Netmask
-				pdat = strstr(http_payload, "wi_netmask");
-				if(pdat != NULL)	// Check that element exists
-				{
-					pdat += (strlen("wi_netmask")+1);	// Data format: wi_deviceName=(name)
-									
-					i = 0;
-					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-					{
-						http_msg[i] = pdat[i];	// Store value of element
-						i++;
-					}
-					if(pdat[i+1] == 'w')
-					{
-						int nm1,nm2,nm3,nm4;
-						if (strlen(http_msg) > 15 )
-						{
-							TRACE("http.c: incorrect netmask format");
-							return;
-						}
-						sscanf(http_msg, "%d.%d.%d.%d", &nm1, &nm2,&nm3,&nm4);
-						Zodiac_Config.netmask[0] = nm1;
-						Zodiac_Config.netmask[1] = nm2;
-						Zodiac_Config.netmask[2] = nm3;
-						Zodiac_Config.netmask[3] = nm4;
-						TRACE("http.c: netmask set to %d.%d.%d.%d" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);				
-					}
-					else
-					{
-						TRACE("http.c: \"&\" cannot be used in form");
-					}
-				}
-				else
-				{
-					TRACE("http.c: no netmask found");
-				}
-				
-				memset(&http_msg, 0, sizeof(http_msg));
-							
-				// Gateway	
-				pdat = strstr(http_payload, "wi_gateway");
-				if(pdat != NULL)	// Check that element exists
-				{
-					pdat += (strlen("wi_gateway")+1);	// Data format: wi_deviceName=(name)
-									
-					i = 0;
-					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-					{
-						http_msg[i] = pdat[i];	// Store value of element
-						i++;
+						TRACE("http.c: firmware update initialisation failed");
 					}
 					
-					// No next 'w' character check as this is the last element
-					
-					int gw1,gw2,gw3,gw4;
-					if (strlen(http_msg) > 15 )
+					// All following packets will contain multi-part file data
+					file_upload = true;
+				}
+				else if(strcmp(http_msg,"save_config") == 0)
+				{
+					memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+				
+					// Device Name
+					pdat = strstr(http_payload, "wi_deviceName");	// Search for element
+					if(pdat != NULL)	// Check that element exists
 					{
-						TRACE("http.c: incorrect gateway format");
-						return;
-					}
-					sscanf(http_msg, "%d.%d.%d.%d", &gw1, &gw2,&gw3,&gw4);
-					Zodiac_Config.gateway_address[0] = gw1;
-					Zodiac_Config.gateway_address[1] = gw2;
-					Zodiac_Config.gateway_address[2] = gw3;
-					Zodiac_Config.gateway_address[3] = gw4;
-					TRACE("http.c: gateway set to %d.%d.%d.%d" , Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
-				}
-				else
-				{
-					TRACE("http.c: no gateway address found");
-				}
-				
-				// Save configuration to EEPROM
-				eeprom_write();
-				TRACE("http.c: config written to EEPROM");
-				
-				// Set update required flag
-				reset_required = true;
-				
-				// Send updated config page
-				if(interfaceCreate_Config_Network())
-				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
-				}
-								
-				// Send updated header page (with restart button)
-				
-					// ***** Placeholder until frame refresh targeting is implemented
-					//
-					//
-					//
-					
-			}
-			else if(strcmp(http_msg,"btn_restart") == 0)
-			{
-				TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
-				for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-				udc_detach();	// Detach the USB device before restart
-				rstc_start_software_reset(RSTC);	// Software reset
-				while (1);
-			}
-			else if(strcmp(http_msg,"btn_default") == 0)
-			{
-				TRACE("http.c: restoring factory settings");
-				
-				struct zodiac_config reset_config =
-				{
-					"Zodiac_FX",		// Name
-					0,0,0,0,0,0,		// MAC Address
-					10,0,1,99,			// IP Address
-					255,255,255,0,		// Netmask
-					10,0,1,1,			// Gateway Address
-					10,0,1,8,			// IP Address of the SDN Controller
-					6633,				// TCP port of SDN Controller
-					1					// OpenFlow enabled
-				};
-				memset(&reset_config.vlan_list, 0, sizeof(struct virtlan)* MAX_VLANS); // Clear vlan array
-
-				// Config VLAN 100
-				sprintf(&reset_config.vlan_list[0].cVlanName, "OpenFlow");	// Vlan name
-				reset_config.vlan_list[0].portmap[0] = 1;		// Assign port 1 to this vlan
-				reset_config.vlan_list[0].portmap[1] = 1;		// Assign port 2 to this vlan
-				reset_config.vlan_list[0].portmap[2] = 1;		// Assign port 3 to this vlan
-				reset_config.vlan_list[0].uActive = 1;		// Vlan is active
-				reset_config.vlan_list[0].uVlanID = 100;	// Vlan ID is 100
-				reset_config.vlan_list[0].uVlanType = 1;	// Set as an Openflow Vlan
-				reset_config.vlan_list[0].uTagged = 0;		// Set as untagged
-
-				// Config VLAN 200
-				sprintf(&reset_config.vlan_list[1].cVlanName, "Controller");
-				reset_config.vlan_list[1].portmap[3] = 1;		// Assign port 4 to this vlan
-				reset_config.vlan_list[1].uActive = 1;		// Vlan is active
-				reset_config.vlan_list[1].uVlanID = 200;	// Vlan ID is 200
-				reset_config.vlan_list[1].uVlanType = 2;	// Set as an Native Vlan
-				reset_config.vlan_list[1].uTagged = 0;		// Set as untagged
-
-				// Set ports
-				reset_config.of_port[0] = 1;		// Port 1 is an OpenFlow port
-				reset_config.of_port[1] = 1;		// Port 2 is an Openflow port
-				reset_config.of_port[2] = 1;		// Port 3 is an OpenFlow port
-				reset_config.of_port[3] = 2;		// Port 4 is an Native port
-
-				// Failstate
-				reset_config.failstate = 0;			// Failstate Secure
-
-				// Force OpenFlow version
-				reset_config.of_version = 0;			// Force version disabled
-
-				memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existing MAC address so it is not reset
-				memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
-				eeprom_write();
-				
-				TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
-				for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-				udc_detach();	// Detach the USB device before restart
-				rstc_start_software_reset(RSTC);	// Software reset
-				while (1);
-			}
-			else if(strcmp(http_msg,"save_ports") == 0)
-			{
-				// Save VLAN port associations
-				
-				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
-				int port = 0;
-				int x, y;
-				int vlanid;
-				char portID[10];
-				
-				// Search for "wi_pxID"
-				for (x=0;x<MAX_VLANS;x++)
-				{
-					port = x+1;
-					snprintf(portID, 10, "wi_p%dID=", port);
-					pdat = strstr(http_payload, portID);	// Search for element
-					if(pdat != NULL)	// Check that the element exists
-					{
-						pdat += (strlen(portID));	// Data format: wi_p1ID=(VLAN ID)
+						pdat += (strlen("wi_deviceName")+1);	// Data format: wi_deviceName=(name)
 					
 						i = 0;
 						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
@@ -714,183 +428,647 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 							http_msg[i] = pdat[i];	// Store value of element
 							i++;
 						}
-						
-						vlanid = atoi(http_msg);
-						
-						if(vlanid == 0)
+						if(pdat[i+1] == 'w')	// Check that the next parameter directly follows the "&" at end of data
 						{
-							// Not a valid selection
-							
-							//for (y=0;y<MAX_VLANS;y++)
-							//{
-								//// User wants to disassociate the VLAN with the port
-								//if(Zodiac_Config.vlan_list[y].portmap[port-1] == 1)
-								//{
-									//Zodiac_Config.vlan_list[y].portmap[port-1] = 0;
-									//Zodiac_Config.of_port[port-1] = 0;
-									//TRACE("http.c: port %d has been removed from VLAN %d", port, Zodiac_Config.vlan_list[y].uVlanID);
-								//}
-							//}
+							uint8_t namelen = strlen(http_msg);
+							if (namelen > 15 ) namelen = 15; // Make sure name is less than 16 characters
+							sprintf(Zodiac_Config.device_name, http_msg, namelen);
+							TRACE("http.c: device name set to '%s'",Zodiac_Config.device_name);
 						}
 						else
 						{
-							// User wants to change the port VLAN
-							// Delete previous assigned VLAN
-							for (y=0;y<MAX_VLANS;y++)
+							TRACE("http.c: \"&\" cannot be used in device name");
+						}
+					}
+					else
+					{
+						TRACE("http.c: no device name found");
+					}
+				
+					memset(&http_msg, 0, sizeof(http_msg));
+								
+					// MAC Address
+					pdat = strstr(http_payload, "wi_macAddress");
+					if(pdat != NULL)	// Check that element exists
+					{
+						pdat += (strlen("wi_macAddress")+1);	// Data format: wi_deviceName=(name)
+					
+						i = 0;
+						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+						{
+							http_msg[i] = pdat[i];	// Store value of element
+							i++;
+						}
+						if(pdat[i+1] == 'w')
+						{
+							int mac1,mac2,mac3,mac4,mac5,mac6;
+							char decArr[18] = "";
+							int j, k;
+						
+							if (strlen(http_msg) != 27 )	// Accounting for ":" as "%3A"
 							{
-								// User wants to disassociate the VLAN with the port
-								if(Zodiac_Config.vlan_list[y].portmap[port-1] == 1)
+								TRACE("http.c: incorrect MAC address format");
+								return;
+							}
+						
+							// Decode http string
+							j = 0; k = 0;
+							while(j < strlen(http_msg) && k < 18)
+							{
+								if(http_msg[j] == '%' && http_msg[j+1] == '3' && http_msg[j+2] == 'A')
 								{
-									Zodiac_Config.vlan_list[y].portmap[port-1] = 0;
-									Zodiac_Config.of_port[port-1] = 0;
-									TRACE("http.c: port %d has been removed from VLAN %d", port, Zodiac_Config.vlan_list[y].uVlanID);
+									decArr[k] = ':';
+									j+=3; k++;
+								}
+								else
+								{
+									decArr[k] = http_msg[j];
+									j++; k++;
 								}
 							}
-
-							// Assign the port to the requested VLAN
-							for (y=0;y<MAX_VLANS;y++)
+						
+							sscanf(decArr, "%x:%x:%x:%x:%x:%x", &mac1, &mac2, &mac3, &mac4, &mac5, &mac6);
+							Zodiac_Config.MAC_address[0] = mac1;
+							Zodiac_Config.MAC_address[1] = mac2;
+							Zodiac_Config.MAC_address[2] = mac3;
+							Zodiac_Config.MAC_address[3] = mac4;
+							Zodiac_Config.MAC_address[4] = mac5;
+							Zodiac_Config.MAC_address[5] = mac6;
+							TRACE("http.c: MAC address set to %.2X:%.2X:%.2X:%.2X:%.2X:%.2X",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
+						}
+						else
+						{
+							TRACE("http.c: \"&\" cannot be used in form");
+						}
+					}
+					else
+					{
+						TRACE("http.c: no MAC address found");
+					}
+				
+					memset(&http_msg, 0, sizeof(http_msg));
+								
+					// IP Address
+					pdat = strstr(http_payload, "wi_ipAddress");
+					if(pdat != NULL)	// Check that element exists
+					{
+						pdat += (strlen("wi_ipAddress")+1);	// Data format: wi_deviceName=(name)
+									
+						i = 0;
+						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+						{
+							http_msg[i] = pdat[i];	// Store value of element
+							i++;
+						}
+						if(pdat[i+1] == 'w')
+						{
+							int ip1,ip2,ip3,ip4;
+							if (strlen(http_msg) > 15 )
 							{
-								if(Zodiac_Config.vlan_list[y].uVlanID == vlanid)
+								TRACE("http.c: incorrect IP format");
+								return;
+							}
+							sscanf(http_msg, "%d.%d.%d.%d", &ip1, &ip2,&ip3,&ip4);
+							Zodiac_Config.IP_address[0] = ip1;
+							Zodiac_Config.IP_address[1] = ip2;
+							Zodiac_Config.IP_address[2] = ip3;
+							Zodiac_Config.IP_address[3] = ip4;
+							TRACE("http.c: IP address set to %d.%d.%d.%d" , Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1], Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]);
+						}
+						else
+						{
+							TRACE("http.c: \"&\" cannot be used in form");
+						}
+					}
+					else
+					{
+						TRACE("http.c: no IP address found");
+					}
+		
+					memset(&http_msg, 0, sizeof(http_msg));
+								
+					// Netmask
+					pdat = strstr(http_payload, "wi_netmask");
+					if(pdat != NULL)	// Check that element exists
+					{
+						pdat += (strlen("wi_netmask")+1);	// Data format: wi_deviceName=(name)
+									
+						i = 0;
+						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+						{
+							http_msg[i] = pdat[i];	// Store value of element
+							i++;
+						}
+						if(pdat[i+1] == 'w')
+						{
+							int nm1,nm2,nm3,nm4;
+							if (strlen(http_msg) > 15 )
+							{
+								TRACE("http.c: incorrect netmask format");
+								return;
+							}
+							sscanf(http_msg, "%d.%d.%d.%d", &nm1, &nm2,&nm3,&nm4);
+							Zodiac_Config.netmask[0] = nm1;
+							Zodiac_Config.netmask[1] = nm2;
+							Zodiac_Config.netmask[2] = nm3;
+							Zodiac_Config.netmask[3] = nm4;
+							TRACE("http.c: netmask set to %d.%d.%d.%d" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);				
+						}
+						else
+						{
+							TRACE("http.c: \"&\" cannot be used in form");
+						}
+					}
+					else
+					{
+						TRACE("http.c: no netmask found");
+					}
+				
+					memset(&http_msg, 0, sizeof(http_msg));
+							
+					// Gateway	
+					pdat = strstr(http_payload, "wi_gateway");
+					if(pdat != NULL)	// Check that element exists
+					{
+						pdat += (strlen("wi_gateway")+1);	// Data format: wi_deviceName=(name)
+									
+						i = 0;
+						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+						{
+							http_msg[i] = pdat[i];	// Store value of element
+							i++;
+						}
+					
+						// No next 'w' character check as this is the last element
+					
+						int gw1,gw2,gw3,gw4;
+						if (strlen(http_msg) > 15 )
+						{
+							TRACE("http.c: incorrect gateway format");
+							return;
+						}
+						sscanf(http_msg, "%d.%d.%d.%d", &gw1, &gw2,&gw3,&gw4);
+						Zodiac_Config.gateway_address[0] = gw1;
+						Zodiac_Config.gateway_address[1] = gw2;
+						Zodiac_Config.gateway_address[2] = gw3;
+						Zodiac_Config.gateway_address[3] = gw4;
+						TRACE("http.c: gateway set to %d.%d.%d.%d" , Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
+					}
+					else
+					{
+						TRACE("http.c: no gateway address found");
+					}
+				
+					// Save configuration to EEPROM
+					eeprom_write();
+					TRACE("http.c: config written to EEPROM");
+				
+					// Set update required flag
+					reset_required = true;
+				
+					// Send updated config page
+					if(interfaceCreate_Config_Network())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+					}
+								
+					// Send updated header page (with restart button)
+				
+						// ***** Placeholder until frame refresh targeting is implemented
+						//
+						//
+						//
+					
+				}
+				else if(strcmp(http_msg,"btn_restart") == 0)
+				{
+					TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
+					for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+					udc_detach();	// Detach the USB device before restart
+					rstc_start_software_reset(RSTC);	// Software reset
+					while (1);
+				}
+				else if(strcmp(http_msg,"btn_default") == 0)
+				{
+					TRACE("http.c: restoring factory settings");
+				
+					struct zodiac_config reset_config =
+					{
+						"Zodiac_FX",		// Name
+						0,0,0,0,0,0,		// MAC Address
+						10,0,1,99,			// IP Address
+						255,255,255,0,		// Netmask
+						10,0,1,1,			// Gateway Address
+						10,0,1,8,			// IP Address of the SDN Controller
+						6633,				// TCP port of SDN Controller
+						1					// OpenFlow enabled
+					};
+					memset(&reset_config.vlan_list, 0, sizeof(struct virtlan)* MAX_VLANS); // Clear vlan array
+
+					// Config VLAN 100
+					sprintf(&reset_config.vlan_list[0].cVlanName, "OpenFlow");	// Vlan name
+					reset_config.vlan_list[0].portmap[0] = 1;		// Assign port 1 to this vlan
+					reset_config.vlan_list[0].portmap[1] = 1;		// Assign port 2 to this vlan
+					reset_config.vlan_list[0].portmap[2] = 1;		// Assign port 3 to this vlan
+					reset_config.vlan_list[0].uActive = 1;		// Vlan is active
+					reset_config.vlan_list[0].uVlanID = 100;	// Vlan ID is 100
+					reset_config.vlan_list[0].uVlanType = 1;	// Set as an Openflow Vlan
+					reset_config.vlan_list[0].uTagged = 0;		// Set as untagged
+
+					// Config VLAN 200
+					sprintf(&reset_config.vlan_list[1].cVlanName, "Controller");
+					reset_config.vlan_list[1].portmap[3] = 1;		// Assign port 4 to this vlan
+					reset_config.vlan_list[1].uActive = 1;		// Vlan is active
+					reset_config.vlan_list[1].uVlanID = 200;	// Vlan ID is 200
+					reset_config.vlan_list[1].uVlanType = 2;	// Set as an Native Vlan
+					reset_config.vlan_list[1].uTagged = 0;		// Set as untagged
+
+					// Set ports
+					reset_config.of_port[0] = 1;		// Port 1 is an OpenFlow port
+					reset_config.of_port[1] = 1;		// Port 2 is an Openflow port
+					reset_config.of_port[2] = 1;		// Port 3 is an OpenFlow port
+					reset_config.of_port[3] = 2;		// Port 4 is an Native port
+
+					// Failstate
+					reset_config.failstate = 0;			// Failstate Secure
+
+					// Force OpenFlow version
+					reset_config.of_version = 0;			// Force version disabled
+
+					memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existing MAC address so it is not reset
+					memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
+					eeprom_write();
+				
+					TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
+					for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+					udc_detach();	// Detach the USB device before restart
+					rstc_start_software_reset(RSTC);	// Software reset
+					while (1);
+				}
+				else if(strcmp(http_msg,"save_ports") == 0)
+				{
+					// Save VLAN port associations
+				
+					memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+					int port = 0;
+					int x, y;
+					int vlanid;
+					char portID[10];
+				
+					// Search for "wi_pxID"
+					for (x=0;x<MAX_VLANS;x++)
+					{
+						port = x+1;
+						snprintf(portID, 10, "wi_p%dID=", port);
+						pdat = strstr(http_payload, portID);	// Search for element
+						if(pdat != NULL)	// Check that the element exists
+						{
+							pdat += (strlen(portID));	// Data format: wi_p1ID=(VLAN ID)
+					
+							i = 0;
+							while(	i < 4									// Limit no. digits
+									&& (pdat[i] >= 48 && pdat[i] <= 57)		// Only digits allowed
+									&& &pdat[i] < http_payload+len				// Prevent overrun of payload data
+								)
+							{
+								http_msg[i] = pdat[i];	// Store value of element
+								i++;
+							}
+						
+							vlanid = atoi(http_msg);
+						
+							if(vlanid == 0)
+							{
+								// Not a valid selection
+							
+								//for (y=0;y<MAX_VLANS;y++)
+								//{
+									//// User wants to disassociate the VLAN with the port
+									//if(Zodiac_Config.vlan_list[y].portmap[port-1] == 1)
+									//{
+										//Zodiac_Config.vlan_list[y].portmap[port-1] = 0;
+										//Zodiac_Config.of_port[port-1] = 0;
+										//TRACE("http.c: port %d has been removed from VLAN %d", port, Zodiac_Config.vlan_list[y].uVlanID);
+									//}
+								//}
+							}
+							else
+							{
+								// User wants to change the port VLAN
+								// Delete previous assigned VLAN
+								for (y=0;y<MAX_VLANS;y++)
 								{
-									if(Zodiac_Config.vlan_list[y].portmap[port-1] == 0  || Zodiac_Config.vlan_list[x].portmap[port-1] > 1 )
+									// User wants to disassociate the VLAN with the port
+									if(Zodiac_Config.vlan_list[y].portmap[port-1] == 1)
 									{
-										Zodiac_Config.vlan_list[y].portmap[port-1] = 1;
-										Zodiac_Config.of_port[port-1] = Zodiac_Config.vlan_list[y].uVlanType;
-										TRACE("http.c: port %d is now assigned to VLAN %d", port, vlanid);
+										Zodiac_Config.vlan_list[y].portmap[port-1] = 0;
+										Zodiac_Config.of_port[port-1] = 0;
+										TRACE("http.c: port %d has been removed from VLAN %d", port, Zodiac_Config.vlan_list[y].uVlanID);
+									}
+								}
+
+								// Assign the port to the requested VLAN
+								for (y=0;y<MAX_VLANS;y++)
+								{
+									if(Zodiac_Config.vlan_list[y].uVlanID == vlanid)
+									{
+										if(Zodiac_Config.vlan_list[y].portmap[port-1] == 0  || Zodiac_Config.vlan_list[x].portmap[port-1] > 1 )
+										{
+											Zodiac_Config.vlan_list[y].portmap[port-1] = 1;
+											Zodiac_Config.of_port[port-1] = Zodiac_Config.vlan_list[y].uVlanType;
+											TRACE("http.c: port %d is now assigned to VLAN %d", port, vlanid);
+										}
 									}
 								}
 							}
 						}
+						else
+						{
+							TRACE("http.c: port VLAN ID not found in Display: Ports response")
+						}
+					}
+				
+					// Save configuration to EEPROM
+					eeprom_write();
+					TRACE("http.c: config written to EEPROM");
+				
+					// Send updated page
+					if(interfaceCreate_Display_Ports(0))
+					{
+						// Only write to buffer - don't send
+						http_send(&shared_buffer, pcb, 0);
+						TRACE("http.c: updated ports page sent successfully (1/2) - %d bytes", strlen(shared_buffer));
 					}
 					else
 					{
-						TRACE("http.c: port VLAN ID not found in Display: Ports response")
+						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				
+					if(interfaceCreate_Display_Ports(1))
+					{
+						// Call TCP output & close the connection
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: updated ports page sent successfully (2/2) - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
-				
-				// Save configuration to EEPROM
-				eeprom_write();
-				TRACE("http.c: config written to EEPROM");
-				
-				// Send updated page
-				if(interfaceCreate_Display_Ports(0))
+				else if(strcmp(http_msg,"btn_ofNext") == 0)
 				{
-					// Only write to buffer - don't send
-					http_send(&shared_buffer, pcb, 0);
-					TRACE("http.c: updated ports page sent successfully (1/2) - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
-				}
 				
-				if(interfaceCreate_Display_Ports(1))
-				{
-					// Call TCP output & close the connection
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: updated ports page sent successfully (2/2) - %d bytes", strlen(shared_buffer));
 				}
-				else
+				else if(strcmp(http_msg,"btn_ofPrev") == 0)
 				{
-					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+				
 				}
-			}
-			else if(strcmp(http_msg,"btn_ofNext") == 0)
-			{
-				
-			}
-			else if(strcmp(http_msg,"btn_ofPrev") == 0)
-			{
-				
-			}
-			else if(strcmp(http_msg,"btn_ofClear") == 0)
-			{
-				// Clear the flow table
-				TRACE("http.c: clearing flow table, %d flow deleted.\r\n", iLastFlow);
-				clear_flows();
+				else if(strcmp(http_msg,"btn_ofClear") == 0)
+				{
+					// Clear the flow table
+					TRACE("http.c: clearing flow table, %d flow deleted.\r\n", iLastFlow);
+					clear_flows();
 
-				// Send updated page
-				if(interfaceCreate_Display_Flows())
-				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
-				}
-			}
-			else if(strcmp(http_msg,"save_vlan") == 0)
-			{
-				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
-				
-				// Search for btn=
-				pdat = strstr(http_payload, "btn=");	// Search for element
-				if(pdat != NULL)	// Check that the element exists
-				{
-					pdat += (strlen("btn="));	// Data format: btn=btn_name
-					
-					i = 0;
-					while(i < 7)	// VLAN button can only be "btn_add" or "btn_del"
+					// Send updated page
+					if(interfaceCreate_Display_Flows())
 					{
-						http_msg[i] = pdat[i];	// Store value of element
-						i++;
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
-				else
+				else if(strcmp(http_msg,"save_vlan") == 0)
 				{
-					TRACE("http.c: button not found in Config: VLANs response")
-				}
-
-				// Match pressed button
-				if(strcmp(http_msg,"btn_del") == 0)
-				{
-					int num = -1;
-					pdat += (strlen("btn_del"));	// Data format: btn=btn_del[number]
-					
-					num = pdat[0] - '0';	// Convert single char element to int
-					
-					TRACE("http.c: deleting element %d in vlan list", num);
-					
-					// Table row must be mapped to the ACTIVE VLANs
-					i = 0;				// for stepping through the vlan list
-					uint8_t ctr = 0;	// for mapping active items & checking against desired delete
-					uint8_t done = 0;	// Break once the correct element is found
-					while(i >= 0 && i < MAX_VLANS && !done)
+					memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+				
+					// Search for btn=
+					pdat = strstr(http_payload, "btn=");	// Search for element
+					if(pdat != NULL)	// Check that the element exists
 					{
-						// Check if vlan is active
-						if(Zodiac_Config.vlan_list[i].uActive == 1)
+						pdat += (strlen("btn="));	// Data format: btn=btn_name
+					
+						i = 0;
+						while(i < 7)	// VLAN button can only be "btn_add" or "btn_del"
 						{
-							// Check if this is the element to be deleted
-							if(ctr == num)
+							http_msg[i] = pdat[i];	// Store value of element
+							i++;
+						}
+					}
+					else
+					{
+						TRACE("http.c: button not found in Config: VLANs response")
+					}
+
+					// Match pressed button
+					if(strcmp(http_msg,"btn_del") == 0)
+					{
+						int num = -1;
+						pdat += (strlen("btn_del"));	// Data format: btn=btn_del[number]
+					
+						num = pdat[0] - '0';	// Convert single char element to int
+					
+						TRACE("http.c: deleting element %d in vlan list", num);
+					
+						// Table row must be mapped to the ACTIVE VLANs
+						i = 0;				// for stepping through the vlan list
+						uint8_t ctr = 0;	// for mapping active items & checking against desired delete
+						uint8_t done = 0;	// Break once the correct element is found
+						while(i >= 0 && i < MAX_VLANS && !done)
+						{
+							// Check if vlan is active
+							if(Zodiac_Config.vlan_list[i].uActive == 1)
 							{
-								// Delete existing VLAN
-								Zodiac_Config.vlan_list[i].uActive = 0;
-								Zodiac_Config.vlan_list[i].uVlanType = 0;
-								Zodiac_Config.vlan_list[i].uTagged = 0;
-								Zodiac_Config.vlan_list[i].uVlanID = 0;
-								done = 1;
+								// Check if this is the element to be deleted
+								if(ctr == num)
+								{
+									// Delete existing VLAN
+									Zodiac_Config.vlan_list[i].uActive = 0;
+									Zodiac_Config.vlan_list[i].uVlanType = 0;
+									Zodiac_Config.vlan_list[i].uTagged = 0;
+									Zodiac_Config.vlan_list[i].uVlanID = 0;
+									done = 1;
+								}
+								else
+								{
+									ctr++;
+								}
+							}
+							i++;
+						}
+					}
+					else if(strcmp(http_msg,"btn_add") == 0)
+					{
+						int vlID = 0;
+						char vlName[16] = "";
+						int vlType = 0;
+					
+						// Find ID input	
+						memset(&http_msg, 0, sizeof(http_msg));		
+						pdat = strstr(http_payload, "wi_vlID");
+						if(pdat != NULL)	// Check that element exists
+						{
+							pdat += (strlen("wi_vlID")+1);	// Data format: wi_vlID=(ID)
+					
+							i = 0;
+							while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+							{
+								http_msg[i] = pdat[i];	// Store value of element
+								i++;
+							}
+							if(pdat[i+1] == 'w' && strlen(http_msg))	// Check to make sure data follows
+							{
+								vlID = atoi(http_msg);
+								TRACE("http.c: VLAN ID: %d", vlID);
 							}
 							else
 							{
-								ctr++;
+								TRACE("http.c: invalid VLAN ID input");
 							}
 						}
-						i++;
+						else
+						{
+							TRACE("http.c: no VLAN ID found");
+						}
+				
+						// Find VLAN name input
+						pdat = strstr(http_payload, "wi_vlName");
+						if(pdat != NULL)	// Check that element exists
+						{
+							pdat += (strlen("wi_vlName")+1);	// Data format: wi_vlName=(Name)
+					
+							i = 0;
+							while(i < 15 && (pdat[i] != '&'))
+							{
+								vlName[i] = pdat[i];	// Store value of element
+								i++;
+							}
+							if(pdat[i+1] == 'w' && strlen(vlName))	// Check to make sure data follows
+							{
+								TRACE("http.c: VLAN Name: %s", vlName);
+							}
+							else
+							{
+								TRACE("http.c: invalid VLAN Name input");
+							}
+						}
+						else
+						{
+							TRACE("http.c: no VLAN Name found");
+						}
+					
+						// Find VLAN type input	
+						pdat = strstr(http_payload, "wi_vlType");
+						if(pdat != NULL)	// Check that element exists
+						{
+							pdat += (strlen("wi_vlType")+1);	// Data format: wi_vlType=(Type)
+							vlType = pdat[0] - '0';		// Convert single char element to int
+						}
+						else
+						{
+							TRACE("http.c: no VLAN Type found");
+						}
+					
+						if(vlID <= 4096)
+						{
+							// Add new VLAN
+							int v=0;
+							uint8_t done = 0;
+							while(v < MAX_VLANS && !done)
+							{
+								if(Zodiac_Config.vlan_list[v].uActive != 1)
+								{
+									Zodiac_Config.vlan_list[v].uActive = 1;
+									Zodiac_Config.vlan_list[v].uVlanID = vlID;
+									sprintf(Zodiac_Config.vlan_list[v].cVlanName, vlName, strlen(vlName));
+									Zodiac_Config.vlan_list[v].uVlanType = vlType;
+									TRACE("http.c: added VLAN %d '%s', type %d",Zodiac_Config.vlan_list[v].uVlanID, Zodiac_Config.vlan_list[v].cVlanName, Zodiac_Config.vlan_list[v].uVlanType);
+									done = 1;
+								}
+								v++;
+							}
+							if(!done)
+							{
+								TRACE("http.c: maximum VLAN limit reached");
+							}
+						}
+						else
+						{
+							TRACE("http.c: VLAN ID > 4096")
+						}
+					}
+					else
+					{
+						TRACE("http.c: unhandled button in Config: VLANs")
+					}
+				
+					// Save configuration to EEPROM
+					eeprom_write();
+					TRACE("http.c: config written to EEPROM");
+				
+					// Send updated config page
+					if(interfaceCreate_Config_VLANs())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
-				else if(strcmp(http_msg,"btn_add") == 0)
+				else if(strcmp(http_msg,"save_of") == 0)
 				{
-					int vlID = 0;
-					char vlName[16] = "";
-					int vlType = 0;
-					
-					// Find ID input	
-					memset(&http_msg, 0, sizeof(http_msg));		
-					pdat = strstr(http_payload, "wi_vlID");
+					// Controller IP Address
+					memset(&http_msg, 0, sizeof(http_msg));
+					pdat = strstr(http_payload, "wi_ofIP");
 					if(pdat != NULL)	// Check that element exists
 					{
-						pdat += (strlen("wi_vlID")+1);	// Data format: wi_vlID=(ID)
+						pdat += (strlen("wi_ofIP")+1);	// Data format: wi_ofIP=(IP)
+									
+						i = 0;
+						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+						{
+							http_msg[i] = pdat[i];	// Store value of element
+							i++;
+						}
+						if(pdat[i+1] == 'w')
+						{
+							int oc1,oc2,oc3,oc4;
+							if (strlen(http_msg) > 15 )
+							{
+								TRACE("http.c: incorrect IP format");
+								return;
+							}
+							sscanf(http_msg, "%d.%d.%d.%d", &oc1,&oc2,&oc3,&oc4);
+							Zodiac_Config.OFIP_address[0] = oc1;
+							Zodiac_Config.OFIP_address[1] = oc2;
+							Zodiac_Config.OFIP_address[2] = oc3;
+							Zodiac_Config.OFIP_address[3] = oc4;
+							TRACE("http.c: openflow server address set to %d.%d.%d.%d" ,\
+								Zodiac_Config.OFIP_address[0], Zodiac_Config.OFIP_address[1],\
+								Zodiac_Config.OFIP_address[2], Zodiac_Config.OFIP_address[3]\
+									);
+						}
+						else
+						{
+							TRACE("http.c: \"&\" cannot be used in form");
+						}
+					}
+				
+					// Controller Port
+					memset(&http_msg, 0, sizeof(http_msg));
+					pdat = strstr(http_payload, "wi_ofPort");
+					if(pdat != NULL)	// Check that element exists
+					{
+						pdat += (strlen("wi_ofPort")+1);	// Data format: wi_ofPort=(Port)
 					
 						i = 0;
 						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
@@ -898,275 +1076,129 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 							http_msg[i] = pdat[i];	// Store value of element
 							i++;
 						}
-						if(pdat[i+1] == 'w' && strlen(http_msg))	// Check to make sure data follows
+						if(pdat[i+1] == 'w')
 						{
-							vlID = atoi(http_msg);
-							TRACE("http.c: VLAN ID: %d", vlID);
+							Zodiac_Config.OFPort = atoi(http_msg);
+							TRACE("OpenFlow Port set to %d" , Zodiac_Config.OFPort);
 						}
 						else
 						{
-							TRACE("http.c: invalid VLAN ID input");
+							TRACE("http.c: \"&\" cannot be used in form");
 						}
 					}
-					else
-					{
-						TRACE("http.c: no VLAN ID found");
-					}
 				
-					// Find VLAN name input
-					pdat = strstr(http_payload, "wi_vlName");
+					// OpenFlow Status
+					memset(&http_msg, 0, sizeof(http_msg));
+					pdat = strstr(http_payload, "wi_ofStatus");
 					if(pdat != NULL)	// Check that element exists
 					{
-						pdat += (strlen("wi_vlName")+1);	// Data format: wi_vlName=(Name)
+						pdat += (strlen("wi_ofStatus")+1);	// Data format: wi_ofPort=(Port)
 					
 						i = 0;
-						while(i < 15 && (pdat[i] != '&'))
+						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
 						{
-							vlName[i] = pdat[i];	// Store value of element
+							http_msg[i] = pdat[i];	// Store value of element
 							i++;
 						}
-						if(pdat[i+1] == 'w' && strlen(vlName))	// Check to make sure data follows
+					
+						if(strcmp(http_msg,"Enable") == 0)
 						{
-							TRACE("http.c: VLAN Name: %s", vlName);
+							Zodiac_Config.OFEnabled = OF_ENABLED;
+							enableOF();
+							TRACE("http.c: openflow enabled");
+						}
+						else if(strcmp(http_msg,"Disable") == 0)
+						{
+							Zodiac_Config.OFEnabled = OF_DISABLED;
+							disableOF();
+							TRACE("http.c: openflow disabled");
 						}
 						else
 						{
-							TRACE("http.c: invalid VLAN Name input");
+							TRACE("http.c: unhandled openflow status");
 						}
 					}
-					else
-					{
-						TRACE("http.c: no VLAN Name found");
-					}
-					
-					// Find VLAN type input	
-					pdat = strstr(http_payload, "wi_vlType");
+				
+					// OpenFlow Status
+					pdat = strstr(http_payload, "wi_failstate");
 					if(pdat != NULL)	// Check that element exists
 					{
-						pdat += (strlen("wi_vlType")+1);	// Data format: wi_vlType=(Type)
-						vlType = pdat[0] - '0';		// Convert single char element to int
-					}
-					else
-					{
-						TRACE("http.c: no VLAN Type found");
-					}
+						pdat += (strlen("wi_failstate")+1);	// Data format: wi_failstate=(state)
 					
-					// Add new VLAN
-					int v=0;
-					uint8_t done = 0;
-					while(v < MAX_VLANS && !done)
-					{
-						if(Zodiac_Config.vlan_list[v].uActive != 1)
+						int failstate = 0;
+						failstate = pdat[0] - '0';	// Convert single char element to int
+					
+						if(failstate == 0)
 						{
-							Zodiac_Config.vlan_list[v].uActive = 1;
-							Zodiac_Config.vlan_list[v].uVlanID = vlID;
-							sprintf(Zodiac_Config.vlan_list[v].cVlanName, vlName, strlen(vlName));
-							Zodiac_Config.vlan_list[v].uVlanType = vlType;
-							TRACE("http.c: added VLAN %d '%s', type %d",Zodiac_Config.vlan_list[v].uVlanID, Zodiac_Config.vlan_list[v].cVlanName, Zodiac_Config.vlan_list[v].uVlanType);
-							done = 1;
+							Zodiac_Config.failstate = 0;
+							TRACE("http.c: failstate set to Secure (0)");
 						}
-						v++;
-					}
-					if(!done)
-					{
-						TRACE("http.c: maximum VLAN limit reached");
-					}
-				}
-				else
-				{
-					TRACE("http.c: unhandled button in Config: VLANs")
-				}
-				
-				// Save configuration to EEPROM
-				eeprom_write();
-				TRACE("http.c: config written to EEPROM");
-				
-				// Send updated config page
-				if(interfaceCreate_Config_VLANs())
-				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
-				}
-				else
-				{
-					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
-				}
-			}
-			else if(strcmp(http_msg,"save_of") == 0)
-			{
-				// Controller IP Address
-				memset(&http_msg, 0, sizeof(http_msg));
-				pdat = strstr(http_payload, "wi_ofIP");
-				if(pdat != NULL)	// Check that element exists
-				{
-					pdat += (strlen("wi_ofIP")+1);	// Data format: wi_ofIP=(IP)
-									
-					i = 0;
-					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-					{
-						http_msg[i] = pdat[i];	// Store value of element
-						i++;
-					}
-					if(pdat[i+1] == 'w')
-					{
-						int oc1,oc2,oc3,oc4;
-						if (strlen(http_msg) > 15 )
+						else if(failstate == 1)
 						{
-							TRACE("http.c: incorrect IP format");
-							return;
+							Zodiac_Config.failstate = 1;
+							TRACE("http.c: failstate set to Safe (1)");
 						}
-						sscanf(http_msg, "%d.%d.%d.%d", &oc1,&oc2,&oc3,&oc4);
-						Zodiac_Config.OFIP_address[0] = oc1;
-						Zodiac_Config.OFIP_address[1] = oc2;
-						Zodiac_Config.OFIP_address[2] = oc3;
-						Zodiac_Config.OFIP_address[3] = oc4;
-						TRACE("http.c: openflow server address set to %d.%d.%d.%d" ,\
-							Zodiac_Config.OFIP_address[0], Zodiac_Config.OFIP_address[1],\
-							Zodiac_Config.OFIP_address[2], Zodiac_Config.OFIP_address[3]\
-								);
+						else
+						{
+							TRACE("http.c: unhandled failstate");
+						}
+					}
+				
+					// OpenFlow Force Version
+					pdat = strstr(http_payload, "wi_ofVer");
+					if(pdat != NULL)	// Check that element exists
+					{
+						pdat += (strlen("wi_ofVer")+1);	// Data format: wi_ofVer=(version)
+					
+						int forceVer = 0;
+						forceVer = pdat[0] - '0';	// Convert single char element to int
+					
+						if(forceVer == 0)
+						{
+							Zodiac_Config.of_version = 0;
+							TRACE("http.c: force openflow version set to auto (0)");
+						}
+						else if(forceVer == 1)
+						{
+							Zodiac_Config.of_version = 1;
+							TRACE("http.c: force openflow version set to 1.0 (1)");
+						}
+						else if(forceVer == 4)
+						{
+							Zodiac_Config.of_version = 4;
+							TRACE("http.c: force openflow version set to 1.3 (4)");
+						}
+						else
+						{
+							TRACE("http.c: unhandled openflow version");
+						}
+					}
+				
+					// Save configuration to EEPROM
+					eeprom_write();
+					TRACE("http.c: config written to EEPROM");
+				
+					// Send updated config page
+					if(interfaceCreate_Config_OpenFlow())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
 					}
 					else
 					{
-						TRACE("http.c: \"&\" cannot be used in form");
+						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 					}
-				}
-				
-				// Controller Port
-				memset(&http_msg, 0, sizeof(http_msg));
-				pdat = strstr(http_payload, "wi_ofPort");
-				if(pdat != NULL)	// Check that element exists
-				{
-					pdat += (strlen("wi_ofPort")+1);	// Data format: wi_ofPort=(Port)
-					
-					i = 0;
-					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-					{
-						http_msg[i] = pdat[i];	// Store value of element
-						i++;
-					}
-					if(pdat[i+1] == 'w')
-					{
-						Zodiac_Config.OFPort = atoi(http_msg);
-						TRACE("OpenFlow Port set to %d" , Zodiac_Config.OFPort);
-					}
-					else
-					{
-						TRACE("http.c: \"&\" cannot be used in form");
-					}
-				}
-				
-				// OpenFlow Status
-				memset(&http_msg, 0, sizeof(http_msg));
-				pdat = strstr(http_payload, "wi_ofStatus");
-				if(pdat != NULL)	// Check that element exists
-				{
-					pdat += (strlen("wi_ofStatus")+1);	// Data format: wi_ofPort=(Port)
-					
-					i = 0;
-					while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-					{
-						http_msg[i] = pdat[i];	// Store value of element
-						i++;
-					}
-					
-					if(strcmp(http_msg,"Enable") == 0)
-					{
-						Zodiac_Config.OFEnabled = OF_ENABLED;
-						enableOF();
-						TRACE("http.c: openflow enabled");
-					}
-					else if(strcmp(http_msg,"Disable") == 0)
-					{
-						Zodiac_Config.OFEnabled = OF_DISABLED;
-						disableOF();
-						TRACE("http.c: openflow disabled");
-					}
-					else
-					{
-						TRACE("http.c: unhandled openflow status");
-					}
-				}
-				
-				// OpenFlow Status
-				pdat = strstr(http_payload, "wi_failstate");
-				if(pdat != NULL)	// Check that element exists
-				{
-					pdat += (strlen("wi_failstate")+1);	// Data format: wi_failstate=(state)
-					
-					int failstate = 0;
-					failstate = pdat[0] - '0';	// Convert single char element to int
-					
-					if(failstate == 0)
-					{
-						Zodiac_Config.failstate = 0;
-						TRACE("http.c: failstate set to Secure (0)");
-					}
-					else if(failstate == 1)
-					{
-						Zodiac_Config.failstate = 1;
-						TRACE("http.c: failstate set to Safe (1)");
-					}
-					else
-					{
-						TRACE("http.c: unhandled failstate");
-					}
-				}
-				
-				// OpenFlow Force Version
-				pdat = strstr(http_payload, "wi_ofVer");
-				if(pdat != NULL)	// Check that element exists
-				{
-					pdat += (strlen("wi_ofVer")+1);	// Data format: wi_ofVer=(version)
-					
-					int forceVer = 0;
-					forceVer = pdat[0] - '0';	// Convert single char element to int
-					
-					if(forceVer == 0)
-					{
-						Zodiac_Config.of_version = 0;
-						TRACE("http.c: force openflow version set to auto (0)");
-					}
-					else if(forceVer == 1)
-					{
-						Zodiac_Config.of_version = 1;
-						TRACE("http.c: force openflow version set to 1.0 (1)");
-					}
-					else if(forceVer == 4)
-					{
-						Zodiac_Config.of_version = 4;
-						TRACE("http.c: force openflow version set to 1.3 (4)");
-					}
-					else
-					{
-						TRACE("http.c: unhandled openflow version");
-					}
-				}
-				
-				// Save configuration to EEPROM
-				eeprom_write();
-				TRACE("http.c: config written to EEPROM");
-				
-				// Send updated config page
-				if(interfaceCreate_Config_OpenFlow())
-				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
 				}
 				else
 				{
-					TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+					TRACE("http.c: unknown request: \"%s\"", http_msg);
 				}
 			}
 			else
 			{
-				TRACE("http.c: unknown request: \"%s\"", http_msg);
+				TRACE("http.c: WARNING: unknown HTTP method received");
 			}
 		}
-		else
-		{
-			TRACE("http.c: WARNING: unknown HTTP method received");
-		}
-				
 	}
 
 	pbuf_free(p);
@@ -1204,8 +1236,8 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 		// Check if more data needs to be written
 		if(out == true)
 		{
-			TRACE("http.c: calling tcp_output & closing connection");
 			if (err == ERR_OK) tcp_output(pcb);
+			TRACE("http.c: calling tcp_output & closing connection");
 			tcp_close(pcb);
 		}
 	}
@@ -1213,9 +1245,194 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 	return;
 }
 
-static uint8_t file_handler(char *ppart, int len)
+static uint8_t upload_handler(char *ppart, int len)
 {
-	//
+	// Current browser support: Chrome
+	
+	static char page[512] = {0};		// Storage for each page of data
+	static uint16_t saved_bytes = 0;	// Persistent counter of unwritten data
+	uint16_t handled_bytes = 0;			// Counter of handled data
+	
+	char *px;	// Start address pointer
+	char *py;	// End address pointer
+	int i = 0;
+	int final = 0;
+	
+	// Search for starting boundary
+	px = strstr(ppart, "application/");
+
+	if(px == NULL)
+	{
+		TRACE("http.c: starting boundary not found - beginning data is valid");
+		px = ppart;	// Data begins at first value of array
+	}
+	else
+	{
+		TRACE("http.c: starting boundary found");
+		
+		// Data begins after boundary
+		px += (strlen("application/"));
+		
+		// Search for start of data
+		i = 0;
+		while(i<20)
+		{
+			px++;
+			if((*px) == '\x0a' && (*(px-1)) == '\x0d' && (*(px-2)) == '\x0a' && (*(px-3)) == '\x0d')
+			{
+				i = 20;
+				px++;
+				// 'i' will be incremented to 21 if this line is run
+			}
+			i++;
+		}
+		
+		if(i == 20)
+		{
+			TRACE("http.c: start of data part not found");
+			return 0;
+		}
+		
+		TRACE("http.c: pointer moved to start of data");
+	}
+	
+	// Search for ending boundary
+	py = ppart + len;
+	
+	i = 128;
+	while(i>0)
+	{
+		py--;
+		if((*py) == '\x0d' && (*(py+1)) == '\x0a' && (*(py+2)) == '\x2d' && (*(py+3)) == '\x2d')
+		{
+			i = 0;
+			// 'i' will be decremented to -1 if this line is run
+		}
+		i--;
+	}
+	
+	if(i == 0)
+	{
+		TRACE("http.c: ending boundary not found - ending data is valid");
+	}
+	else
+	{
+		TRACE("http.c: ending boundary found");
+		
+		// Return ending pointer to the end
+		py = ppart + len;
+		
+		final = 1;
+	}
+	
+	// Write data
+	if(saved_bytes)
+	{
+		// Fill in unwritten page (if it exists)
+		if(final)
+		{
+			while(saved_bytes < 512 && handled_bytes < len)
+			{
+				page[saved_bytes] = *px;
+				px++;
+				saved_bytes++;
+				handled_bytes++;
+			}
+		}
+		else
+		{
+			while(saved_bytes < 512)
+			{
+				page[saved_bytes] = *px;
+				px++;
+				saved_bytes++;
+				handled_bytes++;
+			}
+		}
+		
+		// Write data to page
+		if(flash_write_page(&page))		// ___________________ CHECK
+		{
+			TRACE("http.c: firmware page written successfully (%02d)", page_ctr);
+			page_ctr++;
+		}
+		else
+		{
+			TRACE("http.c: firmware page write FAILED (%02d)", page_ctr);
+		}
+		
+		memset(&page, 0, 512);
+		saved_bytes = 0;
+	}
+	
+	if(handled_bytes < len)
+	{
+		int j;
+
+		// Check for final page of data		
+		if(final)
+		{
+			j = 0;
+			while(px < py)
+			{
+				page[j] = *px;
+				px++;
+				j++;
+				handled_bytes++;
+			}
+		}
+		
+		// Write full pages
+		while(len - handled_bytes >= 512)
+		{
+			j = 0;
+			while(j < 512)
+			{
+				page[j] = *px;	// Store value of element
+				px++;
+				j++;
+				handled_bytes++;
+			}
+					
+			// Write data to page
+			if(flash_write_page(&page))		// ___________________ CHECK
+			{
+				TRACE("http.c: firmware page written successfully (%02d)", page_ctr);
+				page_ctr++;
+			}
+			else
+			{
+				TRACE("http.c: firmware page write FAILED (%02d)", page_ctr);
+			}
+			
+			memset(&page, 0, 512);
+		}
+		
+		// Save unwritten data
+		j = 0;
+		while(handled_bytes < len)
+		{
+			page[j] = *px;	// Store value of element
+			px++;
+			j++;
+			handled_bytes++;
+		}
+		
+		if(px > py)
+		{
+			TRACE("http.c: ERROR - pointer has passed the data");
+			return 0;
+		}
+	}
+	
+	if(final)
+	{
+		return 2;
+	}
+	else
+	{
+		return 1;
+	}
 }
 
 /*
@@ -1439,7 +1656,7 @@ static uint8_t interfaceCreate_Menu(void)
 				"<body>"\
 					"<ul>"\
 						"<li><a href=\"home.htm\" target=\"page\">Status</a></li>"\
-						/*"<li id=\"sub\"><a href=\"upload.htm\" target=\"page\">Update f/w</a></li>"*/
+						//"<li id=\"sub\"><a href=\"upload.htm\" target=\"page\">Update f/w</a></li>"
 						"<li><a href=\"d_home.htm\" target=\"page\">Display</a></li>"\
 						"<li id=\"sub\"><a href=\"d_ports.htm\" target=\"page\">Ports</a></li>"\
 						"<li id=\"sub\"><a href=\"d_of.htm\" target=\"page\">OpenFlow</a></li>"\
@@ -1537,9 +1754,11 @@ static uint8_t interfaceCreate_Upload(void)
 			"</head>"\
 			"<body>"\
 				"<p>"\
-					"<h2>Firmware Upload</h2>"\
+					"<h2>Firmware Update</h2>"\
 				"</p>"\
 			"<body>"\
+				"<p>Browser firmware update is currently only supported in Chrome.<br>"\
+				"Do not attempt an update with an unsupported browser.</p>"\
 				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\">"\
 					"<input type=\"file\" name =\"file\"><br><br>"\
 					"<input type=\"submit\" value=\"Upload File\"/>"\
@@ -1582,15 +1801,17 @@ static uint8_t interfaceCreate_Display_Home(void)
 				"<h2>Display Help</h2>"\
 				"<h3>Ports</h3>"\
 					"<p>"\
-						"Displays information for each of the Zodiac FX Ethernet ports, including its status, byte/packet statistics, and VLAN configuration."\
+						"View information for each of the Zodiac FX Ethernet ports, including its status, byte/packet statistics, and VLAN configuration."\
+						"<br><br>Ports can be assigned to VLANs on this page."\
+						"<br><br>Warning: incorrectly assigning VLANs may cause the web interface to be unresponsive. Zodiac FX may need to be re-configured through a terminal application."\
 					"</p>"\
 				"<h3>OpenFlow</h3>"\
 					"<p>"\
-						"Information about the OpenFlow status and configuration can be found in the OpenFlow display menu. The configured version, and details of the connected controller are also shown."\
+						"View the current OpenFlow status and statistics."\
 					"</p>"\
 				"<h3>Flows</h3>"\
 					"<p>"\
-						"Flow table contents can be viewed in the flows menu."\
+						"View the current flows in the flow table. This page is currently limited to displaying a maximum of 5 flows."\
 					"</p>"\
 			"</body>"\
 		"</html>"\
@@ -1623,7 +1844,7 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 		
 		// Create VLAN type strings
 		char portvlType[3][11];
-		snprintf(portvlType[0], 11, "Unassigned");
+		snprintf(portvlType[0], 11, "n/a");
 		snprintf(portvlType[1], 11, "OpenFlow");
 		snprintf(portvlType[2], 11, "Native");
 		
@@ -1665,6 +1886,10 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						"padding-left: 7px;"\
 						"padding-right: 10px;"\
 						"border: 1px solid black;"\
+						"white-space: nowrap;"\
+					"}"\
+					"th {"\
+						"width: 75px;"\
 					"}"\
 					"#row {"\
 						"font-weight: bold;"\
@@ -2591,15 +2816,16 @@ static uint8_t interfaceCreate_Config_Home(void)
 				"<h2>Config Help</h2>"\
 				"<h3>Network</h3>"\
 					"<p>"\
-						"The network settings of the Zodiac FX can be configured in this menu, including the device name, IP address, MAC address, netmask, and default gateway."\
+						"Configure the network settings of the Zodiac FX. This includes the device name, IP address, MAC address, netmask, and default gateway. After saving a configuration, a restart is required for changes to take effect."\
 					"</p>"\
 				"<h3>VLANs</h3>"\
 					"<p>"\
-						"Virtual LANs can be added or removed in the VLANs menu. These can be assigned in the Ports menu on the left."\
+						"Configure Virtual LANs. These can be added or deleted as required. To assign a port to a VLAN, go to the Display: Ports page. A restart is required for changes to take effect."\
+						"<br><br>Warning: incorrectly configuring VLANs may cause the web interface to be unresponsive. Zodiac FX may need to be re-configured through a terminal application."\
 					"</p>"\
 				"<h3>OpenFlow</h3>"\
 					"<p>"\
-						"The OpenFlow configuration can be modified here. OpenFlow can be enabled or disabled, the version can be specified, and the failstate can be set. The OpenFlow controller's IP address and port can be configured based on your network."\
+						"Configure OpenFlow. Set the controller IP and port for your network configuration. OpenFlow failstate can be modified, and an OpenFlow version can be forced. Alternatively, OpenFlow may be disabled."\
 					"</p>"\
 			"</body>"\
 		"</html>"\
@@ -2822,15 +3048,8 @@ static uint8_t interfaceCreate_Config_OpenFlow(void)
 				"<form style=\"width: 200px\" action=\"save_of\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes.\n\nPress the restart button on the top right for your changes to take effect.');\">"\
 					"<fieldset>"\
 						"<legend>OpenFlow</legend>"\
-						"Controller IP:<br>"\
-						"<input type=\"text\" name=\"wi_ofIP\" value=\"%d.%d.%d.%d\"><br><br>"\
-						"Controller Port:<br>"\
-						"<input type=\"text\" name=\"wi_ofPort\" value=\"%d\"><br><br>"\
-			, Zodiac_Config.OFIP_address[0], Zodiac_Config.OFIP_address[1]
-			, Zodiac_Config.OFIP_address[2], Zodiac_Config.OFIP_address[3]
-			, Zodiac_Config.OFPort
 		);
-		
+				
 		if(Zodiac_Config.OFEnabled == OF_ENABLED)
 		{
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
@@ -2851,6 +3070,16 @@ static uint8_t interfaceCreate_Config_OpenFlow(void)
 						"</select><br><br>"\
 					);
 		}
+		
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+						"Controller IP:<br>"\
+						"<input type=\"text\" name=\"wi_ofIP\" value=\"%d.%d.%d.%d\"><br><br>"\
+						"Controller Port:<br>"\
+						"<input type=\"text\" name=\"wi_ofPort\" value=\"%d\"><br><br>"\
+				, Zodiac_Config.OFIP_address[0], Zodiac_Config.OFIP_address[1]
+				, Zodiac_Config.OFIP_address[2], Zodiac_Config.OFIP_address[3]
+				, Zodiac_Config.OFPort
+			);
 		
 		if(Zodiac_Config.failstate == 0)
 		{
@@ -2953,6 +3182,12 @@ static uint8_t interfaceCreate_About(void)
 					"<p>"\
 						"The Zodiac FX was created by <a href=\"http://northboundnetworks.com\" target=\"_blank\">Northbound Networks</a> to allow the development of SDN applications on real hardware."\
 					"</p>"\
+/*				"<h3>What's new in v0.72</h3>"\
+					"<p>"\
+						"- Feature<br>"\
+						"- Feature<br>"\
+						"- Feature<br>"\
+					"</p>"\		*/
 			"</body>"\
 		"</html>"\
 				) < SHARED_BUFFER_LEN)
