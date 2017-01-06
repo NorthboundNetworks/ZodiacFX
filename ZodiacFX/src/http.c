@@ -1844,7 +1844,7 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 		
 		// Create VLAN type strings
 		char portvlType[3][11];
-		snprintf(portvlType[0], 11, "Unassigned");
+		snprintf(portvlType[0], 11, "n/a");
 		snprintf(portvlType[1], 11, "OpenFlow");
 		snprintf(portvlType[2], 11, "Native");
 		
