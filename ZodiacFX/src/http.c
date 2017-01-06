@@ -1795,8 +1795,8 @@ static uint8_t interfaceCreate_Display_Home(void)
 				"<h3>Ports</h3>"\
 					"<p>"\
 						"View information for each of the Zodiac FX Ethernet ports, including its status, byte/packet statistics, and VLAN configuration."\
-						"<br>Ports can be assigned to VLANs on this page."\
-						"<br>Warning: incorrectly assigning VLANs may cause the web interface to be unresponsive. Zodiac FX may need to be re-configured through a terminal application."\
+						"<br><br>Ports can be assigned to VLANs on this page."\
+						"<br><br>Warning: incorrectly assigning VLANs may cause the web interface to be unresponsive. Zodiac FX may need to be re-configured through a terminal application."\
 					"</p>"\
 				"<h3>OpenFlow</h3>"\
 					"<p>"\
@@ -1879,6 +1879,10 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						"padding-left: 7px;"\
 						"padding-right: 10px;"\
 						"border: 1px solid black;"\
+						"white-space: nowrap;"\
+					"}"\
+					"th {"\
+						"width: 75px;"\
 					"}"\
 					"#row {"\
 						"font-weight: bold;"\
@@ -2810,7 +2814,7 @@ static uint8_t interfaceCreate_Config_Home(void)
 				"<h3>VLANs</h3>"\
 					"<p>"\
 						"Configure Virtual LANs. These can be added or deleted as required. To assign a port to a VLAN, go to the Display: Ports page. A restart is required for changes to take effect."\
-						"<br>Warning: incorrectly configuring VLANs may cause the web interface to be unresponsive. Zodiac FX may need to be re-configured through a terminal application."\
+						"<br><br>Warning: incorrectly configuring VLANs may cause the web interface to be unresponsive. Zodiac FX may need to be re-configured through a terminal application."\
 					"</p>"\
 				"<h3>OpenFlow</h3>"\
 					"<p>"\
