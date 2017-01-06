@@ -731,7 +731,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 							pdat += (strlen(portID));	// Data format: wi_p1ID=(VLAN ID)
 					
 							i = 0;
-							while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+							while(	i < 4									// Limit no. digits
+									&& (pdat[i] >= 48 && pdat[i] <= 57)		// Only digits allowed
+									&& &pdat[i] < http_payload+len				// Prevent overrun of payload data
+								)
 							{
 								http_msg[i] = pdat[i];	// Store value of element
 								i++;
@@ -1792,6 +1795,8 @@ static uint8_t interfaceCreate_Display_Home(void)
 				"<h3>Ports</h3>"\
 					"<p>"\
 						"View information for each of the Zodiac FX Ethernet ports, including its status, byte/packet statistics, and VLAN configuration."\
+						"<br>Ports can be assigned to VLANs on this page."\
+						"<br>Warning: incorrectly assigning VLANs may cause the web interface to be unresponsive. Zodiac FX may need to be re-configured through a terminal application."\
 					"</p>"\
 				"<h3>OpenFlow</h3>"\
 					"<p>"\
@@ -2805,6 +2810,7 @@ static uint8_t interfaceCreate_Config_Home(void)
 				"<h3>VLANs</h3>"\
 					"<p>"\
 						"Configure Virtual LANs. These can be added or deleted as required. To assign a port to a VLAN, go to the Display: Ports page. A restart is required for changes to take effect."\
+						"<br>Warning: incorrectly configuring VLANs may cause the web interface to be unresponsive. Zodiac FX may need to be re-configured through a terminal application."\
 					"</p>"\
 				"<h3>OpenFlow</h3>"\
 					"<p>"\
