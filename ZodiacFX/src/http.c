@@ -731,7 +731,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 							pdat += (strlen(portID));	// Data format: wi_p1ID=(VLAN ID)
 					
 							i = 0;
-							while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+							while(	i < 4									// Limit no. digits
+									&& (pdat[i] >= 48 && pdat[i] <= 57)		// Only digits allowed
+									&& &pdat[i] < http_payload+len				// Prevent overrun of payload data
+								)
 							{
 								http_msg[i] = pdat[i];	// Store value of element
 								i++;
@@ -973,25 +976,32 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 							TRACE("http.c: no VLAN Type found");
 						}
 					
-						// Add new VLAN
-						int v=0;
-						uint8_t done = 0;
-						while(v < MAX_VLANS && !done)
+						if(vlID <= 4096)
 						{
-							if(Zodiac_Config.vlan_list[v].uActive != 1)
+							// Add new VLAN
+							int v=0;
+							uint8_t done = 0;
+							while(v < MAX_VLANS && !done)
 							{
-								Zodiac_Config.vlan_list[v].uActive = 1;
-								Zodiac_Config.vlan_list[v].uVlanID = vlID;
-								sprintf(Zodiac_Config.vlan_list[v].cVlanName, vlName, strlen(vlName));
-								Zodiac_Config.vlan_list[v].uVlanType = vlType;
-								TRACE("http.c: added VLAN %d '%s', type %d",Zodiac_Config.vlan_list[v].uVlanID, Zodiac_Config.vlan_list[v].cVlanName, Zodiac_Config.vlan_list[v].uVlanType);
-								done = 1;
+								if(Zodiac_Config.vlan_list[v].uActive != 1)
+								{
+									Zodiac_Config.vlan_list[v].uActive = 1;
+									Zodiac_Config.vlan_list[v].uVlanID = vlID;
+									sprintf(Zodiac_Config.vlan_list[v].cVlanName, vlName, strlen(vlName));
+									Zodiac_Config.vlan_list[v].uVlanType = vlType;
+									TRACE("http.c: added VLAN %d '%s', type %d",Zodiac_Config.vlan_list[v].uVlanID, Zodiac_Config.vlan_list[v].cVlanName, Zodiac_Config.vlan_list[v].uVlanType);
+									done = 1;
+								}
+								v++;
 							}
-							v++;
+							if(!done)
+							{
+								TRACE("http.c: maximum VLAN limit reached");
+							}
 						}
-						if(!done)
+						else
 						{
-							TRACE("http.c: maximum VLAN limit reached");
+							TRACE("http.c: VLAN ID > 4096")
 						}
 					}
 					else
@@ -1792,6 +1802,8 @@ static uint8_t interfaceCreate_Display_Home(void)
 				"<h3>Ports</h3>"\
 					"<p>"\
 						"View information for each of the Zodiac FX Ethernet ports, including its status, byte/packet statistics, and VLAN configuration."\
+						"<br><br>Ports can be assigned to VLANs on this page."\
+						"<br><br>Warning: incorrectly assigning VLANs may cause the web interface to be unresponsive. Zodiac FX may need to be re-configured through a terminal application."\
 					"</p>"\
 				"<h3>OpenFlow</h3>"\
 					"<p>"\
@@ -1832,7 +1844,7 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 		
 		// Create VLAN type strings
 		char portvlType[3][11];
-		snprintf(portvlType[0], 11, "Unassigned");
+		snprintf(portvlType[0], 11, "n/a");
 		snprintf(portvlType[1], 11, "OpenFlow");
 		snprintf(portvlType[2], 11, "Native");
 		
@@ -1874,6 +1886,10 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						"padding-left: 7px;"\
 						"padding-right: 10px;"\
 						"border: 1px solid black;"\
+						"white-space: nowrap;"\
+					"}"\
+					"th {"\
+						"width: 75px;"\
 					"}"\
 					"#row {"\
 						"font-weight: bold;"\
@@ -2805,6 +2821,7 @@ static uint8_t interfaceCreate_Config_Home(void)
 				"<h3>VLANs</h3>"\
 					"<p>"\
 						"Configure Virtual LANs. These can be added or deleted as required. To assign a port to a VLAN, go to the Display: Ports page. A restart is required for changes to take effect."\
+						"<br><br>Warning: incorrectly configuring VLANs may cause the web interface to be unresponsive. Zodiac FX may need to be re-configured through a terminal application."\
 					"</p>"\
 				"<h3>OpenFlow</h3>"\
 					"<p>"\

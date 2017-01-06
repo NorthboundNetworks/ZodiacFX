@@ -126,7 +126,7 @@
  * MEMP_NUM_TCP_SEG: the number of simultaneously queued TCP segments.
  * (requires the LWIP_TCP option)
  */
-#define MEMP_NUM_TCP_SEG                8
+#define MEMP_NUM_TCP_SEG                16
 
 /**
  * MEMP_NUM_REASSDATA: the number of IP packets simultaneously queued for
