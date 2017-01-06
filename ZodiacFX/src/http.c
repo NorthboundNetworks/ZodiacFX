@@ -976,25 +976,32 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 							TRACE("http.c: no VLAN Type found");
 						}
 					
-						// Add new VLAN
-						int v=0;
-						uint8_t done = 0;
-						while(v < MAX_VLANS && !done)
+						if(vlID <= 4096)
 						{
-							if(Zodiac_Config.vlan_list[v].uActive != 1)
+							// Add new VLAN
+							int v=0;
+							uint8_t done = 0;
+							while(v < MAX_VLANS && !done)
 							{
-								Zodiac_Config.vlan_list[v].uActive = 1;
-								Zodiac_Config.vlan_list[v].uVlanID = vlID;
-								sprintf(Zodiac_Config.vlan_list[v].cVlanName, vlName, strlen(vlName));
-								Zodiac_Config.vlan_list[v].uVlanType = vlType;
-								TRACE("http.c: added VLAN %d '%s', type %d",Zodiac_Config.vlan_list[v].uVlanID, Zodiac_Config.vlan_list[v].cVlanName, Zodiac_Config.vlan_list[v].uVlanType);
-								done = 1;
+								if(Zodiac_Config.vlan_list[v].uActive != 1)
+								{
+									Zodiac_Config.vlan_list[v].uActive = 1;
+									Zodiac_Config.vlan_list[v].uVlanID = vlID;
+									sprintf(Zodiac_Config.vlan_list[v].cVlanName, vlName, strlen(vlName));
+									Zodiac_Config.vlan_list[v].uVlanType = vlType;
+									TRACE("http.c: added VLAN %d '%s', type %d",Zodiac_Config.vlan_list[v].uVlanID, Zodiac_Config.vlan_list[v].cVlanName, Zodiac_Config.vlan_list[v].uVlanType);
+									done = 1;
+								}
+								v++;
 							}
-							v++;
+							if(!done)
+							{
+								TRACE("http.c: maximum VLAN limit reached");
+							}
 						}
-						if(!done)
+						else
 						{
-							TRACE("http.c: maximum VLAN limit reached");
+							TRACE("http.c: VLAN ID > 4096")
 						}
 					}
 					else
