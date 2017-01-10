@@ -1866,6 +1866,7 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 
 		snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 			"<!DOCTYPE html>"\
+			"<META http-equiv=\"refresh\" content=\"31\">"\
 			"<html>"\
 				"<head>"\
 					"<style>"\
@@ -1894,6 +1895,9 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 					"#row {"\
 						"font-weight: bold;"\
 					"}"\
+					"#label {"\
+						"width: 180px;"\
+					"}"\
 					"</style>"\
 				"</head>"\
 				"<body>"\
@@ -1905,7 +1909,7 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						"<legend>Ports</legend>"\
 					"<table>"\
 					  "<tr>"\
-						"<th></th>"\
+						"<th id=\"label\"></th>"\
 						"<th>Port 1</th>"\
 						"<th>Port 2</th>"\
 						"<th>Port 3</th>"\
@@ -2269,6 +2273,7 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 	
 	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 		"<!DOCTYPE html>"\
+		"<META http-equiv=\"refresh\" content=\"31\">"\
 		"<html>"\
 			"<head>"\
 				"<style>"\
