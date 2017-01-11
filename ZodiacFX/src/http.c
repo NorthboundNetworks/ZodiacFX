@@ -2394,7 +2394,7 @@ static uint8_t interfaceCreate_Display_Flows(void)
 				"<p>"\
 					"<h2>Flows</h2>"\
 				"</p>"\
-				"<pre>"\
+				"<pre><span style=\"font-size: 12px; line-height: 1\">"\
 			);
 
 // Begin Flow formatting
@@ -2404,7 +2404,7 @@ uint8_t flowEnd = flowBase + FLOW_LIMIT;
 struct ofp_action_header * act_hdr;
 
 // Ensure page correctly displays end of flows
-if(iLastFlow < (flowEnd))
+if(iLastFlow < flowEnd)
 {
 	flowEnd = iLastFlow;
 }
@@ -2414,11 +2414,11 @@ if (iLastFlow > 0)
 	// OpenFlow v1.0 (0x01) Flow Table
 	if( OF_Version == 1)
 	{
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------\r\n");
 		for (i=flowBase;i<flowEnd;i++)
 		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\nFlow %d\r\n",i+1);
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer)," Match:\r\n");
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n_______\r\n");
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n Flow %d\r\n",i+1);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Match:\r\n");
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Incoming Port: %d\t\t\tEthernet Type: 0x%.4X\r\n",ntohs(flow_match10[i]->match.in_port), ntohs(flow_match10[i]->match.dl_type));
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t\tDestination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",flow_match10[i]->match.dl_src[0], flow_match10[i]->match.dl_src[1], flow_match10[i]->match.dl_src[2], flow_match10[i]->match.dl_src[3], flow_match10[i]->match.dl_src[4], flow_match10[i]->match.dl_src[5] \
 			, flow_match10[i]->match.dl_dst[0], flow_match10[i]->match.dl_dst[1], flow_match10[i]->match.dl_dst[2], flow_match10[i]->match.dl_dst[3], flow_match10[i]->match.dl_dst[4], flow_match10[i]->match.dl_dst[5]);
@@ -2490,7 +2490,7 @@ if (iLastFlow > 0)
 				}
 			}
 		}
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------\r\n\n");
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"_______\r\n\n");
 	}
 	// OpenFlow v1.3 (0x04) Flow Table
 	if( OF_Version == 4)
@@ -2508,11 +2508,11 @@ if (iLastFlow > 0)
 		uint8_t oxm_ipv4[4];
 		uint16_t oxm_ipv6[8];
 
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------\r\n");
 		for (i=flowBase;i<flowEnd;i++)
 		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\nFlow %d\r\n",i+1);
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer)," Match:\r\n");
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n_______\r\n");
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n Flow %d\r\n",i+1);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Match:\r\n");
 			match_size = 0;
 
 			while (match_size < (ntohs(flow_match13[i]->match.length)-4))
@@ -2808,7 +2808,7 @@ if (iLastFlow > 0)
 				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   DROP \r\n");
 			}
 		}
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n-------\r\n\n");
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"_______\r\n\n");
 	}
 	} else {
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"No Flows installed\r\n");
@@ -2816,15 +2816,41 @@ if (iLastFlow > 0)
 	
 // End Flow formatting
 
-	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-				"</pre>"\
-				"<form action=\"btn_ofPage\" method=\"post\">"\
-						"<br><button name=\"btn\" value=\"btn_ofNext\">Next</button>"\
-						"<button name=\"btn\" value=\"btn_ofPrev\">Previous</button>"\
-				"</form>"\
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+				"</span></pre>"\
+				"<form action=\"btn_ofPage\" method=\"post\"><br>"\
+	);
+	
+	// Check if "previous page" button needs to be created
+	if(flowBase >= FLOW_LIMIT)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+					"<button name=\"btn\" value=\"btn_ofPrev\">Previous</button>"\
+				);
+	}
+	
+	// Check if "next page" button needs to be created
+	if(flowEnd < iLastFlow)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+					"<button name=\"btn\" value=\"btn_ofNext\">Next</button>"\
+				);
+	}
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+				"</form>");
+	
+	// Check if "clear flows" button needs to be created
+	if(iLastFlow > 0)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"<form action=\"btn_ofClear\" method=\"post\"  onsubmit=\"return confirm('All flows will be cleared. Do you wish to proceed?');\">"\
-						"<br><button name=\"btn\" value=\"btn_ofClear\">Clear Flows</button>"\
+					"<br><button name=\"btn\" value=\"btn_ofClear\">Clear Flows</button>"\
 				"</form>"\
+		);
+	}
+	
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 			"</body>"\
 		"</html>"\
 	) < SHARED_BUFFER_LEN)
