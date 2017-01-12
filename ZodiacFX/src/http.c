@@ -829,10 +829,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						TRACE("http.c: request for next page of flows");
 						TRACE("http.c: current flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
-						if(flowBase < iLastFlow-5)
+						if(flowBase < iLastFlow-FLOW_LIMIT)
 						{
-							// Increment flow base (display next 5 on page send)
-							flowBase += 5;
+							// Increment flow base (display next set on page send)
+							flowBase += FLOW_LIMIT;
 							TRACE("http.c: new flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
 						}
 						else
@@ -844,10 +844,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						TRACE("http.c: request for previous page of flows");
 						TRACE("http.c: current flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
-						if(flowBase >= 5)
+						if(flowBase >= FLOW_LIMIT)
 						{
-							// Decrement flow base (display previous 5 on page send)
-							flowBase -= 5;
+							// Decrement flow base (display previous set on page send)
+							flowBase -= FLOW_LIMIT;
 							TRACE("http.c: new flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
 						}
 						else
