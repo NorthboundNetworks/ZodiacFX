@@ -157,12 +157,12 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		
 		if(file_upload == true)
 		{
+			int ret = 0;
 			// Handle multi-part file data
 			ret = upload_handler(http_payload, len);
 			if(ret == 2)
 			{
-				// Draw "Please Restart" page
-				interfaceCreate_Display_Flows();
+				// TODO - Draw "Please Restart" page
 				//while(1);
 				file_upload = false;
 			}
@@ -1372,8 +1372,6 @@ static uint8_t upload_handler(char *ppart, int len)
 		TRACE("http.c: ending boundary found");
 		final = 1;
 	}
-	
-// _______________________________________________________________________
 	
 	// Get length of uploaded part
 	data_len = py - px;
