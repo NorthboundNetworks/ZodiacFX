@@ -1360,6 +1360,9 @@ static uint8_t upload_handler(char *ppart, int len)
 		i--;
 	}
 	
+	// Support cURL boundary difference
+	if(*(py-1) == '\x0a') py--;
+	
 	if(i == 0)
 	{
 		TRACE("http.c: ending boundary not found - ending data is valid");
