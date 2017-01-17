@@ -158,14 +158,14 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		if(file_upload == true)
 		{
 			int ret = 0;
-			int tst = 3000;
 			// Handle multi-part file data
 			ret = upload_handler(http_payload, len);
-			while(tst)
+			if(ret == 2)
 			{
-				tst--;
+				// TODO - Draw "Please Restart" page
+				//while(1);
+				file_upload = false;
 			}
-			 tst = 0;		// _______________________________ for debug purposes
 		}
 		else
 		{
@@ -829,10 +829,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						TRACE("http.c: request for next page of flows");
 						TRACE("http.c: current flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
-						if(flowBase < iLastFlow-5)
+						if(flowBase < iLastFlow-FLOW_LIMIT)
 						{
-							// Increment flow base (display next 5 on page send)
-							flowBase += 5;
+							// Increment flow base (display next set on page send)
+							flowBase += FLOW_LIMIT;
 							TRACE("http.c: new flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
 						}
 						else
@@ -844,10 +844,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						TRACE("http.c: request for previous page of flows");
 						TRACE("http.c: current flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
-						if(flowBase >= 5)
+						if(flowBase >= FLOW_LIMIT)
 						{
-							// Decrement flow base (display previous 5 on page send)
-							flowBase -= 5;
+							// Decrement flow base (display previous set on page send)
+							flowBase -= FLOW_LIMIT;
 							TRACE("http.c: new flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
 						}
 						else
@@ -1305,6 +1305,7 @@ static uint8_t upload_handler(char *ppart, int len)
 	char *py;	// End address pointer
 	int i = 0;
 	int final = 0;
+	int data_len = 0;	// Length of actual upload data
 	
 	// Search for starting boundary
 	px = strstr(ppart, "application/");
@@ -1362,117 +1363,146 @@ static uint8_t upload_handler(char *ppart, int len)
 	if(i == 0)
 	{
 		TRACE("http.c: ending boundary not found - ending data is valid");
+		
+		// Return ending pointer to the end
+		py = ppart + len;
 	}
 	else
 	{
 		TRACE("http.c: ending boundary found");
-		
-		// Return ending pointer to the end
-		py = ppart + len;
-		
 		final = 1;
 	}
 	
-	// Write data
+	// Get length of uploaded part
+	data_len = py - px;
+	
+	// Check if any existing data needs to be handled
 	if(saved_bytes)
 	{
-		// Fill in unwritten page (if it exists)
-		if(final)
+		// Fill existing partially-complete page with new data
+		while(saved_bytes < 512 && handled_bytes < len)
 		{
-			while(saved_bytes < 512 && handled_bytes < len)
+			page[saved_bytes] = *px;
+			if(px < py)
 			{
-				page[saved_bytes] = *px;
 				px++;
-				saved_bytes++;
-				handled_bytes++;
 			}
-		}
-		else
-		{
-			while(saved_bytes < 512)
+			else
 			{
-				page[saved_bytes] = *px;
-				px++;
-				saved_bytes++;
-				handled_bytes++;
+				TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
 			}
+			saved_bytes++;
+			handled_bytes++;
 		}
 		
 		// Write data to page
-		if(flash_write_page(&page))		// ___________________ CHECK
+		if(flash_write_page(&page))
 		{
-			TRACE("http.c: firmware page written successfully (%02d)", page_ctr);
+			TRACE("http.c: firmware page written successfully");
 			page_ctr++;
 		}
 		else
 		{
-			TRACE("http.c: firmware page write FAILED (%02d)", page_ctr);
+			TRACE("http.c: firmware page write FAILED");
 		}
 		
-		memset(&page, 0, 512);
+		// Saved bytes have been handled - clear the counter
 		saved_bytes = 0;
 	}
-	
-	if(handled_bytes < len)
-	{
-		int j;
 
-		// Check for final page of data		
-		if(final)
+	while(handled_bytes < data_len)
+	{
+		if(data_len - handled_bytes >= 512)
 		{
-			j = 0;
-			while(px < py)
-			{
-				page[j] = *px;
-				px++;
-				j++;
-				handled_bytes++;
-			}
-		}
-		
-		// Write full pages
-		while(len - handled_bytes >= 512)
-		{
-			j = 0;
+			// Fill 512-byte array
+			int j = 0;
 			while(j < 512)
 			{
-				page[j] = *px;	// Store value of element
-				px++;
+				page[j] = *px;
+				if(px < py)
+				{
+					px++;	
+				}
+				else
+				{
+					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
+				}
 				j++;
 				handled_bytes++;
 			}
-					
-			// Write data to page
-			if(flash_write_page(&page))		// ___________________ CHECK
+			
+			// Write to page
+			if(flash_write_page(&page))
 			{
-				TRACE("http.c: firmware page written successfully (%02d)", page_ctr);
+				TRACE("http.c: firmware page written successfully");
 				page_ctr++;
 			}
 			else
 			{
-				TRACE("http.c: firmware page write FAILED (%02d)", page_ctr);
+				TRACE("http.c: firmware page write FAILED");
+			}
+		}
+		else if(!final)
+		{
+			/* Data needs to be saved */
+			
+			// Save leftover into page array for next run-through
+			int j = 0;
+			while(handled_bytes < data_len)
+			{
+				page[j] = *px;
+				if(px < py)
+				{
+					px++;
+				}
+				else
+				{
+					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
+				}
+				j++;
+				handled_bytes++;
+				saved_bytes++;
+			}
+		}
+		else
+		{
+			/* Final page needs to be written */
+			
+			// Fill 512-byte array
+			int j = 0;
+			while(j < 512)
+			{
+				if(px < py)
+				{
+					// Write data
+					page[j] = *px;
+					px++;
+					handled_bytes++;
+				}
+				else
+				{
+					// Append 0xFF
+					page[j] = 0xFF;
+				}
+
+				j++;
 			}
 			
-			memset(&page, 0, 512);
+			// Write to page
+			if(flash_write_page(&page))
+			{
+				TRACE("http.c: final page written successfully");
+				page_ctr++;
+			}
+			else
+			{
+				TRACE("http.c: final page write FAILED");
+			}
 		}
-		
-		// Save unwritten data
-		j = 0;
-		while(handled_bytes < len)
-		{
-			page[j] = *px;	// Store value of element
-			px++;
-			j++;
-			handled_bytes++;
-		}
-		
-		if(px > py)
-		{
-			TRACE("http.c: ERROR - pointer has passed the data");
-			return 0;
-		}
-	}
 	
+		TRACE("http.c: handled_bytes: %04d, data_len: %04d", handled_bytes, data_len);
+	}	
+			
 	if(final)
 	{
 		return 2;
@@ -1704,7 +1734,7 @@ static uint8_t interfaceCreate_Menu(void)
 				"<body>"\
 					"<ul>"\
 						"<li><a href=\"home.htm\" target=\"page\">Status</a></li>"\
-						//"<li id=\"sub\"><a href=\"upload.htm\" target=\"page\">Update f/w</a></li>"
+						"<li id=\"sub\"><a href=\"upload.htm\" target=\"page\">Update f/w</a></li>"
 						"<li><a href=\"d_home.htm\" target=\"page\">Display</a></li>"\
 						"<li id=\"sub\"><a href=\"d_ports.htm\" target=\"page\">Ports</a></li>"\
 						"<li id=\"sub\"><a href=\"d_of.htm\" target=\"page\">OpenFlow</a></li>"\
