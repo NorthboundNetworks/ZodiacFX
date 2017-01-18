@@ -84,6 +84,7 @@ static uint8_t interfaceCreate_Header(void);
 static uint8_t interfaceCreate_Menu(void);
 static uint8_t interfaceCreate_Home(void);
 static uint8_t interfaceCreate_Upload(void);
+static uint8_t interfaceCreate_Upload_Complete(uint8_t sel);
 static uint8_t interfaceCreate_Display_Home(void);
 static uint8_t interfaceCreate_Display_Ports(uint8_t step);
 static uint8_t interfaceCreate_Display_OpenFlow(void);
@@ -95,6 +96,7 @@ static uint8_t interfaceCreate_Config_OpenFlow(void);
 static uint8_t interfaceCreate_About(void);
 
 static uint8_t upload_handler(char *ppart, int len);
+static char uploaded_version[5] = {0};
 static int page_ctr = 1;
 
 static uint8_t flowBase = 0;		// Current set of flows to display
@@ -158,14 +160,23 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		if(file_upload == true)
 		{
 			int ret = 0;
-			int tst = 3000;
 			// Handle multi-part file data
 			ret = upload_handler(http_payload, len);
-			while(tst)
+			if(ret == 2)
 			{
-				tst--;
+				file_upload = false;
+				
+				// upload check
+				if(interfaceCreate_Upload_Complete(1))
+				{
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+				}
 			}
-			 tst = 0;		// _______________________________ for debug purposes
 		}
 		else
 		{
@@ -412,6 +423,8 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					
 					// All following packets will contain multi-part file data
 					file_upload = true;
+					
+					upload_handler(http_payload, len);
 				}
 				else if(strcmp(http_msg,"save_config") == 0)
 				{
@@ -829,10 +842,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						TRACE("http.c: request for next page of flows");
 						TRACE("http.c: current flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
-						if(flowBase < iLastFlow-5)
+						if(flowBase < iLastFlow-FLOW_LIMIT)
 						{
-							// Increment flow base (display next 5 on page send)
-							flowBase += 5;
+							// Increment flow base (display next set on page send)
+							flowBase += FLOW_LIMIT;
 							TRACE("http.c: new flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
 						}
 						else
@@ -844,10 +857,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						TRACE("http.c: request for previous page of flows");
 						TRACE("http.c: current flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
-						if(flowBase >= 5)
+						if(flowBase >= FLOW_LIMIT)
 						{
-							// Decrement flow base (display previous 5 on page send)
-							flowBase -= 5;
+							// Decrement flow base (display previous set on page send)
+							flowBase -= FLOW_LIMIT;
 							TRACE("http.c: new flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
 						}
 						else
@@ -1294,54 +1307,126 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 }
 
 static uint8_t upload_handler(char *ppart, int len)
-{
-	// Current browser support: Chrome
-	
+{	
 	static char page[512] = {0};		// Storage for each page of data
 	static uint16_t saved_bytes = 0;	// Persistent counter of unwritten data
 	uint16_t handled_bytes = 0;			// Counter of handled data
+	static int boundary_start = 1;		// Check for start of data
+	static char boundary_ID[50] = {0};	// Storage for boundary ID
 	
 	char *px;	// Start address pointer
 	char *py;	// End address pointer
 	int i = 0;
 	int final = 0;
+	int data_len = 0;	// Length of actual upload data
 	
-	// Search for starting boundary
-	px = strstr(ppart, "application/");
-
-	if(px == NULL)
+	TRACE("http.c: upload handler received %d payload bytes", len)
+	
+	if(boundary_start)
 	{
-		TRACE("http.c: starting boundary not found - beginning data is valid");
-		px = ppart;	// Data begins at first value of array
+		// Store the boundary ID
+		
+		memset(&shared_buffer, 0, SHARED_BUFFER_LEN);	// Clear shared_buffer
+		
+		i = 0;
+		while(i < len)
+		{
+			shared_buffer[i] = ppart[i];
+			i++;
+		}
+			
+		px = strstr(shared_buffer, "----");
+		if(px == NULL)
+		{
+			TRACE("http.c: boundary ID not found - waiting for next packet");
+			return 0;
+		}
+		else
+		{
+			// Traverse forward until the ID begins
+			while(*px == '\x2d')
+			{
+				px++;
+			}
+			// Store entirety of boundary ID
+			i = 0;
+			while(i < 50 && *px != '\x2d' && *px != '\x0d' && *px != '\x0a')
+			{
+				boundary_ID[i] = *px;
+			
+				px++;
+				i++;
+			}
+			TRACE("http.c: boundary ID : %s", boundary_ID);
+		}
+		
+		memset(&shared_buffer, 0, SHARED_BUFFER_LEN);	// Clear shared_buffer
+		
+		// Search for starting boundary (support MIME types)
+		if(strstr(ppart, "application/mac-binary") != NULL)
+		{
+			px = strstr(ppart, "application/mac-binary");
+			px += (strlen("application/mac-binary"));
+		}
+		else if(strstr(ppart, "application/macbinary") != NULL)
+		{
+			px = strstr(ppart, "application/macbinary");
+			px += (strlen("application/macbinary"));
+		}
+		else if(strstr(ppart, "application/octet-stream") != NULL)
+		{
+			px = strstr(ppart, "application/octet-stream");
+			px += (strlen("application/octet-stream"));
+		}
+		else if(strstr(ppart, "application/x-binary") != NULL)
+		{
+			px = strstr(ppart, "application/x-binary");
+			px += (strlen("application/x-binary"));
+		}
+		else if(strstr(ppart, "application/x-macbinary") != NULL)
+		{
+			px = strstr(ppart, "application/x-macbinary");
+			px += (strlen("application/x-macbinary"));
+		}
+		else
+		{
+			px = NULL;
+		}
+
+		if(px == NULL)
+		{
+			TRACE("http.c: starting boundary not found - waiting for next packet");
+			return 0;
+		}
+		else
+		{
+			TRACE("http.c: starting boundary found");
+		
+			// Search for start of data
+			i = 0;
+			while(((*px) == '\x0a' || (*(px)) == '\x0d') && (i<20))
+			{
+				px++;
+				i++;
+				// 'i' will be incremented to 21 if this line is run
+			}
+					
+			if(i == 20)
+			{
+				TRACE("http.c: start of data part not found");
+				return 0;
+			}
+		
+			TRACE("http.c: pointer moved to start of data");
+			
+			// Starting boundary has been handled
+			boundary_start = 0;
+		}
 	}
 	else
 	{
-		TRACE("http.c: starting boundary found");
-		
-		// Data begins after boundary
-		px += (strlen("application/"));
-		
-		// Search for start of data
-		i = 0;
-		while(i<20)
-		{
-			px++;
-			if((*px) == '\x0a' && (*(px-1)) == '\x0d' && (*(px-2)) == '\x0a' && (*(px-3)) == '\x0d')
-			{
-				i = 20;
-				px++;
-				// 'i' will be incremented to 21 if this line is run
-			}
-			i++;
-		}
-		
-		if(i == 20)
-		{
-			TRACE("http.c: start of data part not found");
-			return 0;
-		}
-		
-		TRACE("http.c: pointer moved to start of data");
+		// Once starting boundary has been handled, the start of each payload is valid
+		px = ppart;
 	}
 	
 	// Search for ending boundary
@@ -1351,130 +1436,235 @@ static uint8_t upload_handler(char *ppart, int len)
 	while(i>0)
 	{
 		py--;
-		if((*py) == '\x0d' && (*(py+1)) == '\x0a' && (*(py+2)) == '\x2d' && (*(py+3)) == '\x2d')
+		// Latch onto '----' ("----[boundary ID]")
+		if((*(py-1)) == '\x2d' && (*(py-2)) == '\x2d' && (*(py-3)) == '\x2d' && (*(py-4)) == '\x2d')
 		{
-			i = 0;
-			// 'i' will be decremented to -1 if this line is run
+			// Store the discovered boundary
+			char tmpID[50] = {0};
+			int z = 0;
+			while(z < 50 && *(py+z) != '\x2d' && *(py+z) != '\x0d' && *(py+z) != '\x0a')
+			{
+				tmpID[z] = *(py+z);
+				z++;
+			}
+			
+			TRACE("http.c: discovered boundary ID : %s", tmpID);
+			
+			// Match the boundary ID with stored ID
+			if(strcmp(tmpID, boundary_ID) == 0)
+			{
+				TRACE("http.c: boundary IDs match");
+				TRACE("http.c: moving data end pointer");
+				// Traverse through the preceding newline characters
+				while(*(py-1) == '\x0d' || *(py-1) == '\x0a' || *(py-1) == '\x2d')
+				{
+					py--;
+				}
+				
+				i = 0;
+				// 'i' will be decremented to -1 if this line is run
+			}
+			else
+			{
+				i = 1;
+				// 'i' will be decremented to 0 if this line is run
+			}
 		}
 		i--;
 	}
+
 	
 	if(i == 0)
 	{
 		TRACE("http.c: ending boundary not found - ending data is valid");
+		
+		// Return ending pointer to the end
+		py = ppart + len;
 	}
 	else
 	{
 		TRACE("http.c: ending boundary found");
-		
-		// Return ending pointer to the end
-		py = ppart + len;
-		
 		final = 1;
 	}
 	
-	// Write data
+	// Get length of uploaded part
+	data_len = py - px;
+	
+	// Check if any existing data needs to be handled
 	if(saved_bytes)
 	{
-		// Fill in unwritten page (if it exists)
-		if(final)
+		TRACE("http.c: %d saved bytes need to be cleared", saved_bytes);
+		
+		if(!final)
 		{
+			// Fill existing partially-complete page with new data
 			while(saved_bytes < 512 && handled_bytes < len)
 			{
 				page[saved_bytes] = *px;
-				px++;
+				if(px < py)
+				{
+					px++;
+				}
+				else
+				{
+					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
+				}
 				saved_bytes++;
 				handled_bytes++;
 			}
 		}
 		else
 		{
+			/* Final page needs to be written */
+			
+			// Fill 512-byte array
 			while(saved_bytes < 512)
 			{
-				page[saved_bytes] = *px;
-				px++;
+				if(px < py)
+				{
+					// Write data
+					page[saved_bytes] = *px;
+					px++;
+					handled_bytes++;
+				}
+				else
+				{
+					// Append 0xFF
+					page[saved_bytes] = 0xFF;
+				}
+
 				saved_bytes++;
-				handled_bytes++;
 			}
 		}
 		
 		// Write data to page
-		if(flash_write_page(&page))		// ___________________ CHECK
+		if(flash_write_page(&page))
 		{
-			TRACE("http.c: firmware page written successfully (%02d)", page_ctr);
+			TRACE("http.c: firmware page written successfully");
 			page_ctr++;
 		}
 		else
 		{
-			TRACE("http.c: firmware page write FAILED (%02d)", page_ctr);
+			TRACE("http.c: firmware page write FAILED");
 		}
 		
-		memset(&page, 0, 512);
+		// Saved bytes have been handled - clear the counter
 		saved_bytes = 0;
-	}
-	
-	if(handled_bytes < len)
-	{
-		int j;
-
-		// Check for final page of data		
-		if(final)
-		{
-			j = 0;
-			while(px < py)
-			{
-				page[j] = *px;
-				px++;
-				j++;
-				handled_bytes++;
-			}
-		}
 		
-		// Write full pages
-		while(len - handled_bytes >= 512)
+		TRACE("http.c: saved bytes have been cleared");		
+		TRACE("http.c: handled_bytes: %04d, data_len: %04d", handled_bytes, data_len);
+	}
+
+	while(handled_bytes < data_len)
+	{
+		if(data_len - handled_bytes >= 512)
 		{
-			j = 0;
+			// Fill 512-byte array
+			int j = 0;
 			while(j < 512)
 			{
-				page[j] = *px;	// Store value of element
-				px++;
+				page[j] = *px;
+				if(px < py)
+				{
+					px++;	
+				}
+				else
+				{
+					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
+				}
 				j++;
 				handled_bytes++;
 			}
-					
-			// Write data to page
-			if(flash_write_page(&page))		// ___________________ CHECK
+			
+			// Write to page
+			if(flash_write_page(&page))
 			{
-				TRACE("http.c: firmware page written successfully (%02d)", page_ctr);
+				TRACE("http.c: firmware page written successfully");
 				page_ctr++;
 			}
 			else
 			{
-				TRACE("http.c: firmware page write FAILED (%02d)", page_ctr);
+				TRACE("http.c: firmware page write FAILED");
+			}
+		}
+		else if(!final)
+		{
+			/* Data needs to be saved */
+			TRACE("http.c: data needs to be saved");
+			
+			// Save leftover into page array for next run-through
+			int j = 0;
+			while(handled_bytes < data_len)
+			{
+				page[j] = *px;
+				if(px < py)
+				{
+					px++;
+				}
+				else
+				{
+					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
+				}
+				j++;
+				handled_bytes++;
+				saved_bytes++;
 			}
 			
-			memset(&page, 0, 512);
+			TRACE("http.c: %d bytes saved", saved_bytes);
 		}
-		
-		// Save unwritten data
-		j = 0;
-		while(handled_bytes < len)
+		else
 		{
-			page[j] = *px;	// Store value of element
-			px++;
-			j++;
-			handled_bytes++;
+			/* Final page needs to be written */
+			
+			// Fill 512-byte array
+			int j = 0;
+			while(j < 512)
+			{
+				if(px < py)
+				{
+					// Write data
+					page[j] = *px;
+					px++;
+					handled_bytes++;
+				}
+				else
+				{
+					// Append 0xFF
+					page[j] = 0xFF;
+				}
+
+				j++;
+			}
+			
+			// Write to page
+			if(flash_write_page(&page))
+			{
+				TRACE("http.c: final page written successfully");
+				page_ctr++;
+			}
+			else
+			{
+				TRACE("http.c: final page write FAILED");
+			}
 		}
-		
-		if(px > py)
-		{
-			TRACE("http.c: ERROR - pointer has passed the data");
-			return 0;
-		}
-	}
 	
+		TRACE("http.c: handled_bytes: %04d, data_len: %04d", handled_bytes, data_len);
+	}	
+			
 	if(final)
 	{
+		// Retrieve version number from binary
+		char *pNN_check = py - NN_VERIFICATION_LEN;
+		int k = 0;
+			
+		while(k < 5)
+		{		
+			uploaded_version[k]	= *(pNN_check+4+k);
+			k++;
+		}
+		
+		TRACE("http.c: NN verification : %s", uploaded_version);
+						
 		return 2;
 	}
 	else
@@ -1704,7 +1894,7 @@ static uint8_t interfaceCreate_Menu(void)
 				"<body>"\
 					"<ul>"\
 						"<li><a href=\"home.htm\" target=\"page\">Status</a></li>"\
-						//"<li id=\"sub\"><a href=\"upload.htm\" target=\"page\">Update f/w</a></li>"
+						"<li id=\"sub\"><a href=\"upload.htm\" target=\"page\">Update f/w</a></li>"
 						"<li><a href=\"d_home.htm\" target=\"page\">Display</a></li>"\
 						"<li id=\"sub\"><a href=\"d_ports.htm\" target=\"page\">Ports</a></li>"\
 						"<li id=\"sub\"><a href=\"d_of.htm\" target=\"page\">OpenFlow</a></li>"\
@@ -1805,9 +1995,9 @@ static uint8_t interfaceCreate_Upload(void)
 					"<h2>Firmware Update</h2>"\
 				"</p>"\
 			"<body>"\
-				"<p>Browser firmware update is currently only supported in Chrome.<br>"\
+				"<p>Browser firmware update is currently supported in Windows, with the following browsers:<br> - Chrome<br> - Firefox<br> - Edge<br> - Internet Explorer 11<br><br>"\
 				"Do not attempt an update with an unsupported browser.</p>"\
-				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\">"\
+				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\" onsubmit=\"return confirm('Firmware file will now be uploaded. This may take up to 2 minutes. DO NOT refresh the page while firmware update is in progress.');\">"\
 					"<input type=\"file\" name =\"file\"><br><br>"\
 					"<input type=\"submit\" value=\"Upload File\"/>"\
 				"</form>"\
@@ -1822,6 +2012,91 @@ static uint8_t interfaceCreate_Upload(void)
 	{
 		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
 		return 0;
+	}
+}
+
+/*
+*	Create and format HTML for firmware update complete page
+*
+*/
+static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
+{
+	if(sel == 1)
+	{	
+		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+			"<!DOCTYPE html>"\
+				"<html>"\
+					"<head>"\
+						"<style>"\
+						"body {"\
+							"overflow: auto;"\
+							"font-family:Sans-serif;"\
+							"line-height: 1.2em;"\
+							"font-size: 17px;"\
+							"margin-left: 20px;"\
+						"}"\
+						"</style>"\
+					"</head>"\
+					"<body>"\
+						"<p>"\
+							"<h2>Firmware Update</h2>"\
+						"</p>"\
+					"<body>"\
+						"<p>Firmware upload successful.<br><br>"\
+						"Current version: %s<br>"\
+						"Uploaded version: %s<br><br>"\
+						"Zodiac FX will be updated on the next restart.</p>"\
+						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart. This may take up to 30 seconds');\">"\
+							"<button name=\"btn\" value=\"btn_restart\">Restart</button>"\
+						"</form>"\
+					"</body>"\
+				"</html>"\
+			, VERSION, uploaded_version) < SHARED_BUFFER_LEN)
+		{
+			TRACE("http.c: html written to buffer");
+			return 1;
+		}
+		else
+		{
+			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+			return 0;
+		}
+	}
+	else
+	{
+		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+			"<!DOCTYPE html>"\
+				"<html>"\
+					"<head>"\
+						"<style>"\
+						"body {"\
+							"overflow: auto;"\
+							"font-family:Sans-serif;"\
+							"line-height: 1.2em;"\
+							"font-size: 17px;"\
+							"margin-left: 20px;"\
+						"}"\
+						"</style>"\
+					"</head>"\
+					"<body>"\
+						"<p>"\
+							"<h2>Firmware Update</h2>"\
+						"</p>"\
+					"<body>"\
+						"<p>Firmware upload failed. Please try again.<br><br>"\
+						"Current version: %s<br><br>"\
+					"</body>"\
+				"</html>"\
+			, VERSION) < SHARED_BUFFER_LEN)
+		{
+			TRACE("http.c: html written to buffer");
+			return 1;
+		}
+		else
+		{
+			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+			return 0;
+		}
 	}
 }
 
@@ -2338,7 +2613,7 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 				"<p>"\
 					"<h2>OpenFlow Information</h2>"\
 				"</p>"\
-				"<form style=\"width: 200px\" action=\"save_none\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes.\n\nPress the restart button on the top right for your changes to take effect.');\">"\
+				"<form style=\"width: 200px\" action=\"save_none\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes. Press the restart button on the top right for your changes to take effect.');\">"\
 					"<fieldset>"\
 						"<legend>OpenFlow</legend>"\
 						"Status:<br>"\
@@ -3118,7 +3393,7 @@ static uint8_t interfaceCreate_Config_OpenFlow(void)
 				"<p>"\
 					"<h2>OpenFlow Configuration</h2>"\
 				"</p>"\
-				"<form style=\"width: 200px\" action=\"save_of\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes.\n\nPress the restart button on the top right for your changes to take effect.');\">"\
+				"<form style=\"width: 200px\" action=\"save_of\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes. Press the restart button on the top right for your changes to take effect.');\">"\
 					"<fieldset>"\
 						"<legend>OpenFlow</legend>"\
 		);

@@ -31,7 +31,7 @@
 #ifndef HTTP_H_
 #define HTTP_H_
 
-#define FLOW_LIMIT	5		// Displayable flows per page
+#define FLOW_LIMIT	4		// Displayable flows per page
 
 void http_init(void);
 

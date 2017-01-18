@@ -1525,36 +1525,7 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		trace = true;
 		printf("Starting trace...\r\n");
 		return;
-	}
-	
-	if (strcmp(command, "check_flash")==0)
-	{
-		// Display contents of firmware update region (ending @ first 0xFFFFFFFF)
-		unsigned long* pmem = (unsigned long*)0x00450000;
-		while(pmem <= 0x00480000)
-		{
-			if(*pmem == 0xFFFFFFFF)
-			{
-				return;
-			}
-			printf("Addr: %p  Val: 0x%l08x\n\r", (void *)pmem, *pmem);
-			pmem++;			
-		}
-		return;
-	}
-	
-	if (strcmp(command, "check_flash_all")==0)
-	{
-		// Display contents of firmware update region
-		unsigned long* pmem = (unsigned long*)0x00450000;
-		while(pmem <= 0x00480000)
-		{
-			printf("Addr: %p  Val: 0x%l08x\n\r", (void *)pmem, *pmem);
-			pmem++;
-		}
-		return;
-	}
-	
+	}	
 	
 	// Unknown Command response
 	printf("Unknown command\r\n");
