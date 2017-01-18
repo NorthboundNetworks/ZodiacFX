@@ -1312,16 +1312,54 @@ static uint8_t upload_handler(char *ppart, int len)
 	static uint16_t saved_bytes = 0;	// Persistent counter of unwritten data
 	uint16_t handled_bytes = 0;			// Counter of handled data
 	static int boundary_start = 1;		// Check for start of data
+	static char boundary_ID[50] = {0};	// Storage for boundary ID
 	
 	char *px;	// Start address pointer
 	char *py;	// End address pointer
-	char filetype[30] = {0};
 	int i = 0;
 	int final = 0;
 	int data_len = 0;	// Length of actual upload data
 	
 	if(boundary_start)
 	{
+		// Store the boundary ID
+		
+		memset(&shared_buffer, 0, SHARED_BUFFER_LEN);	// Clear shared_buffer
+		
+		i = 0;
+		while(i < len)
+		{
+			shared_buffer[i] = ppart[i];
+			i++;
+		}
+			
+		px = strstr(shared_buffer, "----");
+		if(px == NULL)
+		{
+			TRACE("http.c: boundary ID not found - waiting for next packet");
+			return 0;
+		}
+		else
+		{
+			// Traverse forward until the ID begins
+			while(*px == '\x2d')
+			{
+				px++;
+			}
+			// Store entirety of boundary ID
+			i = 0;
+			while(i < 50 && *px != '\x2d' && *px != '\x0d' && *px != '\x0a')
+			{
+				boundary_ID[i] = *px;
+			
+				px++;
+				i++;
+			}
+			TRACE("http.c: boundary ID : %s", boundary_ID);
+		}
+		
+		memset(&shared_buffer, 0, SHARED_BUFFER_LEN);	// Clear shared_buffer
+		
 		// Search for starting boundary (support MIME types)
 		if(strstr(ppart, "application/mac-binary") != NULL)
 		{
@@ -1396,20 +1434,43 @@ static uint8_t upload_handler(char *ppart, int len)
 	while(i>0)
 	{
 		py--;
-		// Latch onto '------'
-		if((*py) == '\x2d' && (*(py-1)) == '\x2d' && (*(py-2)) == '\x2d' && (*(py-3)) == '\x2d' && (*(py-4)) == '\x2d' && (*(py-5)) == '\x2d')
+		// Latch onto '----' ("----[boundary ID]")
+		if((*(py-1)) == '\x2d' && (*(py-2)) == '\x2d' && (*(py-3)) == '\x2d' && (*(py-4)) == '\x2d')
 		{
-			// Traverse through the preceding newline characters
-			while(*(py-1) == '\x0d' || *(py-1) == '\x0a' || *(py-1) == '\x2d')
+			// Store the discovered boundary
+			char tmpID[50] = {0};
+			int z = 0;
+			while(z < 50 && *(py+z) != '\x2d' && *(py+z) != '\x0d' && *(py+z) != '\x0a')
 			{
-				py--;
+				tmpID[z] = *(py+z);
+				z++;
 			}
 			
-			i = 0;
-			// 'i' will be decremented to -1 if this line is run
+			TRACE("http.c: discovered boundary ID : %s", tmpID);
+			
+			// Match the boundary ID with stored ID
+			if(strcmp(tmpID, boundary_ID) == 0)
+			{
+				TRACE("http.c: boundary IDs match");
+				TRACE("http.c: moving data end pointer");
+				// Traverse through the preceding newline characters
+				while(*(py-1) == '\x0d' || *(py-1) == '\x0a' || *(py-1) == '\x2d')
+				{
+					py--;
+				}
+				
+				i = 0;
+				// 'i' will be decremented to -1 if this line is run
+			}
+			else
+			{
+				i = 1;
+				// 'i' will be decremented to 0 if this line is run
+			}
 		}
 		i--;
 	}
+
 	
 	if(i == 0)
 	{
