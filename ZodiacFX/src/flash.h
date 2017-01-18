@@ -48,5 +48,6 @@ void xmodem_clear_padding(uint8_t *buff);
 #define NEW_FW_BASE			(IFLASH_ADDR + (5*IFLASH_NB_OF_PAGES/8)*IFLASH_PAGE_SIZE)
 #define NEW_FW_MAX_SIZE		196608
 
+#define NN_VERIFICATION_LEN	8
 
 #endif /* FLASH_H_ */

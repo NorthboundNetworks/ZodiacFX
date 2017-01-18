@@ -84,6 +84,7 @@ static uint8_t interfaceCreate_Header(void);
 static uint8_t interfaceCreate_Menu(void);
 static uint8_t interfaceCreate_Home(void);
 static uint8_t interfaceCreate_Upload(void);
+static uint8_t interfaceCreate_Upload_Complete(uint8_t sel);
 static uint8_t interfaceCreate_Display_Home(void);
 static uint8_t interfaceCreate_Display_Ports(uint8_t step);
 static uint8_t interfaceCreate_Display_OpenFlow(void);
@@ -95,6 +96,7 @@ static uint8_t interfaceCreate_Config_OpenFlow(void);
 static uint8_t interfaceCreate_About(void);
 
 static uint8_t upload_handler(char *ppart, int len);
+static char uploaded_version[5] = {0};
 static int page_ctr = 1;
 
 static uint8_t flowBase = 0;		// Current set of flows to display
@@ -164,12 +166,16 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			{
 				file_upload = false;
 				
-				// Restart
-				TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
-				for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-				udc_detach();	// Detach the USB device before restart
-				rstc_start_software_reset(RSTC);	// Software reset
-				while(1);
+				// upload check
+				if(interfaceCreate_Upload_Complete(1))
+				{
+					http_send(&shared_buffer, pcb, 1);
+					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+				}
+				else
+				{
+					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+				}
 			}
 		}
 		else
@@ -1424,20 +1430,46 @@ static uint8_t upload_handler(char *ppart, int len)
 	// Check if any existing data needs to be handled
 	if(saved_bytes)
 	{
-		// Fill existing partially-complete page with new data
-		while(saved_bytes < 512 && handled_bytes < len)
+		if(!final)
 		{
-			page[saved_bytes] = *px;
-			if(px < py)
+			// Fill existing partially-complete page with new data
+			while(saved_bytes < 512 && handled_bytes < len)
 			{
-				px++;
+				page[saved_bytes] = *px;
+				if(px < py)
+				{
+					px++;
+				}
+				else
+				{
+					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
+				}
+				saved_bytes++;
+				handled_bytes++;
 			}
-			else
+		}
+		else
+		{
+			/* Final page needs to be written */
+			
+			// Fill 512-byte array
+			while(saved_bytes < 512)
 			{
-				TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
+				if(px < py)
+				{
+					// Write data
+					page[saved_bytes] = *px;
+					px++;
+					handled_bytes++;
+				}
+				else
+				{
+					// Append 0xFF
+					page[saved_bytes] = 0xFF;
+				}
+
+				saved_bytes++;
 			}
-			saved_bytes++;
-			handled_bytes++;
 		}
 		
 		// Write data to page
@@ -1453,6 +1485,8 @@ static uint8_t upload_handler(char *ppart, int len)
 		
 		// Saved bytes have been handled - clear the counter
 		saved_bytes = 0;
+		
+		TRACE("http.c: handled_bytes: %04d, data_len: %04d", handled_bytes, data_len);
 	}
 
 	while(handled_bytes < data_len)
@@ -1550,6 +1584,16 @@ static uint8_t upload_handler(char *ppart, int len)
 			
 	if(final)
 	{
+		// Retrieve version number from binary
+		char *pNN_check = py - NN_VERIFICATION_LEN;
+		int k = 0;
+			
+		while(k < 5)
+		{		
+			uploaded_version[k]	= *(pNN_check+4+k);
+			k++;
+		}
+						
 		return 2;
 	}
 	else
@@ -1880,9 +1924,9 @@ static uint8_t interfaceCreate_Upload(void)
 					"<h2>Firmware Update</h2>"\
 				"</p>"\
 			"<body>"\
-				"<p>Browser firmware update is currently supported in:<br> - Chrome<br> - Firefox<br> - Edge<br> - Internet Explorer 11<br>"\
+				"<p>Browser firmware update is currently supported in Windows, with the following browsers:<br> - Chrome<br> - Firefox<br> - Edge<br> - Internet Explorer 11<br><br>"\
 				"Do not attempt an update with an unsupported browser.</p>"\
-				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\" onsubmit=\"return confirm('Firmware file will now be uploaded. This may take up to 1 minute. Zodiac FX will automatically restart with the new firmware.');\">"\
+				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\" onsubmit=\"return confirm('Firmware file will now be uploaded. This may take up to 2 minutes. DO NOT refresh the page while firmware update is in progress.');\">"\
 					"<input type=\"file\" name =\"file\"><br><br>"\
 					"<input type=\"submit\" value=\"Upload File\"/>"\
 				"</form>"\
@@ -1897,6 +1941,91 @@ static uint8_t interfaceCreate_Upload(void)
 	{
 		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
 		return 0;
+	}
+}
+
+/*
+*	Create and format HTML for firmware update complete page
+*
+*/
+static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
+{
+	if(sel == 1)
+	{	
+		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+			"<!DOCTYPE html>"\
+				"<html>"\
+					"<head>"\
+						"<style>"\
+						"body {"\
+							"overflow: auto;"\
+							"font-family:Sans-serif;"\
+							"line-height: 1.2em;"\
+							"font-size: 17px;"\
+							"margin-left: 20px;"\
+						"}"\
+						"</style>"\
+					"</head>"\
+					"<body>"\
+						"<p>"\
+							"<h2>Firmware Update</h2>"\
+						"</p>"\
+					"<body>"\
+						"<p>Firmware upload successful.<br><br>"\
+						"Current version: %s<br>"\
+						"Uploaded version: %s<br><br>"\
+						"Zodiac FX will be updated on the next restart.</p>"\
+						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart. This may take up to 30 seconds');\">"\
+							"<button name=\"btn\" value=\"btn_restart\">Restart</button>"\
+						"</form>"\
+					"</body>"\
+				"</html>"\
+			, VERSION, uploaded_version) < SHARED_BUFFER_LEN)
+		{
+			TRACE("http.c: html written to buffer");
+			return 1;
+		}
+		else
+		{
+			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+			return 0;
+		}
+	}
+	else
+	{
+		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+			"<!DOCTYPE html>"\
+				"<html>"\
+					"<head>"\
+						"<style>"\
+						"body {"\
+							"overflow: auto;"\
+							"font-family:Sans-serif;"\
+							"line-height: 1.2em;"\
+							"font-size: 17px;"\
+							"margin-left: 20px;"\
+						"}"\
+						"</style>"\
+					"</head>"\
+					"<body>"\
+						"<p>"\
+							"<h2>Firmware Update</h2>"\
+						"</p>"\
+					"<body>"\
+						"<p>Firmware upload failed. Please try again.<br><br>"\
+						"Current version: %s<br><br>"\
+					"</body>"\
+				"</html>"\
+			, VERSION) < SHARED_BUFFER_LEN)
+		{
+			TRACE("http.c: html written to buffer");
+			return 1;
+		}
+		else
+		{
+			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+			return 0;
+		}
 	}
 }
 
@@ -2413,7 +2542,7 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 				"<p>"\
 					"<h2>OpenFlow Information</h2>"\
 				"</p>"\
-				"<form style=\"width: 200px\" action=\"save_none\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes.\n\nPress the restart button on the top right for your changes to take effect.');\">"\
+				"<form style=\"width: 200px\" action=\"save_none\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes. Press the restart button on the top right for your changes to take effect.');\">"\
 					"<fieldset>"\
 						"<legend>OpenFlow</legend>"\
 						"Status:<br>"\
@@ -3193,7 +3322,7 @@ static uint8_t interfaceCreate_Config_OpenFlow(void)
 				"<p>"\
 					"<h2>OpenFlow Configuration</h2>"\
 				"</p>"\
-				"<form style=\"width: 200px\" action=\"save_of\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes.\n\nPress the restart button on the top right for your changes to take effect.');\">"\
+				"<form style=\"width: 200px\" action=\"save_of\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes. Press the restart button on the top right for your changes to take effect.');\">"\
 					"<fieldset>"\
 						"<legend>OpenFlow</legend>"\
 		);
