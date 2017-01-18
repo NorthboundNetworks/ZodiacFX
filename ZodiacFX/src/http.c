@@ -1320,6 +1320,8 @@ static uint8_t upload_handler(char *ppart, int len)
 	int final = 0;
 	int data_len = 0;	// Length of actual upload data
 	
+	TRACE("http.c: upload handler received %d payload bytes", len)
+	
 	if(boundary_start)
 	{
 		// Store the boundary ID
@@ -1491,6 +1493,8 @@ static uint8_t upload_handler(char *ppart, int len)
 	// Check if any existing data needs to be handled
 	if(saved_bytes)
 	{
+		TRACE("http.c: %d saved bytes need to be cleared", saved_bytes);
+		
 		if(!final)
 		{
 			// Fill existing partially-complete page with new data
@@ -1547,6 +1551,7 @@ static uint8_t upload_handler(char *ppart, int len)
 		// Saved bytes have been handled - clear the counter
 		saved_bytes = 0;
 		
+		TRACE("http.c: saved bytes have been cleared");		
 		TRACE("http.c: handled_bytes: %04d, data_len: %04d", handled_bytes, data_len);
 	}
 
@@ -1585,6 +1590,7 @@ static uint8_t upload_handler(char *ppart, int len)
 		else if(!final)
 		{
 			/* Data needs to be saved */
+			TRACE("http.c: data needs to be saved");
 			
 			// Save leftover into page array for next run-through
 			int j = 0;
@@ -1603,6 +1609,8 @@ static uint8_t upload_handler(char *ppart, int len)
 				handled_bytes++;
 				saved_bytes++;
 			}
+			
+			TRACE("http.c: %d bytes saved", saved_bytes);
 		}
 		else
 		{
@@ -1654,6 +1662,8 @@ static uint8_t upload_handler(char *ppart, int len)
 			uploaded_version[k]	= *(pNN_check+4+k);
 			k++;
 		}
+		
+		TRACE("http.c: NN verification : %s", uploaded_version);
 						
 		return 2;
 	}
