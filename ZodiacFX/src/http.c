@@ -162,9 +162,14 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			ret = upload_handler(http_payload, len);
 			if(ret == 2)
 			{
-				// TODO - Draw "Please Restart" page
-				//while(1);
 				file_upload = false;
+				
+				// Restart
+				TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
+				for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+				udc_detach();	// Detach the USB device before restart
+				rstc_start_software_reset(RSTC);	// Software reset
+				while(1);
 			}
 		}
 		else
@@ -412,6 +417,8 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					
 					// All following packets will contain multi-part file data
 					file_upload = true;
+					
+					upload_handler(http_payload, len);
 				}
 				else if(strcmp(http_msg,"save_config") == 0)
 				{
@@ -1294,55 +1301,86 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 }
 
 static uint8_t upload_handler(char *ppart, int len)
-{
-	// Current browser support: Chrome
-	
+{	
 	static char page[512] = {0};		// Storage for each page of data
 	static uint16_t saved_bytes = 0;	// Persistent counter of unwritten data
 	uint16_t handled_bytes = 0;			// Counter of handled data
+	static int boundary_start = 1;		// Check for start of data
 	
 	char *px;	// Start address pointer
 	char *py;	// End address pointer
+	char filetype[30] = {0};
 	int i = 0;
 	int final = 0;
 	int data_len = 0;	// Length of actual upload data
 	
-	// Search for starting boundary
-	px = strstr(ppart, "application/");
-
-	if(px == NULL)
+	if(boundary_start)
 	{
-		TRACE("http.c: starting boundary not found - beginning data is valid");
-		px = ppart;	// Data begins at first value of array
+		// Search for starting boundary (support MIME types)
+		if(strstr(ppart, "application/mac-binary") != NULL)
+		{
+			px = strstr(ppart, "application/mac-binary");
+			px += (strlen("application/mac-binary"));
+		}
+		else if(strstr(ppart, "application/macbinary") != NULL)
+		{
+			px = strstr(ppart, "application/macbinary");
+			px += (strlen("application/macbinary"));
+		}
+		else if(strstr(ppart, "application/octet-stream") != NULL)
+		{
+			px = strstr(ppart, "application/octet-stream");
+			px += (strlen("application/octet-stream"));
+		}
+		else if(strstr(ppart, "application/x-binary") != NULL)
+		{
+			px = strstr(ppart, "application/x-binary");
+			px += (strlen("application/x-binary"));
+		}
+		else if(strstr(ppart, "application/x-macbinary") != NULL)
+		{
+			px = strstr(ppart, "application/x-macbinary");
+			px += (strlen("application/x-macbinary"));
+		}
+		else
+		{
+			px = NULL;
+		}
+
+		if(px == NULL)
+		{
+			TRACE("http.c: starting boundary not found - waiting for next packet");
+			return 0;
+		}
+		else
+		{
+			TRACE("http.c: starting boundary found");
+		
+			// Search for start of data
+			i = 0;
+			while(((*px) == '\x0a' || (*(px)) == '\x0d') && (i<20))
+			{
+				px++;
+				i++;
+				// 'i' will be incremented to 21 if this line is run
+			}
+					
+			if(i == 20)
+			{
+				TRACE("http.c: start of data part not found");
+				return 0;
+			}
+		
+			TRACE("http.c: pointer moved to start of data");
+			
+			// Starting boundary has been handled
+			boundary_start = 0;
+		}
 	}
 	else
 	{
-		TRACE("http.c: starting boundary found");
-		
-		// Data begins after boundary
-		px += (strlen("application/"));
-		
-		// Search for start of data
-		i = 0;
-		while(i<20)
-		{
-			px++;
-			if((*px) == '\x0a' && (*(px-1)) == '\x0d' && (*(px-2)) == '\x0a' && (*(px-3)) == '\x0d')
-			{
-				i = 20;
-				px++;
-				// 'i' will be incremented to 21 if this line is run
-			}
-			i++;
-		}
-		
-		if(i == 20)
-		{
-			TRACE("http.c: start of data part not found");
-			return 0;
-		}
-		
-		TRACE("http.c: pointer moved to start of data");
+		// Once starting boundary has been handled, the start of each payload is valid
+		px = ppart;
 	}
 	
 	// Search for ending boundary
@@ -1352,16 +1390,20 @@ static uint8_t upload_handler(char *ppart, int len)
 	while(i>0)
 	{
 		py--;
-		if((*py) == '\x0d' && (*(py+1)) == '\x0a' && (*(py+2)) == '\x2d' && (*(py+3)) == '\x2d')
+		// Latch onto '------'
+		if((*py) == '\x2d' && (*(py-1)) == '\x2d' && (*(py-2)) == '\x2d' && (*(py-3)) == '\x2d' && (*(py-4)) == '\x2d' && (*(py-5)) == '\x2d')
 		{
+			// Traverse through the preceding newline characters
+			while(*(py-1) == '\x0d' || *(py-1) == '\x0a' || *(py-1) == '\x2d')
+			{
+				py--;
+			}
+			
 			i = 0;
 			// 'i' will be decremented to -1 if this line is run
 		}
 		i--;
 	}
-	
-	// Support cURL boundary difference
-	if(*(py-1) == '\x0a') py--;
 	
 	if(i == 0)
 	{
@@ -1838,9 +1880,9 @@ static uint8_t interfaceCreate_Upload(void)
 					"<h2>Firmware Update</h2>"\
 				"</p>"\
 			"<body>"\
-				"<p>Browser firmware update is currently only supported in Chrome.<br>"\
+				"<p>Browser firmware update is currently supported in:<br> - Chrome<br> - Firefox<br> - Edge<br> - Internet Explorer 11<br>"\
 				"Do not attempt an update with an unsupported browser.</p>"\
-				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\">"\
+				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\" onsubmit=\"return confirm('Firmware file will now be uploaded. This may take up to 1 minute. Zodiac FX will automatically restart with the new firmware.');\">"\
 					"<input type=\"file\" name =\"file\"><br><br>"\
 					"<input type=\"submit\" value=\"Upload File\"/>"\
 				"</form>"\
