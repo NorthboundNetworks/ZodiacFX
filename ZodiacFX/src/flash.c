@@ -34,6 +34,7 @@
 #include "flash.h"
 #include "config_zodiac.h"
 #include "openflow/openflow.h"
+#include "trace.h"
 
 // Global variables
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
@@ -113,6 +114,7 @@ int firmware_update_init(void)
 */
 int flash_write_page(uint8_t *flash_page)
 {
+	TRACE("flash.c: writing to 0x%08x", flash_page_addr);
 	if(flash_page_addr <= IFLASH_ADDR + IFLASH_SIZE - IFLASH_PAGE_SIZE)
 	{
 		ul_rc = flash_write(flash_page_addr, flash_page,
