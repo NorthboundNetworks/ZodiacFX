@@ -158,6 +158,8 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		http_payload = (char*)p->payload;
 		len = p->tot_len;
 		
+		TRACE("http.c: -- HTTP recv received %d payload bytes", len)
+		
 		if(file_upload == true)
 		{
 			// Check HTTP method
@@ -210,7 +212,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				{
 					file_upload = false;
 					boundary_start = 1;
-					flash_clear_gpnvm(1);
+					//flash_clear_gpnvm(1);
 					// upload check
 					if(interfaceCreate_Upload_Complete(1))
 					{
@@ -1307,6 +1309,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			}
 		}
 	}
+	else
+	{
+		TRACE("http.c: receive error");
+	}
 
 	pbuf_free(p);
 
@@ -1365,7 +1371,7 @@ static uint8_t upload_handler(char *ppart, int len)
 	int final = 0;
 	int data_len = 0;	// Length of actual upload data
 	
-	TRACE("http.c: upload handler received %d payload bytes", len)
+	TRACE("http.c: -- upload handler received %d payload bytes", len)
 	
 	if(boundary_start)
 	{
