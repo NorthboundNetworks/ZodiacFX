@@ -1546,60 +1546,7 @@ static uint8_t upload_handler(char *ppart, int len)
 	{
 		TRACE("http.c: %d saved bytes need to be cleared", saved_bytes);
 		
-		if(saved_bytes + len < 512)
-		{
-			int max_len = saved_bytes + len;
-			// Fill existing partially-complete page with new data
-			while(saved_bytes < max_len && handled_bytes < len)
-			{
-				page[saved_bytes] = *px;
-				if(px < py)
-				{
-					px++;
-				}
-				else
-				{
-					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
-				}
-				saved_bytes++;
-				handled_bytes++;
-			}
-			
-			// Handle edge-case
-			TRACE("http.c: unable to fill a complete page - skipping page write");
-			TRACE("http.c: %d bytes saved", saved_bytes);
-			return 1;
-		}
-		else if(!final)
-		{
-			// Fill existing partially-complete page with new data
-			while(saved_bytes < 512 && handled_bytes < len)
-			{
-				page[saved_bytes] = *px;
-				if(px < py)
-				{
-					px++;
-				}
-				else
-				{
-					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
-				}
-				saved_bytes++;
-				handled_bytes++;
-			}
-			
-			// Write data to page
-			if(flash_write_page(&page))
-			{
-				TRACE("http.c: firmware page written successfully");
-				page_ctr++;
-			}
-			else
-			{
-				TRACE("http.c: firmware page write FAILED");
-			}
-		}
-		else
+		if(final)
 		{
 			/* Final page needs to be written */
 			
@@ -1633,7 +1580,60 @@ static uint8_t upload_handler(char *ppart, int len)
 				TRACE("http.c: final firmware page write FAILED");
 			}
 		}
-		
+		else if(saved_bytes + len < 512)
+		{
+			int max_len = saved_bytes + len;
+			// Fill existing partially-complete page with new data
+			while(saved_bytes < max_len && handled_bytes < len)
+			{
+				page[saved_bytes] = *px;
+				if(px < py)
+				{
+					px++;
+				}
+				else
+				{
+					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
+				}
+				saved_bytes++;
+				handled_bytes++;
+			}
+			
+			// Handle edge-case
+			TRACE("http.c: unable to fill a complete page - skipping page write");
+			TRACE("http.c: %d bytes saved", saved_bytes);
+			return 1;
+		}
+		else
+		{
+			// Fill existing partially-complete page with new data
+			while(saved_bytes < 512 && handled_bytes < len)
+			{
+				page[saved_bytes] = *px;
+				if(px < py)
+				{
+					px++;
+				}
+				else
+				{
+					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
+				}
+				saved_bytes++;
+				handled_bytes++;
+			}
+			
+			// Write data to page
+			if(flash_write_page(&page))
+			{
+				TRACE("http.c: firmware page written successfully");
+				page_ctr++;
+			}
+			else
+			{
+				TRACE("http.c: firmware page write FAILED");
+			}
+		}
+				
 		// Saved bytes have been handled - clear the counter
 		saved_bytes = 0;
 		
