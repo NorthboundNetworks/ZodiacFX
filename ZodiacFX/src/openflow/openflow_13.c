@@ -579,10 +579,10 @@ void multipart_stats_handler(void)
 	
 	multi_pos += multi_flow_reply13(&shared_buffer, multi_req);
 		
-	if (size == len && multi_pos !=0)
-	{
-		sendtcp(&shared_buffer, multi_pos);
-	}
+	//if (size == len && multi_pos !=0)
+	//{
+		//sendtcp(&shared_buffer, multi_pos);
+	//}
 	return;
 }
 
