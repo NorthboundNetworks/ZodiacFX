@@ -69,6 +69,7 @@ int tcp_wait = 0;
 int totaltime = 0;
 int heartbeat = 0;
 int multi_pos;
+bool reply_more_flag = false;
 bool rcv_freq;
 
 // Internal Functions

@@ -46,4 +46,6 @@
 
 #define HB_TIMEOUT	6	// Number of seconds to wait when there is no response from the controller
 
+#define MAX_OF_STATS	15		// Maximum number of flows to send to controller
+
 #endif /* CONFIG_ZODIAC_H_ */

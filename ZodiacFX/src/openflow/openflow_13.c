@@ -61,6 +61,7 @@ extern struct ofp_switch_config Switch_config;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern int multi_pos;
 extern uint8_t NativePortMatrix;
+extern bool reply_more_flag;
 
 // Internal functions
 void features_reply13(uint32_t xid);
@@ -561,6 +562,18 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 	if (size == len && multi_pos !=0)
 	{
 		sendtcp(&shared_buffer, multi_pos);
+		if(reply_more_flag == true)
+		{
+			//tcp_output(tcp_pcb);
+			while(reply_more_flag == true)
+			{
+				multi_pos = 0;
+				multi_pos += multi_flow_reply13(&shared_buffer[multi_pos], multi_req);
+				sendtcp(&shared_buffer, multi_pos);
+				//tcp_output(tcp_pcb);
+			}
+		}
+
 	}
 	return;
 }
@@ -685,14 +698,54 @@ int multi_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
 	char statsbuffer[2048];
+	static int statsStart = 0;
+	static int statsEnd = 0;
 	struct ofp13_multipart_reply *reply;
+	
+	if(reply_more_flag == false)
+	{
+		statsStart = 0;
+		statsEnd = 0;
+	}
+	
 	reply = (struct ofp13_multipart_reply *) buffer;
 	reply->header.version = OF_Version;
 	reply->header.type = OFPT13_MULTIPART_REPLY;
 	reply->header.xid = msg->header.xid;
-	reply->flags = 0;
 	reply->type = htons(OFPMP13_FLOW);
-	int len = flow_stats_msg13(&statsbuffer, 0, iLastFlow);
+	if(iLastFlow > 15)
+	{
+		//TRACE("openflow_13.c: %d flows - multiple stats packets must be sent", iLastFlow);
+		if(statsEnd == 0)
+		{
+			statsEnd = 15;
+		}
+		
+		if(statsEnd < iLastFlow)
+		{
+			reply_more_flag = true;
+			reply->flags = OFPMPF13_REPLY_MORE;
+		}
+		else
+		{
+			statsEnd = iLastFlow;
+			reply_more_flag = false;
+			reply->flags = 0;
+		}
+		
+	}
+	else
+	{
+		statsStart = 0;
+		statsEnd = iLastFlow;
+		reply_more_flag = false;
+		reply->flags = 0;
+	}
+	//TRACE("openflow_13.c: generating stats message for flows %d to %d", statsStart, statsEnd);
+	int len = flow_stats_msg13(&statsbuffer, statsStart, statsEnd);
+	statsStart += 15;
+	statsEnd += 15;
+	
 	memcpy(reply->body, &statsbuffer, len);
 	len += 	sizeof(struct ofp13_multipart_reply);
 	reply->header.length = htons(len);
