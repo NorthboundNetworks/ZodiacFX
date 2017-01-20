@@ -62,6 +62,7 @@ extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern int multi_pos;
 extern uint8_t NativePortMatrix;
 extern bool reply_more_flag;
+extern uint32_t reply_more_xid;
 
 // Internal functions
 void features_reply13(uint32_t xid);
@@ -562,18 +563,25 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 	if (size == len && multi_pos !=0)
 	{
 		sendtcp(&shared_buffer, multi_pos);
-		if(reply_more_flag == true)
-		{
-			//tcp_output(tcp_pcb);
-			while(reply_more_flag == true)
-			{
-				multi_pos = 0;
-				multi_pos += multi_flow_reply13(&shared_buffer[multi_pos], multi_req);
-				sendtcp(&shared_buffer, multi_pos);
-				//tcp_output(tcp_pcb);
-			}
-		}
+	}
+	return;
+}
 
+/*
+*	OpenFlow reply more stats function
+*
+*	@param xid - transaction ID
+*
+*/
+void multipart_stats_handler(void)
+{
+	struct ofp13_multipart_request *multi_req;
+	
+	multi_pos += multi_flow_reply13(&shared_buffer, multi_req);
+		
+	if (size == len && multi_pos !=0)
+	{
+		sendtcp(&shared_buffer, multi_pos);
 	}
 	return;
 }
@@ -711,7 +719,14 @@ int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	reply = (struct ofp13_multipart_reply *) buffer;
 	reply->header.version = OF_Version;
 	reply->header.type = OFPT13_MULTIPART_REPLY;
-	reply->header.xid = msg->header.xid;
+	if(reply_more_flag == true)
+	{
+		reply->header.xid = reply_more_xid;
+	}
+	else
+	{
+		reply->header.xid = msg->header.xid;
+	}
 	reply->type = htons(OFPMP13_FLOW);
 	if(iLastFlow > 15)
 	{
@@ -719,6 +734,7 @@ int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 		if(statsEnd == 0)
 		{
 			statsEnd = 15;
+			reply_more_xid = msg->header.xid;
 		}
 		
 		if(statsEnd < iLastFlow)
