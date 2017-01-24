@@ -2220,7 +2220,7 @@ static uint8_t interfaceCreate_Display_Home(void)
 					"</p>"\
 				"<h3>Flows</h3>"\
 					"<p>"\
-						"View the current flows in the flow table. This page is currently limited to displaying a maximum of 5 flows."\
+						"View the current flows in the flow table. 4 flows are displayed per page."\
 					"</p>"\
 			"</body>"\
 		"</html>"\
