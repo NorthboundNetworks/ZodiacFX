@@ -80,7 +80,7 @@ void echo_reply(uint32_t xid);
 err_t TCPready(void *arg, struct tcp_pcb *tpcb, err_t err);
 void tcp_error(void * arg, err_t err);
 static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
-static err_t of_sent(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+static err_t of_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len);
 
 /*
 *	Converts a 64bit value from host to network format
@@ -210,22 +210,14 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 *
 *	@param *arg - pointer the additional TCP args
 *	@param *tcp_pcb - pointer the TCP session structure.
-*	@param *p - pointer to the buffer containing the TCP packet.
-*	@param err - error code.
 *
 */
-static err_t of_sent(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+static err_t of_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 {
-	if (err == ERR_OK && p != NULL)
+	TRACE("openflow.c: [of_sent] %d bytes acknowledged ", len);
+	if(reply_more_flag == true)
 	{
-		if(reply_more_flag == true)
-		{
-			
-		}
-		else
-		{
-			reply_more_xid = 0;
-		}
+		multi_flow_more_reply13();
 	}
 	
 	return ERR_OK;

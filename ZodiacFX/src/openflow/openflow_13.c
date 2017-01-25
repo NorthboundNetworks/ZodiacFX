@@ -568,25 +568,6 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 }
 
 /*
-*	OpenFlow reply more stats function
-*
-*	@param xid - transaction ID
-*
-*/
-void multipart_stats_handler(void)
-{
-	struct ofp13_multipart_request *multi_req;
-	
-	multi_pos += multi_flow_reply13(&shared_buffer, multi_req);
-		
-	//if (size == len && multi_pos !=0)
-	//{
-		//sendtcp(&shared_buffer, multi_pos);
-	//}
-	return;
-}
-
-/*
 *	OpenFlow FEATURE Reply message function
 *
 *	@param xid - transaction ID
@@ -705,67 +686,82 @@ int multi_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 */
 int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
+	int len = 0;
 	char statsbuffer[2048];
-	static int statsStart = 0;
-	static int statsEnd = 0;
 	struct ofp13_multipart_reply *reply;
-	
-	if(reply_more_flag == false)
-	{
-		statsStart = 0;
-		statsEnd = 0;
-	}
-	
 	reply = (struct ofp13_multipart_reply *) buffer;
 	reply->header.version = OF_Version;
 	reply->header.type = OFPT13_MULTIPART_REPLY;
-	if(reply_more_flag == true)
-	{
-		reply->header.xid = reply_more_xid;
-	}
-	else
-	{
-		reply->header.xid = msg->header.xid;
-	}
+	reply->header.xid = msg->header.xid;
+	reply->flags = 0;
 	reply->type = htons(OFPMP13_FLOW);
 	if(iLastFlow > 15)
 	{
-		//TRACE("openflow_13.c: %d flows - multiple stats packets must be sent", iLastFlow);
-		if(statsEnd == 0)
-		{
-			statsEnd = 15;
-			reply_more_xid = msg->header.xid;
-		}
-		
-		if(statsEnd < iLastFlow)
-		{
-			reply_more_flag = true;
-			reply->flags = OFPMPF13_REPLY_MORE;
-		}
-		else
-		{
-			statsEnd = iLastFlow;
-			reply_more_flag = false;
-			reply->flags = 0;
-		}
-		
+		// Only send first 15 flows
+		len = flow_stats_msg13(&statsbuffer, 0, 15);
+		reply->flags = htons(OFPMPF13_REPLY_MORE);		// More replies will follow
+		reply_more_flag = true;					// Notify of_sent that more messages need to be sent
+		reply_more_xid = msg->header.xid;		// Store xid for later replies
 	}
 	else
 	{
-		statsStart = 0;
-		statsEnd = iLastFlow;
-		reply_more_flag = false;
-		reply->flags = 0;
+		// Send all flows
+		len = flow_stats_msg13(&statsbuffer, 0, iLastFlow);
 	}
-	//TRACE("openflow_13.c: generating stats message for flows %d to %d", statsStart, statsEnd);
-	int len = flow_stats_msg13(&statsbuffer, statsStart, statsEnd);
-	statsStart += 15;
-	statsEnd += 15;
-	
 	memcpy(reply->body, &statsbuffer, len);
 	len += 	sizeof(struct ofp13_multipart_reply);
 	reply->header.length = htons(len);
 	return len;
+}
+
+/*
+*	OpenFlow reply more stats function
+*
+*	@param xid - transaction ID
+*
+*/
+void multi_flow_more_reply13(void)
+{
+	// Clear shared_buffer
+	memset(&shared_buffer, 0, SHARED_BUFFER_LEN);
+	
+	static int startFlow = 15;
+	int len = 0;
+	char statsbuffer[2048];
+	struct ofp13_multipart_reply *reply;
+	reply = (struct ofp13_multipart_reply *) shared_buffer;
+	reply->header.version = OF_Version;
+	reply->header.type = OFPT13_MULTIPART_REPLY;
+	reply->header.xid = reply_more_xid;
+	reply->type = htons(OFPMP13_FLOW);
+	if((startFlow+15) < iLastFlow)
+	{
+		// Send first 15 flows
+		TRACE("openflow_13.c: writing next 15 flow stats");
+		len = flow_stats_msg13(&statsbuffer, startFlow, (startFlow+15));
+		reply->flags = OFPMPF13_REPLY_MORE;		// More replies will follow
+		reply_more_flag = true;					// Notify of_sent that more messages need to be sent
+		startFlow += 15;
+	}
+	else
+	{
+		// Finish sending flows
+		TRACE("openflow_13.c: writing final set of flow stats");
+		len = flow_stats_msg13(&statsbuffer, startFlow, iLastFlow);
+		reply->flags = 0;						// No more replies will follow
+		reply_more_flag = false;				// Notify of_sent that no more messages need to be sent
+		reply_more_xid = 0;						// Clear stored xid
+	}
+	memcpy(reply->body, &statsbuffer, len);
+	len += 	sizeof(struct ofp13_multipart_reply);
+	reply->header.length = htons(len);
+	
+	if (len < 2048)
+	{
+		TRACE("openflow_13.c: sending flow stats");
+		sendtcp(&shared_buffer, len);
+	}
+	return;
 }
 
 /*
