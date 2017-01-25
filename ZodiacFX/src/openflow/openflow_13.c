@@ -737,20 +737,21 @@ void multi_flow_more_reply13(void)
 	if((startFlow+15) < iLastFlow)
 	{
 		// Send first 15 flows
-		TRACE("openflow_13.c: writing next 15 flow stats");
+		TRACE("openflow_13.c: writing flow stats: %d to %d", startFlow, (startFlow+15));
 		len = flow_stats_msg13(&statsbuffer, startFlow, (startFlow+15));
-		reply->flags = OFPMPF13_REPLY_MORE;		// More replies will follow
+		reply->flags = htons(OFPMPF13_REPLY_MORE);		// More replies will follow
 		reply_more_flag = true;					// Notify of_sent that more messages need to be sent
 		startFlow += 15;
 	}
 	else
 	{
 		// Finish sending flows
-		TRACE("openflow_13.c: writing final set of flow stats");
+		TRACE("openflow_13.c: writing final flow stats: %d to %d", startFlow, iLastFlow);
 		len = flow_stats_msg13(&statsbuffer, startFlow, iLastFlow);
 		reply->flags = 0;						// No more replies will follow
 		reply_more_flag = false;				// Notify of_sent that no more messages need to be sent
 		reply_more_xid = 0;						// Clear stored xid
+		startFlow = 0;							// Clear startFlow
 	}
 	memcpy(reply->body, &statsbuffer, len);
 	len += 	sizeof(struct ofp13_multipart_reply);
