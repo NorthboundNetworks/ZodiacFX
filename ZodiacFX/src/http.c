@@ -98,6 +98,7 @@ static uint8_t interfaceCreate_About(void);
 static uint8_t upload_handler(char *ppart, int len);
 static char uploaded_version[5] = {0};
 static int page_ctr = 1;
+static int boundary_start = 1;		// Check for start of data
 
 static uint8_t flowBase = 0;		// Current set of flows to display
 
@@ -157,24 +158,71 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		http_payload = (char*)p->payload;
 		len = p->tot_len;
 		
+		TRACE("http.c: -- HTTP recv received %d payload bytes", len)
+		
 		if(file_upload == true)
 		{
-			int ret = 0;
-			// Handle multi-part file data
-			ret = upload_handler(http_payload, len);
-			if(ret == 2)
+			// Check HTTP method
+			i = 0;
+			while(i < 63 && (http_payload[i] != ' '))
 			{
-				file_upload = false;
+				http_msg[i] = http_payload[i];
+				i++;
+			}
+			
+			if(strcmp(http_msg,"GET") == 0)
+			{
+				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 				
-				// upload check
-				if(interfaceCreate_Upload_Complete(1))
+				// Specified resource directly follows GET
+				i = 0;
+				while(i < 63 && (http_payload[i+5] != ' '))
 				{
-					http_send(&shared_buffer, pcb, 1);
-					TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					http_msg[i] = http_payload[i+5];	// Offset http_payload to isolate resource
+					i++;
+				}
+				
+				if(strcmp(http_msg,"header.htm") == 0)
+				{
+					return ERR_OK;
 				}
 				else
 				{
-					TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					file_upload = false;
+					boundary_start = 1;
+					
+					// upload failed
+					if(interfaceCreate_Upload_Complete(0))
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+			}
+			else
+			{
+				int ret = 0;
+				// Handle multi-part file data
+				ret = upload_handler(http_payload, len);
+				if(ret == 2)
+				{
+					file_upload = false;
+					boundary_start = 1;
+					//flash_clear_gpnvm(1);
+					// upload check
+					if(interfaceCreate_Upload_Complete(1))
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
 				}
 			}
 		}
@@ -1261,6 +1309,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			}
 		}
 	}
+	else
+	{
+		TRACE("http.c: receive error");
+	}
 
 	pbuf_free(p);
 
@@ -1311,7 +1363,6 @@ static uint8_t upload_handler(char *ppart, int len)
 	static char page[512] = {0};		// Storage for each page of data
 	static uint16_t saved_bytes = 0;	// Persistent counter of unwritten data
 	uint16_t handled_bytes = 0;			// Counter of handled data
-	static int boundary_start = 1;		// Check for start of data
 	static char boundary_ID[50] = {0};	// Storage for boundary ID
 	
 	char *px;	// Start address pointer
@@ -1320,7 +1371,7 @@ static uint8_t upload_handler(char *ppart, int len)
 	int final = 0;
 	int data_len = 0;	// Length of actual upload data
 	
-	TRACE("http.c: upload handler received %d payload bytes", len)
+	TRACE("http.c: -- upload handler received %d payload bytes", len)
 	
 	if(boundary_start)
 	{
@@ -1495,25 +1546,7 @@ static uint8_t upload_handler(char *ppart, int len)
 	{
 		TRACE("http.c: %d saved bytes need to be cleared", saved_bytes);
 		
-		if(!final)
-		{
-			// Fill existing partially-complete page with new data
-			while(saved_bytes < 512 && handled_bytes < len)
-			{
-				page[saved_bytes] = *px;
-				if(px < py)
-				{
-					px++;
-				}
-				else
-				{
-					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
-				}
-				saved_bytes++;
-				handled_bytes++;
-			}
-		}
-		else
+		if(final)
 		{
 			/* Final page needs to be written */
 			
@@ -1535,19 +1568,72 @@ static uint8_t upload_handler(char *ppart, int len)
 
 				saved_bytes++;
 			}
+			
+			// Write data to page
+			if(flash_write_page(&page))
+			{
+				TRACE("http.c: final firmware page written successfully");
+				page_ctr++;
+			}
+			else
+			{
+				TRACE("http.c: final firmware page write FAILED");
+			}
 		}
-		
-		// Write data to page
-		if(flash_write_page(&page))
+		else if(saved_bytes + len < 512)
 		{
-			TRACE("http.c: firmware page written successfully");
-			page_ctr++;
+			int max_len = saved_bytes + len;
+			// Fill existing partially-complete page with new data
+			while(saved_bytes < max_len && handled_bytes < len)
+			{
+				page[saved_bytes] = *px;
+				if(px < py)
+				{
+					px++;
+				}
+				else
+				{
+					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
+				}
+				saved_bytes++;
+				handled_bytes++;
+			}
+			
+			// Handle edge-case
+			TRACE("http.c: unable to fill a complete page - skipping page write");
+			TRACE("http.c: %d bytes saved", saved_bytes);
+			return 1;
 		}
 		else
 		{
-			TRACE("http.c: firmware page write FAILED");
+			// Fill existing partially-complete page with new data
+			while(saved_bytes < 512 && handled_bytes < len)
+			{
+				page[saved_bytes] = *px;
+				if(px < py)
+				{
+					px++;
+				}
+				else
+				{
+					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
+				}
+				saved_bytes++;
+				handled_bytes++;
+			}
+			
+			// Write data to page
+			if(flash_write_page(&page))
+			{
+				TRACE("http.c: firmware page written successfully");
+				page_ctr++;
+			}
+			else
+			{
+				TRACE("http.c: firmware page write FAILED");
+			}
 		}
-		
+				
 		// Saved bytes have been handled - clear the counter
 		saved_bytes = 0;
 		
@@ -2134,7 +2220,7 @@ static uint8_t interfaceCreate_Display_Home(void)
 					"</p>"\
 				"<h3>Flows</h3>"\
 					"<p>"\
-						"View the current flows in the flow table. This page is currently limited to displaying a maximum of 5 flows."\
+						"View the current flows in the flow table. 4 flows are displayed per page."\
 					"</p>"\
 			"</body>"\
 		"</html>"\

@@ -72,6 +72,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
 void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
 void of10_message(struct ofp_header *ofph, int size, int len);
 void of13_message(struct ofp_header *ofph, int size, int len);
+void multi_flow_more_reply13(void);
 void barrier10_reply(uint32_t xid);
 void barrier13_reply(uint32_t xid);
 void sendtcp(const void *buffer, u16_t len);
