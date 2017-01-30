@@ -72,8 +72,14 @@ extern int flash_write_page(uint8_t *flash_page);
 // Local Variables
 struct tcp_pcb *http_pcb;
 char http_msg[64];			// Buffer for HTTP message filtering
-static bool file_upload = false;	// Multi-part firmware file upload flag
-bool reset_required;
+static uint8_t upload_handler(char *ppart, int len);
+static char uploaded_version[5] = {0};
+static int page_ctr = 1;
+static int boundary_start = 1;		// Check for start of data
+static uint8_t flowBase = 0;		// Current set of flows to display
+
+// Flag variables
+static bool reset_required;			// Track if any configuration changes are pending a restart
 
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
@@ -94,13 +100,6 @@ static uint8_t interfaceCreate_Config_Network(void);
 static uint8_t interfaceCreate_Config_VLANs(void);
 static uint8_t interfaceCreate_Config_OpenFlow(void);
 static uint8_t interfaceCreate_About(void);
-
-static uint8_t upload_handler(char *ppart, int len);
-static char uploaded_version[5] = {0};
-static int page_ctr = 1;
-static int boundary_start = 1;		// Check for start of data
-
-static uint8_t flowBase = 0;		// Current set of flows to display
 
 /*
 *	Converts a 64bit value from host to network format
@@ -146,6 +145,11 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 */
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 {
+	// Local static flag variables
+	//static bool 
+	static bool file_upload = false;	// Multi-part firmware file upload flag
+	
+	// Local variables
 	int len;
 	int i = 0;
 	char *http_payload;
@@ -1822,7 +1826,10 @@ static uint8_t interfaceCreate_Header(void)
 	// Send header
 	if(reset_required == false)
 	{
-		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+		strcat(shared_buffer,"Connection: close\r\n");
+		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+		if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"<!DOCTYPE html>"\
 				"<META http-equiv=\"refresh\" content=\"61\">"\
 				"<html>"\
@@ -1874,7 +1881,10 @@ static uint8_t interfaceCreate_Header(void)
 	}
 	else if(reset_required == true)
 	{
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+		strcat(shared_buffer,"Connection: close\r\n");
+		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 			"<!DOCTYPE html>"\
 			"<META http-equiv=\"refresh\" content=\"61\">"\
 			"<html>"\
@@ -1946,7 +1956,10 @@ static uint8_t interfaceCreate_Header(void)
 static uint8_t interfaceCreate_Menu(void)
 {
 	// Send menu
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -2015,7 +2028,10 @@ static uint8_t interfaceCreate_Home(void)
 	int t = (totaltime/2)%3600;
 	int min = t/60;
 
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<META http-equiv=\"refresh\" content=\"61\">"\
 		"<html>"\
@@ -2062,7 +2078,10 @@ static uint8_t interfaceCreate_Home(void)
 */
 static uint8_t interfaceCreate_Upload(void)
 {
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -2192,7 +2211,10 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 */
 static uint8_t interfaceCreate_Display_Home(void)
 {
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -2272,8 +2294,11 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 				vlCtr++;
 			}
 		}
-
-		snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		
+		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+		strcat(shared_buffer,"Connection: close\r\n");
+		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 			"<!DOCTYPE html>"\
 			"<META http-equiv=\"refresh\" content=\"31\">"\
 			"<html>"\
@@ -2498,8 +2523,8 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						  "</tr>"\
 						"</table>"\
 						"<br>"\
-							"<input type=\"submit\" value=\"Save\">"\
-							"<input type=\"reset\" value=\"Cancel\"><br>"\
+							"<input type=\"submit\" name=\"ports_submit\" value=\"Save\">"\
+							"<input type=\"reset\" name=\"ports_cancel\" value=\"Cancel\"><br>"\
 						"</fieldset>"\
 						"</form>"\
 					"</body>"\
@@ -2577,8 +2602,8 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						  "</tr>"\
 						"</table>"\
 						"<br>"\
-							"<input type=\"submit\" value=\"Save\">"\
-							"<input type=\"reset\" value=\"Cancel\"><br>"\
+							"<input type=\"submit\" name=\"ports_submit\" value=\"Save\">"\
+							"<input type=\"reset\" name=\"ports_cancel\" value=\"Cancel\"><br>"\
 						"</fieldset>"\
 						"</form>"\
 					"</body>"\
@@ -2680,7 +2705,10 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 		snprintf(wi_ofVersion, 15, "Auto");
 	}
 	
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<META http-equiv=\"refresh\" content=\"31\">"\
 		"<html>"\
@@ -2737,7 +2765,10 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 */
 static uint8_t interfaceCreate_Display_Flows(void)
 {
-	snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -3232,7 +3263,10 @@ if (iLastFlow > 0)
 */
 static uint8_t interfaceCreate_Config_Home(void)
 {
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -3281,42 +3315,45 @@ static uint8_t interfaceCreate_Config_Home(void)
 */
 static uint8_t interfaceCreate_Config_Network(void)
 {
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
-		"<html>"\
-		"<head>"\
-		"<style>"\
-		"body {"\
-			"overflow: auto;"\
-			"font-family:Sans-serif;"\
-			"line-height: 1.2em;"\
-			"font-size: 17px;"\
-			"margin-left: 20px;"\
-		"}"\
-		"</style>"\
-		"</head>"\
-		"<body>"\
-		"<p>"\
-		"<h1>Network Configuration</h1>"\
-		"</p>"\
-		"<form style=\"width: 200px\" action=\"save_config\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes. Press the restart button on the top right for your changes to take effect.');\">"\
-		"<fieldset>"\
-		"<legend>Connection</legend>"\
-		"Name:<br>"\
-		"<input type=\"text\" name=\"wi_deviceName\" value=\"%s\"><br><br>"\
-		"MAC Address:<br>"\
-		"<input type=\"text\" name=\"wi_macAddress\" value=\"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X\"><br><br>"\
-		"IP Address:<br>"\
-		"<input type=\"text\" name=\"wi_ipAddress\" value=\"%d.%d.%d.%d\"><br><br>"\
-		"Netmask:<br>"\
-		"<input type=\"text\" name=\"wi_netmask\" value=\"%d.%d.%d.%d\"><br><br>"\
-		"Gateway:<br>"\
-		"<input type=\"text\" name=\"wi_gateway\" value=\"%d.%d.%d.%d\"><br><br>"\
-		"<input type=\"submit\" value=\"Save\">"\
-		"<input type=\"reset\" value=\"Cancel\">"\
-		"</fieldset>"\
-		"</form>"\
-		"</body>"\
+			"<html>"\
+				"<head>"\
+					"<style>"\
+					"body {"\
+						"overflow: auto;"\
+						"font-family:Sans-serif;"\
+						"line-height: 1.2em;"\
+						"font-size: 17px;"\
+						"margin-left: 20px;"\
+					"}"\
+					"</style>"\
+				"</head>"\
+			"<body>"\
+				"<p>"\
+					"<h1>Network Configuration</h1>"\
+				"</p>"\
+				"<form style=\"width: 200px\" action=\"save_config\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes. Press the restart button on the top right for your changes to take effect.');\">"\
+					"<fieldset>"\
+						"<legend>Connection</legend>"\
+						"Name:<br>"\
+						"<input type=\"text\" name=\"wi_deviceName\" value=\"%s\"><br><br>"\
+						"MAC Address:<br>"\
+						"<input type=\"text\" name=\"wi_macAddress\" value=\"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X\"><br><br>"\
+						"IP Address:<br>"\
+						"<input type=\"text\" name=\"wi_ipAddress\" value=\"%d.%d.%d.%d\"><br><br>"\
+						"Netmask:<br>"\
+						"<input type=\"text\" name=\"wi_netmask\" value=\"%d.%d.%d.%d\"><br><br>"\
+						"Gateway:<br>"\
+						"<input type=\"text\" name=\"wi_gateway\" value=\"%d.%d.%d.%d\"><br><br>"\
+						"<input type=\"submit\" value=\"Save\">"\
+						"<input type=\"reset\" value=\"Cancel\">"\
+					"</fieldset>"\
+				"</form>"\
+			"</body>"\
 		"</html>"\
 			, Zodiac_Config.device_name\
 			, Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]\
@@ -3346,7 +3383,10 @@ static uint8_t interfaceCreate_Config_VLANs(void)
 	char wi_vlType[10] = "";
 	
 	// Opening tags, and base table
-	snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -3461,7 +3501,10 @@ static uint8_t interfaceCreate_Config_VLANs(void)
 */
 static uint8_t interfaceCreate_Config_OpenFlow(void)
 {	
-	snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -3596,7 +3639,10 @@ static uint8_t interfaceCreate_Config_OpenFlow(void)
 */
 static uint8_t interfaceCreate_About(void)
 {
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
