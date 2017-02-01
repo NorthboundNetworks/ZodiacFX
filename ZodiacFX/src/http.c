@@ -71,7 +71,7 @@ extern int flash_write_page(uint8_t *flash_page);
 
 // Local Variables
 struct tcp_pcb *http_pcb;
-char http_msg[64];			// Buffer for HTTP message filtering
+static char http_msg[64];			// Buffer for HTTP message filtering
 static uint8_t upload_handler(char *ppart, int len);
 static char uploaded_version[5] = {0};
 static int page_ctr = 1;
@@ -100,6 +100,9 @@ static uint8_t interfaceCreate_Config_Network(void);
 static uint8_t interfaceCreate_Config_VLANs(void);
 static uint8_t interfaceCreate_Config_OpenFlow(void);
 static uint8_t interfaceCreate_About(void);
+
+static uint8_t Config_Network(char *payload, int len);
+
 
 /*
 *	Converts a 64bit value from host to network format
@@ -146,7 +149,6 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 {
 	// Local static flag variables
-	//static bool 
 	static bool file_upload = false;	// Multi-part firmware file upload flag
 	
 	// Local variables
@@ -480,236 +482,27 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				}
 				else if(strcmp(http_msg,"save_config") == 0)
 				{
-					memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
-				
-					// Device Name
-					pdat = strstr(http_payload, "wi_deviceName");	// Search for element
-					if(pdat != NULL)	// Check that element exists
+					if(Config_Network(&http_payload, len) == SUCCESS)
 					{
-						pdat += (strlen("wi_deviceName")+1);	// Data format: wi_deviceName=(name)
-					
-						i = 0;
-						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-						{
-							http_msg[i] = pdat[i];	// Store value of element
-							i++;
-						}
-						if(pdat[i+1] == 'w')	// Check that the next parameter directly follows the "&" at end of data
-						{
-							uint8_t namelen = strlen(http_msg);
-							if (namelen > 15 ) namelen = 15; // Make sure name is less than 16 characters
-							sprintf(Zodiac_Config.device_name, http_msg, namelen);
-							TRACE("http.c: device name set to '%s'",Zodiac_Config.device_name);
-						}
-						else
-						{
-							TRACE("http.c: \"&\" cannot be used in device name");
-						}
-					}
-					else
-					{
-						TRACE("http.c: no device name found");
-					}
-				
-					memset(&http_msg, 0, sizeof(http_msg));
-								
-					// MAC Address
-					pdat = strstr(http_payload, "wi_macAddress");
-					if(pdat != NULL)	// Check that element exists
-					{
-						pdat += (strlen("wi_macAddress")+1);	// Data format: wi_deviceName=(name)
-					
-						i = 0;
-						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-						{
-							http_msg[i] = pdat[i];	// Store value of element
-							i++;
-						}
-						if(pdat[i+1] == 'w')
-						{
-							int mac1,mac2,mac3,mac4,mac5,mac6;
-							char decArr[18] = "";
-							int j, k;
-						
-							if (strlen(http_msg) != 27 )	// Accounting for ":" as "%3A"
-							{
-								TRACE("http.c: incorrect MAC address format");
-								return;
-							}
-						
-							// Decode http string
-							j = 0; k = 0;
-							while(j < strlen(http_msg) && k < 18)
-							{
-								if(http_msg[j] == '%' && http_msg[j+1] == '3' && http_msg[j+2] == 'A')
-								{
-									decArr[k] = ':';
-									j+=3; k++;
-								}
-								else
-								{
-									decArr[k] = http_msg[j];
-									j++; k++;
-								}
-							}
-						
-							sscanf(decArr, "%x:%x:%x:%x:%x:%x", &mac1, &mac2, &mac3, &mac4, &mac5, &mac6);
-							Zodiac_Config.MAC_address[0] = mac1;
-							Zodiac_Config.MAC_address[1] = mac2;
-							Zodiac_Config.MAC_address[2] = mac3;
-							Zodiac_Config.MAC_address[3] = mac4;
-							Zodiac_Config.MAC_address[4] = mac5;
-							Zodiac_Config.MAC_address[5] = mac6;
-							TRACE("http.c: MAC address set to %.2X:%.2X:%.2X:%.2X:%.2X:%.2X",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
-						}
-						else
-						{
-							TRACE("http.c: \"&\" cannot be used in form");
-						}
-					}
-					else
-					{
-						TRACE("http.c: no MAC address found");
-					}
-				
-					memset(&http_msg, 0, sizeof(http_msg));
-								
-					// IP Address
-					pdat = strstr(http_payload, "wi_ipAddress");
-					if(pdat != NULL)	// Check that element exists
-					{
-						pdat += (strlen("wi_ipAddress")+1);	// Data format: wi_deviceName=(name)
-									
-						i = 0;
-						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-						{
-							http_msg[i] = pdat[i];	// Store value of element
-							i++;
-						}
-						if(pdat[i+1] == 'w')
-						{
-							int ip1,ip2,ip3,ip4;
-							if (strlen(http_msg) > 15 )
-							{
-								TRACE("http.c: incorrect IP format");
-								return;
-							}
-							sscanf(http_msg, "%d.%d.%d.%d", &ip1, &ip2,&ip3,&ip4);
-							Zodiac_Config.IP_address[0] = ip1;
-							Zodiac_Config.IP_address[1] = ip2;
-							Zodiac_Config.IP_address[2] = ip3;
-							Zodiac_Config.IP_address[3] = ip4;
-							TRACE("http.c: IP address set to %d.%d.%d.%d" , Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1], Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]);
-						}
-						else
-						{
-							TRACE("http.c: \"&\" cannot be used in form");
-						}
-					}
-					else
-					{
-						TRACE("http.c: no IP address found");
-					}
-		
-					memset(&http_msg, 0, sizeof(http_msg));
-								
-					// Netmask
-					pdat = strstr(http_payload, "wi_netmask");
-					if(pdat != NULL)	// Check that element exists
-					{
-						pdat += (strlen("wi_netmask")+1);	// Data format: wi_deviceName=(name)
-									
-						i = 0;
-						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-						{
-							http_msg[i] = pdat[i];	// Store value of element
-							i++;
-						}
-						if(pdat[i+1] == 'w')
-						{
-							int nm1,nm2,nm3,nm4;
-							if (strlen(http_msg) > 15 )
-							{
-								TRACE("http.c: incorrect netmask format");
-								return;
-							}
-							sscanf(http_msg, "%d.%d.%d.%d", &nm1, &nm2,&nm3,&nm4);
-							Zodiac_Config.netmask[0] = nm1;
-							Zodiac_Config.netmask[1] = nm2;
-							Zodiac_Config.netmask[2] = nm3;
-							Zodiac_Config.netmask[3] = nm4;
-							TRACE("http.c: netmask set to %d.%d.%d.%d" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);				
-						}
-						else
-						{
-							TRACE("http.c: \"&\" cannot be used in form");
-						}
-					}
-					else
-					{
-						TRACE("http.c: no netmask found");
-					}
-				
-					memset(&http_msg, 0, sizeof(http_msg));
+						TRACE("http.c: network configuration successful");
 							
-					// Gateway	
-					pdat = strstr(http_payload, "wi_gateway");
-					if(pdat != NULL)	// Check that element exists
-					{
-						pdat += (strlen("wi_gateway")+1);	// Data format: wi_deviceName=(name)
-									
-						i = 0;
-						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+						// Send updated config page
+						if(interfaceCreate_Config_Network())
 						{
-							http_msg[i] = pdat[i];	// Store value of element
-							i++;
+							http_send(&shared_buffer, pcb, 1);
+							TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
+							return SUCCESS;
 						}
-					
-						// No next 'w' character check as this is the last element
-					
-						int gw1,gw2,gw3,gw4;
-						if (strlen(http_msg) > 15 )
+						else
 						{
-							TRACE("http.c: incorrect gateway format");
-							return;
+							TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+							return FAILURE;
 						}
-						sscanf(http_msg, "%d.%d.%d.%d", &gw1, &gw2,&gw3,&gw4);
-						Zodiac_Config.gateway_address[0] = gw1;
-						Zodiac_Config.gateway_address[1] = gw2;
-						Zodiac_Config.gateway_address[2] = gw3;
-						Zodiac_Config.gateway_address[3] = gw4;
-						TRACE("http.c: gateway set to %d.%d.%d.%d" , Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
 					}
 					else
 					{
-						TRACE("http.c: no gateway address found");
+						TRACE("http.c: ERROR: network configuration failed");
 					}
-				
-					// Save configuration to EEPROM
-					eeprom_write();
-					TRACE("http.c: config written to EEPROM");
-				
-					// Set update required flag
-					reset_required = true;
-				
-					// Send updated config page
-					if(interfaceCreate_Config_Network())
-					{
-						http_send(&shared_buffer, pcb, 1);
-						TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
-					}
-					else
-					{
-						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
-					}
-								
-					// Send updated header page (with restart button)
-				
-						// ***** Placeholder until frame refresh targeting is implemented
-						//
-						//
-						//
-					
 				}
 				else if(strcmp(http_msg,"btn_restart") == 0)
 				{
@@ -1348,7 +1141,7 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 	{
 		// Write data to tcp buffer
 		err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
-		TRACE("http.c: sending %d bytes to TCP stack, %d REMAINING in buffer", len, (buf_size - len));
+		TRACE("http.c: tcp buffer %d/%d", len, buf_size);
 
 		// Check if more data needs to be written
 		if(out == true)
@@ -1761,6 +1554,233 @@ static uint8_t upload_handler(char *ppart, int len)
 	{
 		return 1;
 	}
+}
+
+static uint8_t Config_Network(char *payload, int len)
+{
+	int i = 0;
+	char *pdat;
+	
+	memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+	
+	// Device Name
+	pdat = strstr(payload, "wi_deviceName");	// Search for element
+	if(pdat != NULL)	// Check that element exists
+	{
+		pdat += (strlen("wi_deviceName")+1);	// Data format: wi_deviceName=(name)
+		
+		i = 0;
+		while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+		{
+			http_msg[i] = pdat[i];	// Store value of element
+			i++;
+		}
+		if(pdat[i+1] == 'w')	// Check that the next parameter directly follows the "&" at end of data
+		{
+			uint8_t namelen = strlen(http_msg);
+			if (namelen > 15 ) namelen = 15; // Make sure name is less than 16 characters
+			sprintf(Zodiac_Config.device_name, http_msg, namelen);
+			TRACE("http.c: device name set to '%s'",Zodiac_Config.device_name);
+		}
+		else
+		{
+			TRACE("http.c: \"&\" cannot be used in device name");
+		}
+	}
+	else
+	{
+		TRACE("http.c: no device name found");
+	}
+	
+	memset(&http_msg, 0, sizeof(http_msg));
+	
+	// MAC Address
+	pdat = strstr(payload, "wi_macAddress");
+	if(pdat != NULL)	// Check that element exists
+	{
+		pdat += (strlen("wi_macAddress")+1);	// Data format: wi_deviceName=(name)
+		
+		i = 0;
+		while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+		{
+			http_msg[i] = pdat[i];	// Store value of element
+			i++;
+		}
+		if(pdat[i+1] == 'w')
+		{
+			int mac1,mac2,mac3,mac4,mac5,mac6;
+			char decArr[18] = "";
+			int j, k;
+			
+			if (strlen(http_msg) != 27 )	// Accounting for ":" as "%3A"
+			{
+				TRACE("http.c: incorrect MAC address format");
+				return;
+			}
+			
+			// Decode http string
+			j = 0; k = 0;
+			while(j < strlen(http_msg) && k < 18)
+			{
+				if(http_msg[j] == '%' && http_msg[j+1] == '3' && http_msg[j+2] == 'A')
+				{
+					decArr[k] = ':';
+					j+=3; k++;
+				}
+				else
+				{
+					decArr[k] = http_msg[j];
+					j++; k++;
+				}
+			}
+			
+			sscanf(decArr, "%x:%x:%x:%x:%x:%x", &mac1, &mac2, &mac3, &mac4, &mac5, &mac6);
+			Zodiac_Config.MAC_address[0] = mac1;
+			Zodiac_Config.MAC_address[1] = mac2;
+			Zodiac_Config.MAC_address[2] = mac3;
+			Zodiac_Config.MAC_address[3] = mac4;
+			Zodiac_Config.MAC_address[4] = mac5;
+			Zodiac_Config.MAC_address[5] = mac6;
+			TRACE("http.c: MAC address set to %.2X:%.2X:%.2X:%.2X:%.2X:%.2X",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
+		}
+		else
+		{
+			TRACE("http.c: \"&\" cannot be used in form");
+		}
+	}
+	else
+	{
+		TRACE("http.c: no MAC address found");
+	}
+	
+	memset(&http_msg, 0, sizeof(http_msg));
+	
+	// IP Address
+	pdat = strstr(payload, "wi_ipAddress");
+	if(pdat != NULL)	// Check that element exists
+	{
+		pdat += (strlen("wi_ipAddress")+1);	// Data format: wi_deviceName=(name)
+		
+		i = 0;
+		while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+		{
+			http_msg[i] = pdat[i];	// Store value of element
+			i++;
+		}
+		if(pdat[i+1] == 'w')
+		{
+			int ip1,ip2,ip3,ip4;
+			if (strlen(http_msg) > 15 )
+			{
+				TRACE("http.c: incorrect IP format");
+				return;
+			}
+			sscanf(http_msg, "%d.%d.%d.%d", &ip1, &ip2,&ip3,&ip4);
+			Zodiac_Config.IP_address[0] = ip1;
+			Zodiac_Config.IP_address[1] = ip2;
+			Zodiac_Config.IP_address[2] = ip3;
+			Zodiac_Config.IP_address[3] = ip4;
+			TRACE("http.c: IP address set to %d.%d.%d.%d" , Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1], Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]);
+		}
+		else
+		{
+			TRACE("http.c: \"&\" cannot be used in form");
+		}
+	}
+	else
+	{
+		TRACE("http.c: no IP address found");
+	}
+	
+	memset(&http_msg, 0, sizeof(http_msg));
+	
+	// Netmask
+	pdat = strstr(payload, "wi_netmask");
+	if(pdat != NULL)	// Check that element exists
+	{
+		pdat += (strlen("wi_netmask")+1);	// Data format: wi_deviceName=(name)
+		
+		i = 0;
+		while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+		{
+			http_msg[i] = pdat[i];	// Store value of element
+			i++;
+		}
+		if(pdat[i+1] == 'w')
+		{
+			int nm1,nm2,nm3,nm4;
+			if (strlen(http_msg) > 15 )
+			{
+				TRACE("http.c: incorrect netmask format");
+				return;
+			}
+			sscanf(http_msg, "%d.%d.%d.%d", &nm1, &nm2,&nm3,&nm4);
+			Zodiac_Config.netmask[0] = nm1;
+			Zodiac_Config.netmask[1] = nm2;
+			Zodiac_Config.netmask[2] = nm3;
+			Zodiac_Config.netmask[3] = nm4;
+			TRACE("http.c: netmask set to %d.%d.%d.%d" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);
+		}
+		else
+		{
+			TRACE("http.c: \"&\" cannot be used in form");
+		}
+	}
+	else
+	{
+		TRACE("http.c: no netmask found");
+	}
+	
+	memset(&http_msg, 0, sizeof(http_msg));
+	
+	// Gateway
+	pdat = strstr(payload, "wi_gateway");
+	if(pdat != NULL)	// Check that element exists
+	{
+		pdat += (strlen("wi_gateway")+1);	// Data format: wi_deviceName=(name)
+		
+		i = 0;
+		while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+		{
+			http_msg[i] = pdat[i];	// Store value of element
+			i++;
+		}
+		
+		// No next 'w' character check as this is the last element
+		
+		int gw1,gw2,gw3,gw4;
+		if (strlen(http_msg) > 15 )
+		{
+			TRACE("http.c: incorrect gateway format");
+			return;
+		}
+		sscanf(http_msg, "%d.%d.%d.%d", &gw1, &gw2,&gw3,&gw4);
+		Zodiac_Config.gateway_address[0] = gw1;
+		Zodiac_Config.gateway_address[1] = gw2;
+		Zodiac_Config.gateway_address[2] = gw3;
+		Zodiac_Config.gateway_address[3] = gw4;
+		TRACE("http.c: gateway set to %d.%d.%d.%d" , Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
+	}
+	else
+	{
+		TRACE("http.c: no gateway address found");
+	}
+	
+	// Save configuration to EEPROM
+	eeprom_write();
+	TRACE("http.c: config written to EEPROM");
+	
+	// Set update required flag
+	reset_required = true;
+	
+	return SUCCESS;
+	
+	// Send updated header page (with restart button)
+	
+	// ***** Placeholder until frame refresh targeting is implemented
+	//
+	//
+	//
 }
 
 /*
