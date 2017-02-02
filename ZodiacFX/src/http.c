@@ -72,7 +72,6 @@ extern int flash_write_page(uint8_t *flash_page);
 // Local Variables
 struct tcp_pcb *http_pcb;
 static char http_msg[64];			// Buffer for HTTP message filtering
-static uint8_t upload_handler(char *ppart, int len);
 static char uploaded_version[5] = {0};
 static int page_ctr = 1;
 static int boundary_start = 1;		// Check for start of data
@@ -80,11 +79,16 @@ static uint8_t flowBase = 0;		// Current set of flows to display
 
 // Flag variables
 static bool reset_required;			// Track if any configuration changes are pending a restart
+static bool file_upload = false;	// Multi-part firmware file upload flag
 
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
 void http_send(char *buffer, struct tcp_pcb *pcb, bool out);
 
+static uint8_t upload_handler(char *payload, int len);
+static uint8_t upload_cleanup(struct tcp_pcb *pcb);
+
+// HTML resources
 static uint8_t interfaceCreate_Frames(void);
 static uint8_t interfaceCreate_Header(void);
 static uint8_t interfaceCreate_Menu(void);
@@ -102,6 +106,7 @@ static uint8_t interfaceCreate_Config_OpenFlow(void);
 static uint8_t interfaceCreate_About(void);
 static uint8_t interfaceCreate_Restart(void);
 
+// Configuration functions
 static uint8_t Config_Network(char *payload, int len);
 
 
@@ -148,10 +153,7 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 *
 */
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
-{
-	// Local static flag variables
-	static bool file_upload = false;	// Multi-part firmware file upload flag
-	
+{	
 	// Local variables
 	int len;
 	int i = 0;
@@ -195,19 +197,8 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				}
 				else
 				{
-					file_upload = false;
-					boundary_start = 1;
-					
-					// upload failed
-					if(interfaceCreate_Upload_Complete(0))
-					{
-						http_send(&shared_buffer, pcb, 1);
-						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-					}
-					else
-					{
-						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-					}
+					// Stop upload operation
+					upload_cleanup(pcb);
 				}
 			}
 			else
@@ -242,10 +233,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				http_msg[i] = http_payload[i];
 				i++;
 			}
-			TRACE("http.c: %s method received", http_msg);
 	
 			if(strcmp(http_msg,"GET") == 0)
 			{			
+				TRACE("http.c: GET method received");
 				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 			
 				// Specified resource directly follows GET
@@ -452,6 +443,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			}
 			else if(strcmp(http_msg,"POST") == 0)
 			{
+				TRACE("http.c: POST method received");
 				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 
 				// Specified resource directly follows POST
@@ -1114,7 +1106,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			}
 			else
 			{
-				TRACE("http.c: WARNING: unknown HTTP method received");
+				TRACE("http.c: unknown HTTP method received");
 			}
 		}
 	}
@@ -1137,7 +1129,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 /*
 *	HTTP Send function
 *
-*	Parameter:
+*	Parameters:
 *		out - specify whether TCP packet should be sent
 */
 void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
@@ -1167,12 +1159,22 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 	return;
 }
 
-static uint8_t upload_handler(char *ppart, int len)
+/*
+*	Upload handler function
+*
+*	Details:
+*		Handles part-by-part firmware upload process
+*
+*	Parameters:
+*		payload	- pointer to payload data
+*		len		- length of payload
+*/
+static uint8_t upload_handler(char *payload, int len)
 {	
 	static char page[512] = {0};		// Storage for each page of data
 	static uint16_t saved_bytes = 0;	// Persistent counter of unwritten data
 	uint16_t handled_bytes = 0;			// Counter of handled data
-	static char boundary_ID[50] = {0};	// Storage for boundary ID
+	static char boundary_ID[BOUNDARY_MAX_LEN] = {0};	// Storage for boundary ID
 	
 	char *px;	// Start address pointer
 	char *py;	// End address pointer
@@ -1191,7 +1193,7 @@ static uint8_t upload_handler(char *ppart, int len)
 		i = 0;
 		while(i < len)
 		{
-			shared_buffer[i] = ppart[i];
+			shared_buffer[i] = payload[i];
 			i++;
 		}
 			
@@ -1203,6 +1205,7 @@ static uint8_t upload_handler(char *ppart, int len)
 		}
 		else
 		{
+			memset(&boundary_ID, 0, BOUNDARY_MAX_LEN);
 			// Traverse forward until the ID begins
 			while(*px == '\x2d')
 			{
@@ -1210,7 +1213,7 @@ static uint8_t upload_handler(char *ppart, int len)
 			}
 			// Store entirety of boundary ID
 			i = 0;
-			while(i < 50 && *px != '\x2d' && *px != '\x0d' && *px != '\x0a')
+			while(i < BOUNDARY_MAX_LEN && *px != '\x2d' && *px != '\x0d' && *px != '\x0a')
 			{
 				boundary_ID[i] = *px;
 			
@@ -1223,29 +1226,29 @@ static uint8_t upload_handler(char *ppart, int len)
 		memset(&shared_buffer, 0, SHARED_BUFFER_LEN);	// Clear shared_buffer
 		
 		// Search for starting boundary (support MIME types)
-		if(strstr(ppart, "application/mac-binary") != NULL)
+		if(strstr(payload, "application/mac-binary") != NULL)
 		{
-			px = strstr(ppart, "application/mac-binary");
+			px = strstr(payload, "application/mac-binary");
 			px += (strlen("application/mac-binary"));
 		}
-		else if(strstr(ppart, "application/macbinary") != NULL)
+		else if(strstr(payload, "application/macbinary") != NULL)
 		{
-			px = strstr(ppart, "application/macbinary");
+			px = strstr(payload, "application/macbinary");
 			px += (strlen("application/macbinary"));
 		}
-		else if(strstr(ppart, "application/octet-stream") != NULL)
+		else if(strstr(payload, "application/octet-stream") != NULL)
 		{
-			px = strstr(ppart, "application/octet-stream");
+			px = strstr(payload, "application/octet-stream");
 			px += (strlen("application/octet-stream"));
 		}
-		else if(strstr(ppart, "application/x-binary") != NULL)
+		else if(strstr(payload, "application/x-binary") != NULL)
 		{
-			px = strstr(ppart, "application/x-binary");
+			px = strstr(payload, "application/x-binary");
 			px += (strlen("application/x-binary"));
 		}
-		else if(strstr(ppart, "application/x-macbinary") != NULL)
+		else if(strstr(payload, "application/x-macbinary") != NULL)
 		{
-			px = strstr(ppart, "application/x-macbinary");
+			px = strstr(payload, "application/x-macbinary");
 			px += (strlen("application/x-macbinary"));
 		}
 		else
@@ -1286,11 +1289,11 @@ static uint8_t upload_handler(char *ppart, int len)
 	else
 	{
 		// Once starting boundary has been handled, the start of each payload is valid
-		px = ppart;
+		px = payload;
 	}
 	
 	// Search for ending boundary
-	py = ppart + len;
+	py = payload + len;
 	
 	i = 128;
 	while(i>0)
@@ -1300,9 +1303,9 @@ static uint8_t upload_handler(char *ppart, int len)
 		if((*(py-1)) == '\x2d' && (*(py-2)) == '\x2d' && (*(py-3)) == '\x2d' && (*(py-4)) == '\x2d')
 		{
 			// Store the discovered boundary
-			char tmpID[50] = {0};
+			char tmpID[BOUNDARY_MAX_LEN] = {0};
 			int z = 0;
-			while(z < 50 && *(py+z) != '\x2d' && *(py+z) != '\x0d' && *(py+z) != '\x0a')
+			while(z < BOUNDARY_MAX_LEN && *(py+z) != '\x2d' && *(py+z) != '\x0d' && *(py+z) != '\x0a')
 			{
 				tmpID[z] = *(py+z);
 				z++;
@@ -1326,6 +1329,7 @@ static uint8_t upload_handler(char *ppart, int len)
 			}
 			else
 			{
+				TRACE("http.c: boundary IDs do not match");
 				i = 1;
 				// 'i' will be decremented to 0 if this line is run
 			}
@@ -1339,7 +1343,7 @@ static uint8_t upload_handler(char *ppart, int len)
 		TRACE("http.c: ending boundary not found - ending data is valid");
 		
 		// Return ending pointer to the end
-		py = ppart + len;
+		py = payload + len;
 	}
 	else
 	{
@@ -1566,6 +1570,34 @@ static uint8_t upload_handler(char *ppart, int len)
 	{
 		return 1;
 	}
+}
+
+/*
+*	Upload cleanup function
+*
+*	Details:
+*		Handles variable cleanup for interrupted or failed firmware uploads
+*
+*	Parameters:
+*		pcb	 - TCP protocol control block
+*/
+static uint8_t upload_cleanup(struct tcp_pcb *pcb)
+{
+	file_upload = false;
+	boundary_start = 1;
+						
+	// upload failed
+	if(interfaceCreate_Upload_Complete(0))
+	{
+		http_send(&shared_buffer, pcb, 1);
+		TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+	}
+	else
+	{
+		TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+	}
+	
+	return;
 }
 
 static uint8_t Config_Network(char *payload, int len)
