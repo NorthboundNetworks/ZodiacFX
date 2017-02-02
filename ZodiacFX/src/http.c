@@ -3712,7 +3712,7 @@ static uint8_t interfaceCreate_Restart(void)
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
-		"<META http-equiv=\"refresh\" content=\"5; url=frames.html\">"\
+		"<META http-equiv=\"refresh\" content=\"10; url=frames.html\">"\
 		"<html>"\
 			"<head>"\
 				"<style>"\
