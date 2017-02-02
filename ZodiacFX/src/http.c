@@ -1791,7 +1791,7 @@ static uint8_t interfaceCreate_Frames(void)
 {
 	// Format HTTP response
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	// Send frames
 	strcat(shared_buffer, \
@@ -1847,7 +1847,7 @@ static uint8_t interfaceCreate_Header(void)
 	if(reset_required == false)
 	{
 		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-		strcat(shared_buffer,"Connection: close\r\n");
+		strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 		if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"<!DOCTYPE html>"\
@@ -1902,7 +1902,7 @@ static uint8_t interfaceCreate_Header(void)
 	else if(reset_required == true)
 	{
 		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-		strcat(shared_buffer,"Connection: close\r\n");
+		strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 			"<!DOCTYPE html>"\
@@ -1977,7 +1977,7 @@ static uint8_t interfaceCreate_Menu(void)
 {
 	// Send menu
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
@@ -2049,7 +2049,7 @@ static uint8_t interfaceCreate_Home(void)
 	int min = t/60;
 
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
@@ -2099,7 +2099,7 @@ static uint8_t interfaceCreate_Home(void)
 static uint8_t interfaceCreate_Upload(void)
 {
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
@@ -2232,7 +2232,7 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 static uint8_t interfaceCreate_Display_Home(void)
 {
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
@@ -2316,7 +2316,7 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 		}
 		
 		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-		strcat(shared_buffer,"Connection: close\r\n");
+		strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 			"<!DOCTYPE html>"\
@@ -2726,7 +2726,7 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 	}
 	
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
@@ -2786,7 +2786,7 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 static uint8_t interfaceCreate_Display_Flows(void)
 {
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
@@ -3284,7 +3284,7 @@ if (iLastFlow > 0)
 static uint8_t interfaceCreate_Config_Home(void)
 {
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
@@ -3336,7 +3336,7 @@ static uint8_t interfaceCreate_Config_Home(void)
 static uint8_t interfaceCreate_Config_Network(void)
 {
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
@@ -3404,7 +3404,7 @@ static uint8_t interfaceCreate_Config_VLANs(void)
 	
 	// Opening tags, and base table
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
@@ -3522,7 +3522,7 @@ static uint8_t interfaceCreate_Config_VLANs(void)
 static uint8_t interfaceCreate_Config_OpenFlow(void)
 {	
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
@@ -3660,7 +3660,7 @@ static uint8_t interfaceCreate_Config_OpenFlow(void)
 static uint8_t interfaceCreate_About(void)
 {
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
