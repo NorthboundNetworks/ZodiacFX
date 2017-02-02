@@ -78,12 +78,13 @@ static int boundary_start = 1;		// Check for start of data
 static uint8_t flowBase = 0;		// Current set of flows to display
 
 // Flag variables
-static bool reset_required;			// Track if any configuration changes are pending a restart
+static bool restart_required = false;		// Track if any configuration changes are pending a restart
 static bool file_upload = false;	// Multi-part firmware file upload flag
 
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
 void http_send(char *buffer, struct tcp_pcb *pcb, bool out);
+static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len);
 
 static uint8_t upload_handler(char *payload, int len);
 static uint8_t upload_cleanup(struct tcp_pcb *pcb);
@@ -145,9 +146,32 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 	tcp_recv(pcb, http_recv);
 	tcp_err(pcb, NULL);
 	tcp_poll(pcb, NULL, 4);
+	tcp_sent(pcb, http_sent);
 	return ERR_OK;
 }
 
+/*
+*	HTTP Sent callback function
+*
+*	@param *arg - pointer the additional TCP args
+*	@param *tcp_pcb - pointer the TCP session structure.
+*
+*/
+static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len)
+{
+	TRACE("http.c: [http_sent] %d bytes sent", len);
+	if(restart_required == true)
+	{
+		TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
+		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+		udc_detach();	// Detach the USB device before restart
+		rstc_start_software_reset(RSTC);	// Software reset
+		while (1);
+	}
+	
+	return ERR_OK;
+}
+	
 /*
 *	HTTP receive function
 *
@@ -508,11 +532,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 					}
-					TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
-					for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-					udc_detach();	// Detach the USB device before restart
-					rstc_start_software_reset(RSTC);	// Software reset
-					while (1);
+					restart_required = true;
 				}
 				else if(strcmp(http_msg,"btn_default") == 0)
 				{
@@ -1815,9 +1835,6 @@ static uint8_t Config_Network(char *payload, int len)
 	eeprom_write();
 	TRACE("http.c: config written to EEPROM");
 	
-	// Set update required flag
-	reset_required = true;
-	
 	return SUCCESS;
 	
 	// Send updated header page (with restart button)
@@ -1882,70 +1899,12 @@ static uint8_t interfaceCreate_Frames(void)
 */
 static uint8_t interfaceCreate_Header(void)
 {
-	reset_required = true;	// ***** Placeholder until frame refresh targeting is implemented
-	
 	int hr = (totaltime/2)/3600;
 	int t = (totaltime/2)%3600;
 	int min = t/60;
 
 	// Send header
-	if(reset_required == false)
-	{
-		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-		strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
-		if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-				"<!DOCTYPE html>"\
-				"<META http-equiv=\"refresh\" content=\"61\">"\
-				"<html>"\
-					"<head>"\
-					"<style>"\
-						"header {"\
-							"font-family:Sans-serif;"\
-							"position: absolute;"\
-							"top: 0;"\
-							"left: 0;"\
-							"width: 100%%;"\
-							"height: 100%%;"\
-							"overflow: hidden;"\
-							"color: white;"\
-							"background: black;"\
-						"}"\
-						"h1 {"\
-							"margin-top:20px;"\
-							"padding-left: 20px;"\
-						"}"\
-                		".info {"\
-							"font-family:Sans-serif;"\
-							"color: white;"\
-							"position: fixed;"\
-							"right: 150px;"\
-							"top: 30px;"\
-						"}"\
-					"</style>"\
-					"</head>"\
-					"<body>"\
-						"<header>"\
-							"<h1>Zodiac FX</h1>"\
-						"</header>"\
-                		"<div class=\"info\">"\
-							"Uptime: %02d:%02d"\
-						"</div>"\
-					"</body>"\
-				"</html>"\
-					, hr, min) < SHARED_BUFFER_LEN)
-		{
-			TRACE("http.c: html written to buffer");
-			return 1;
-		}
-		else
-		{
-			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
-			return 0;
-		}
-	}
-	else if(reset_required == true)
-	{
+	
 		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
 		strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
@@ -2011,7 +1970,6 @@ static uint8_t interfaceCreate_Header(void)
 		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
 		return 0;
 	}
-}
 }
 
 /*
