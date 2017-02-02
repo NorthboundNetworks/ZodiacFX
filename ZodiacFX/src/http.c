@@ -100,6 +100,7 @@ static uint8_t interfaceCreate_Config_Network(void);
 static uint8_t interfaceCreate_Config_VLANs(void);
 static uint8_t interfaceCreate_Config_OpenFlow(void);
 static uint8_t interfaceCreate_About(void);
+static uint8_t interfaceCreate_Restart(void);
 
 static uint8_t Config_Network(char *payload, int len);
 
@@ -265,7 +266,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				}
 			
 				// Check resource & serve page
-				if(http_msg[0] == '\0')
+				if(http_msg[0] == '\0' || strcmp(http_msg,"frames.html") == 0)
 				{
 					if(interfaceCreate_Frames())
 					{
@@ -506,6 +507,17 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				}
 				else if(strcmp(http_msg,"btn_restart") == 0)
 				{
+					if(interfaceCreate_Restart())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
+						return SUCCESS;
+					}
+					else
+					{
+						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+						return FAILURE;
+					}
 					TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
 					for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
 					udc_detach();	// Detach the USB device before restart
@@ -1947,7 +1959,7 @@ static uint8_t interfaceCreate_Header(void)
 						"<h1>Zodiac FX</h1>"\
 					"</header>"\
 					"<div class=\"wrapper\">"\
-						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart. This may take up to 30 seconds');\">"\
+						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart.');\" target=_top>"\
 							"<button name=\"btn\" value=\"btn_restart\">Restart</button>"\
 						"</form>"\
 					"</div>"\
@@ -2171,7 +2183,7 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 						"Current version: %s<br>"\
 						"Uploaded version: %s<br><br>"\
 						"Zodiac FX will be updated on the next restart.</p>"\
-						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart. This may take up to 30 seconds');\">"\
+						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart.');\" target=_top>"\
 							"<button name=\"btn\" value=\"btn_restart\">Restart</button>"\
 						"</form>"\
 					"</body>"\
@@ -3688,6 +3700,44 @@ static uint8_t interfaceCreate_About(void)
 						"- Feature<br>"\
 						"- Feature<br>"\
 					"</p>"\		*/
+			"</body>"\
+		"</html>"\
+				) < SHARED_BUFFER_LEN)
+	{
+		TRACE("http.c: html written to buffer");
+		return 1;
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}
+}
+
+static uint8_t interfaceCreate_Restart(void)
+{
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+		"<!DOCTYPE html>"\
+		"<META http-equiv=\"refresh\" content=\"5; url=frames.html\">"\
+		"<html>"\
+			"<head>"\
+				"<style>"\
+				"body {"\
+					"overflow: auto;"\
+					"font-family:Sans-serif;"\
+					"line-height: 1.2em;"\
+					"font-size: 17px;"\
+					"margin-left: 20px;"\
+				"}"\
+				"</style>"\
+			"</head>"\
+			"<body>"\
+					"<p>"\
+						"Restarting..."\
+					"</p>"\
 			"</body>"\
 		"</html>"\
 				) < SHARED_BUFFER_LEN)
