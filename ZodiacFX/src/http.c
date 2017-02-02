@@ -503,12 +503,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
-						return SUCCESS;
 					}
 					else
 					{
 						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
-						return FAILURE;
 					}
 					TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
 					for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
@@ -1171,7 +1169,7 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 */
 static uint8_t upload_handler(char *payload, int len)
 {	
-	static char page[512] = {0};		// Storage for each page of data
+	static char page[IFLASH_PAGE_SIZE] = {0};		// Storage for each page of data
 	static uint16_t saved_bytes = 0;	// Persistent counter of unwritten data
 	uint16_t handled_bytes = 0;			// Counter of handled data
 	static char boundary_ID[BOUNDARY_MAX_LEN] = {0};	// Storage for boundary ID
@@ -1284,6 +1282,9 @@ static uint8_t upload_handler(char *payload, int len)
 			
 			// Starting boundary has been handled
 			boundary_start = 0;
+			
+			// Clear page array before use
+			memset(&page, 0, IFLASH_PAGE_SIZE);	// Clear shared_buffer
 		}
 	}
 	else
@@ -1364,7 +1365,7 @@ static uint8_t upload_handler(char *payload, int len)
 			/* Final page needs to be written */
 			
 			// Fill 512-byte array
-			while(saved_bytes < 512)
+			while(saved_bytes < IFLASH_PAGE_SIZE)
 			{
 				if(px < py)
 				{
@@ -1393,7 +1394,7 @@ static uint8_t upload_handler(char *payload, int len)
 				TRACE("http.c: final firmware page write FAILED");
 			}
 		}
-		else if(saved_bytes + len < 512)
+		else if(saved_bytes + len < IFLASH_PAGE_SIZE)
 		{
 			int max_len = saved_bytes + len;
 			// Fill existing partially-complete page with new data
@@ -1420,7 +1421,7 @@ static uint8_t upload_handler(char *payload, int len)
 		else
 		{
 			// Fill existing partially-complete page with new data
-			while(saved_bytes < 512 && handled_bytes < len)
+			while(saved_bytes < IFLASH_PAGE_SIZE && handled_bytes < len)
 			{
 				page[saved_bytes] = *px;
 				if(px < py)
@@ -1456,11 +1457,11 @@ static uint8_t upload_handler(char *payload, int len)
 
 	while(handled_bytes < data_len)
 	{
-		if(data_len - handled_bytes >= 512)
+		if(data_len - handled_bytes >= IFLASH_PAGE_SIZE)
 		{
 			// Fill 512-byte array
 			int j = 0;
-			while(j < 512)
+			while(j < IFLASH_PAGE_SIZE)
 			{
 				page[j] = *px;
 				if(px < py)
@@ -1517,7 +1518,7 @@ static uint8_t upload_handler(char *payload, int len)
 			
 			// Fill 512-byte array
 			int j = 0;
-			while(j < 512)
+			while(j < IFLASH_PAGE_SIZE)
 			{
 				if(px < py)
 				{
