@@ -50,6 +50,7 @@
 // Global variables
 struct netif gs_net_if;
 struct zodiac_config Zodiac_Config;
+struct integrity_check verify;
 int charcount, charcount_last;
 bool masterselect;
 bool stackenabled;

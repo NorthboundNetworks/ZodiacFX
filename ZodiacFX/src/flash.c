@@ -35,9 +35,11 @@
 #include "config_zodiac.h"
 #include "openflow/openflow.h"
 #include "trace.h"
+#include "command.h"
 
 // Global variables
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
+extern struct integrity_check verify;
 
 // Static variables
 static uint32_t page_addr;
@@ -147,11 +149,93 @@ void cli_update(void)
 	{
 		printf("Error: failed to write firmware to memory\r\n");
 	}
-	printf("Firmware upload complete - Restarting the Zodiac FX.\r\n");
-	for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
-	udc_detach();	// Detach the USB device before restart
-	rstc_start_software_reset(RSTC);	// Software reset
+	if(verification_check() == 0)
+	{
+		printf("Firmware upload complete - Restarting the Zodiac FX.\r\n");
+		for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
+		udc_detach();	// Detach the USB device before restart
+		rstc_start_software_reset(RSTC);	// Software reset
+	}
+	else
+	{
+		printf("\r\n");
+		printf("Firmware verification check failed\r\n");
+		printf("\r\n");
+	}
+
 	return;
+}
+
+/*
+*	Check test verification value in flash
+*
+*/
+int get_verification(void)
+{
+	char* pflash = (char*)(FLASH_BUFFER_END-1);
+	char* buffer_start = (char*)FLASH_BUFFER;
+	
+	while(((*pflash) == '\xFF' || (*pflash) == '\0') && pflash > buffer_start)
+	{
+		pflash--;
+	}
+
+	if(pflash > buffer_start)
+	{
+		pflash-=7;
+
+		//memcpy(value, pflash, 8);
+		memcpy(&verify, pflash, 8);
+		
+		return 1;
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+/*
+*	Verify firmware data
+*
+*/
+int verification_check(void)
+{
+	// Populate integrity_check verify structure variable
+	get_verification();
+	
+	if(verify.identifier != 'N')
+	{
+		return 1;
+	}
+	else if(verify.device != 'F')
+	{
+		return 2;
+	}
+	else
+	{
+		// Compare specified length and uploaded binary length
+		char* pflash = (char*)(FLASH_BUFFER_END-1);
+		char* buffer_start = (char*)FLASH_BUFFER;
+		
+		while(*(pflash-1) == '\xFF' || *(pflash-1) == '\0')
+		{
+			if(pflash == buffer_start)
+			{
+				return 3;
+			}
+			pflash--;
+		}
+
+		if((pflash-buffer_start) != (char*)verify.length)
+		{
+			return 4;
+		}
+		
+	}
+	
+	return 0;
+
 }
 
 /*

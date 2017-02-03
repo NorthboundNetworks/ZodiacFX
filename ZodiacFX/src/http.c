@@ -53,6 +53,7 @@ extern uint32_t uid_buf[4];	// Unique identifier
 extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];	// SHARED_BUFFER_LEN must never be reduced below 2048
+extern struct integrity_check verify;
 
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
@@ -72,7 +73,6 @@ extern int flash_write_page(uint8_t *flash_page);
 // Local Variables
 struct tcp_pcb *http_pcb;
 static char http_msg[64];			// Buffer for HTTP message filtering
-static char uploaded_version[5] = {0};
 static int page_ctr = 1;
 static int boundary_start = 1;		// Check for start of data
 static uint8_t flowBase = 0;		// Current set of flows to display
@@ -236,14 +236,29 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					boundary_start = 1;
 					//flash_clear_gpnvm(1);
 					// upload check
-					if(interfaceCreate_Upload_Complete(1))
+					if(verification_check() == 0)
 					{
-						http_send(&shared_buffer, pcb, 1);
-						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+						if(interfaceCreate_Upload_Complete(1))
+						{
+							http_send(&shared_buffer, pcb, 1);
+							TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+						}
+						else
+						{
+							TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+						}
 					}
 					else
 					{
-						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+						if(interfaceCreate_Upload_Complete(0))
+						{
+							http_send(&shared_buffer, pcb, 1);
+							TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+						}
+						else
+						{
+							TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+						}
 					}
 				}
 			}
@@ -1572,19 +1587,7 @@ static uint8_t upload_handler(char *payload, int len)
 	}	
 			
 	if(final)
-	{
-		// Retrieve version number from binary
-		char *pNN_check = py - NN_VERIFICATION_LEN;
-		int k = 0;
-			
-		while(k < 5)
-		{		
-			uploaded_version[k]	= *(pNN_check+4+k);
-			k++;
-		}
-		
-		TRACE("http.c: NN verification : %s", uploaded_version);
-						
+	{		
 		return 2;
 	}
 	else
@@ -2172,14 +2175,14 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 					"<body>"\
 						"<p>Firmware upload successful.<br><br>"\
 						"Current version: %s<br>"\
-						"Uploaded version: %s<br><br>"\
+						"Uploaded version: %d.%d<br><br>"\
 						"Zodiac FX will be updated on the next restart.</p>"\
 						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart.');\" target=_top>"\
 							"<button name=\"btn\" value=\"btn_restart\">Restart</button>"\
 						"</form>"\
 					"</body>"\
 				"</html>"\
-			, VERSION, uploaded_version) < SHARED_BUFFER_LEN)
+			, VERSION, (verify.version/100), (verify.version%100)) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html written to buffer");
 			return 1;

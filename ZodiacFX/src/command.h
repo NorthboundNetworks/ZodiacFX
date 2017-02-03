@@ -75,6 +75,16 @@ struct zodiac_config {
 } PACK_STRUCT_STRUCT;
 PACK_STRUCT_END
 
+PACK_STRUCT_BEGIN
+struct integrity_check
+{
+	uint8_t		identifier;
+	uint16_t	version;
+	uint32_t	length;
+	uint8_t		device;
+} PACK_STRUCT_STRUCT;
+PACK_STRUCT_END
+
 typedef struct arp_header {
 	uint8_t et_dest[6];  /**< Destination node */
 	uint8_t et_src[6];   /**< Source node */
