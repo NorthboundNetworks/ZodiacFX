@@ -2119,9 +2119,9 @@ static uint8_t interfaceCreate_Upload(void)
 					"<h2>Firmware Update</h2>"\
 				"</p>"\
 			"<body>"\
-				"<p>Browser firmware update is currently supported in Windows, with the following browsers:<br> - Chrome<br> - Firefox<br> - Edge<br> - Internet Explorer 11<br><br>"\
+				"<p>Browser firmware update is currently supported in the following browsers:<br> - Chrome (Windows & macOS)<br> - Firefox (Windows & macOS)<br> - Edge (Windows)<br> - Internet Explorer 11 (Windows)<br><br>"\
 				"Do not attempt an update with an unsupported browser.</p>"\
-				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\" onsubmit=\"return confirm('Firmware file will now be uploaded. This may take up to 2 minutes. DO NOT refresh the page while firmware update is in progress.');\">"\
+				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\" onsubmit=\"return confirm('Firmware file will now be uploaded. This may take up to 60 seconds. DO NOT refresh the page while firmware update is in progress.');\">"\
 					"<input type=\"file\" name =\"file\"><br><br>"\
 					"<input type=\"submit\" value=\"Upload File\"/>"\
 				"</form>"\
