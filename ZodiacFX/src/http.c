@@ -87,7 +87,6 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out);
 static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len);
 
 static uint8_t upload_handler(char *payload, int len);
-static uint8_t upload_cleanup(struct tcp_pcb *pcb);
 
 // HTML resources
 static uint8_t interfaceCreate_Frames(void);
@@ -222,7 +221,16 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				else
 				{
 					// Stop upload operation
-					upload_cleanup(pcb);
+					upload_handler(NULL, 0);	// Clean up upload operation
+					if(interfaceCreate_Upload_Complete(0))
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
 				}
 			}
 			else
@@ -238,6 +246,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					// upload check
 					if(verification_check() == 0)
 					{
+						upload_handler(NULL, 0);	// Clean up upload operation
 						if(interfaceCreate_Upload_Complete(1))
 						{
 							http_send(&shared_buffer, pcb, 1);
@@ -250,6 +259,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					}
 					else
 					{
+						upload_handler(NULL, 0);	// Clean up upload operation
 						if(interfaceCreate_Upload_Complete(0))
 						{
 							http_send(&shared_buffer, pcb, 1);
@@ -1203,16 +1213,27 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 *		len		- length of payload
 */
 static uint8_t upload_handler(char *payload, int len)
-{	
-	static char page[IFLASH_PAGE_SIZE] = {0};		// Storage for each page of data
-	static uint16_t saved_bytes = 0;	// Persistent counter of unwritten data
-	uint16_t handled_bytes = 0;			// Counter of handled data
+{
+	static char page[IFLASH_PAGE_SIZE] = {0};			// Storage for each page of data
+	static uint16_t saved_bytes = 0;					// Persistent counter of unwritten data
+	uint16_t handled_bytes = 0;							// Counter of handled data
 	static char boundary_ID[BOUNDARY_MAX_LEN] = {0};	// Storage for boundary ID
+
+	if(payload == NULL || len == 0)
+	{
+		// Clean up upload handler (on interrupted/failed upload)
+		memset(&page, 0, IFLASH_PAGE_SIZE);				// Clear page storage
+		memset(&boundary_ID, 0, BOUNDARY_MAX_LEN);		// Clear boundary storage
+		saved_bytes = 0;								// Clear saved byte counter
+		file_upload = false;							// Clear file upload flag
+		boundary_start = 1;								// Set starting boundary required flag
+		return 1;
+	}
 	
-	char *px;	// Start address pointer
-	char *py;	// End address pointer
+	char *px;			// Start address pointer
+	char *py;			// End address pointer
 	int i = 0;
-	int final = 0;
+	int final = 0;		// Final page flag (set after ending boundary is found)
 	int data_len = 0;	// Length of actual upload data
 	
 	TRACE("http.c: -- upload handler received %d payload bytes", len)
@@ -1594,34 +1615,6 @@ static uint8_t upload_handler(char *payload, int len)
 	{
 		return 1;
 	}
-}
-
-/*
-*	Upload cleanup function
-*
-*	Details:
-*		Handles variable cleanup for interrupted or failed firmware uploads
-*
-*	Parameters:
-*		pcb	 - TCP protocol control block
-*/
-static uint8_t upload_cleanup(struct tcp_pcb *pcb)
-{
-	file_upload = false;
-	boundary_start = 1;
-						
-	// upload failed
-	if(interfaceCreate_Upload_Complete(0))
-	{
-		http_send(&shared_buffer, pcb, 1);
-		TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-	}
-	else
-	{
-		TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-	}
-	
-	return;
 }
 
 static uint8_t Config_Network(char *payload, int len)
