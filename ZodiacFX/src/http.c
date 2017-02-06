@@ -222,7 +222,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				{
 					// Stop upload operation
 					upload_handler(NULL, 0);	// Clean up upload operation
-					if(interfaceCreate_Upload_Complete(0))
+					if(interfaceCreate_Upload_Complete(2))
 					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
@@ -260,7 +260,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					else
 					{
 						upload_handler(NULL, 0);	// Clean up upload operation
-						if(interfaceCreate_Upload_Complete(0))
+						if(interfaceCreate_Upload_Complete(3))
 						{
 							http_send(&shared_buffer, pcb, 1);
 							TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
@@ -2167,15 +2167,13 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 						"</p>"\
 					"<body>"\
 						"<p>Firmware upload successful.<br><br>"\
-						"Current version: %s<br>"\
-						"Uploaded version: %d.%d<br><br>"\
 						"Zodiac FX will be updated on the next restart.</p>"\
 						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart.');\" target=_top>"\
 							"<button name=\"btn\" value=\"btn_restart\">Restart</button>"\
 						"</form>"\
 					"</body>"\
 				"</html>"\
-			, VERSION, (verify.version/100), (verify.version%100)) < SHARED_BUFFER_LEN)
+			) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html written to buffer");
 			return 1;
@@ -2188,7 +2186,7 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 	}
 	else
 	{
-		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 			"<!DOCTYPE html>"\
 				"<html>"\
 					"<head>"\
@@ -2207,11 +2205,30 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 							"<h2>Firmware Update</h2>"\
 						"</p>"\
 					"<body>"\
-						"<p>Firmware upload failed. Please try again.<br><br>"\
-						"Current version: %s<br><br>"\
+				);
+		if(sel == 2)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+						"<p>Firmware upload interrupted. Please try again.<br><br>"\
+				);
+		}
+		else if(sel == 3)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+						"<p>Firmware upload failed. Unable to verify firmware. Please try again, or check the integrity of the firmware.<br><br>"\
+				);
+		}
+		else
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+			"<p>Firmware upload failed. Please try again.<br><br>"\
+			);
+		}
+				
+		if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 					"</body>"\
 				"</html>"\
-			, VERSION) < SHARED_BUFFER_LEN)
+				) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html written to buffer");
 			return 1;

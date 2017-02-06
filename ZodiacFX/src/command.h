@@ -78,10 +78,9 @@ PACK_STRUCT_END
 PACK_STRUCT_BEGIN
 struct integrity_check
 {
-	uint8_t		identifier;
-	uint16_t	version;
+	uint8_t		signature[2];
 	uint32_t	length;
-	uint8_t		device;
+	uint8_t		device[2];
 } PACK_STRUCT_STRUCT;
 PACK_STRUCT_END
 

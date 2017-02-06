@@ -204,11 +204,11 @@ int verification_check(void)
 	// Populate integrity_check verify structure variable
 	get_verification();
 	
-	if(verify.identifier != 'N')
+	if(!(verify.signature[0] == 'N' && verify.signature[1] == 'N'))
 	{
 		return 1;
 	}
-	else if(verify.device != 'F')
+	else if(!(verify.device[0] == 'F' && verify.device[1] == 'X'))
 	{
 		return 2;
 	}
