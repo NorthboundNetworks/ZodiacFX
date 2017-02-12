@@ -53,6 +53,7 @@ extern uint32_t uid_buf[4];	// Unique identifier
 extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];	// SHARED_BUFFER_LEN must never be reduced below 2048
+extern struct integrity_check verify;
 
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
@@ -71,14 +72,23 @@ extern int flash_write_page(uint8_t *flash_page);
 
 // Local Variables
 struct tcp_pcb *http_pcb;
-char http_msg[64];			// Buffer for HTTP message filtering
+static char http_msg[64];			// Buffer for HTTP message filtering
+static int page_ctr = 1;
+static int boundary_start = 1;		// Check for start of data
+static uint8_t flowBase = 0;		// Current set of flows to display
+
+// Flag variables
+static bool restart_required = false;		// Track if any configuration changes are pending a restart
 static bool file_upload = false;	// Multi-part firmware file upload flag
-bool reset_required;
 
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
 void http_send(char *buffer, struct tcp_pcb *pcb, bool out);
+static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len);
 
+static uint8_t upload_handler(char *payload, int len);
+
+// HTML resources
 static uint8_t interfaceCreate_Frames(void);
 static uint8_t interfaceCreate_Header(void);
 static uint8_t interfaceCreate_Menu(void);
@@ -94,13 +104,11 @@ static uint8_t interfaceCreate_Config_Network(void);
 static uint8_t interfaceCreate_Config_VLANs(void);
 static uint8_t interfaceCreate_Config_OpenFlow(void);
 static uint8_t interfaceCreate_About(void);
+static uint8_t interfaceCreate_Restart(void);
 
-static uint8_t upload_handler(char *ppart, int len);
-static char uploaded_version[5] = {0};
-static int page_ctr = 1;
-static int boundary_start = 1;		// Check for start of data
+// Configuration functions
+static uint8_t Config_Network(char *payload, int len);
 
-static uint8_t flowBase = 0;		// Current set of flows to display
 
 /*
 *	Converts a 64bit value from host to network format
@@ -137,15 +145,39 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 	tcp_recv(pcb, http_recv);
 	tcp_err(pcb, NULL);
 	tcp_poll(pcb, NULL, 4);
+	tcp_sent(pcb, http_sent);
 	return ERR_OK;
 }
 
+/*
+*	HTTP Sent callback function
+*
+*	@param *arg - pointer the additional TCP args
+*	@param *tcp_pcb - pointer the TCP session structure.
+*
+*/
+static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len)
+{
+	TRACE("http.c: [http_sent] %d bytes sent", len);
+	if(restart_required == true)
+	{
+		TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
+		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+		udc_detach();	// Detach the USB device before restart
+		rstc_start_software_reset(RSTC);	// Software reset
+		while (1);
+	}
+	
+	return ERR_OK;
+}
+	
 /*
 *	HTTP receive function
 *
 */
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
-{
+{	
+	// Local variables
 	int len;
 	int i = 0;
 	char *http_payload;
@@ -188,11 +220,9 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				}
 				else
 				{
-					file_upload = false;
-					boundary_start = 1;
-					
-					// upload failed
-					if(interfaceCreate_Upload_Complete(0))
+					// Stop upload operation
+					upload_handler(NULL, 0);	// Clean up upload operation
+					if(interfaceCreate_Upload_Complete(2))
 					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
@@ -214,14 +244,31 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					boundary_start = 1;
 					//flash_clear_gpnvm(1);
 					// upload check
-					if(interfaceCreate_Upload_Complete(1))
+					if(verification_check() == 0)
 					{
-						http_send(&shared_buffer, pcb, 1);
-						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+						upload_handler(NULL, 0);	// Clean up upload operation
+						if(interfaceCreate_Upload_Complete(1))
+						{
+							http_send(&shared_buffer, pcb, 1);
+							TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+						}
+						else
+						{
+							TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+						}
 					}
 					else
 					{
-						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+						upload_handler(NULL, 0);	// Clean up upload operation
+						if(interfaceCreate_Upload_Complete(3))
+						{
+							http_send(&shared_buffer, pcb, 1);
+							TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+						}
+						else
+						{
+							TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+						}
 					}
 				}
 			}
@@ -235,10 +282,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				http_msg[i] = http_payload[i];
 				i++;
 			}
-			TRACE("http.c: %s method received", http_msg);
 	
 			if(strcmp(http_msg,"GET") == 0)
 			{			
+				TRACE("http.c: GET method received");
 				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 			
 				// Specified resource directly follows GET
@@ -259,7 +306,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				}
 			
 				// Check resource & serve page
-				if(http_msg[0] == '\0')
+				if(http_msg[0] == '\0' || strcmp(http_msg,"frames.html") == 0)
 				{
 					if(interfaceCreate_Frames())
 					{
@@ -445,6 +492,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			}
 			else if(strcmp(http_msg,"POST") == 0)
 			{
+				TRACE("http.c: POST method received");
 				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 
 				// Specified resource directly follows POST
@@ -476,220 +524,31 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				}
 				else if(strcmp(http_msg,"save_config") == 0)
 				{
-					memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
-				
-					// Device Name
-					pdat = strstr(http_payload, "wi_deviceName");	// Search for element
-					if(pdat != NULL)	// Check that element exists
+					if(Config_Network(&http_payload, len) == SUCCESS)
 					{
-						pdat += (strlen("wi_deviceName")+1);	// Data format: wi_deviceName=(name)
-					
-						i = 0;
-						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-						{
-							http_msg[i] = pdat[i];	// Store value of element
-							i++;
-						}
-						if(pdat[i+1] == 'w')	// Check that the next parameter directly follows the "&" at end of data
-						{
-							uint8_t namelen = strlen(http_msg);
-							if (namelen > 15 ) namelen = 15; // Make sure name is less than 16 characters
-							sprintf(Zodiac_Config.device_name, http_msg, namelen);
-							TRACE("http.c: device name set to '%s'",Zodiac_Config.device_name);
-						}
-						else
-						{
-							TRACE("http.c: \"&\" cannot be used in device name");
-						}
-					}
-					else
-					{
-						TRACE("http.c: no device name found");
-					}
-				
-					memset(&http_msg, 0, sizeof(http_msg));
-								
-					// MAC Address
-					pdat = strstr(http_payload, "wi_macAddress");
-					if(pdat != NULL)	// Check that element exists
-					{
-						pdat += (strlen("wi_macAddress")+1);	// Data format: wi_deviceName=(name)
-					
-						i = 0;
-						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-						{
-							http_msg[i] = pdat[i];	// Store value of element
-							i++;
-						}
-						if(pdat[i+1] == 'w')
-						{
-							int mac1,mac2,mac3,mac4,mac5,mac6;
-							char decArr[18] = "";
-							int j, k;
-						
-							if (strlen(http_msg) != 27 )	// Accounting for ":" as "%3A"
-							{
-								TRACE("http.c: incorrect MAC address format");
-								return;
-							}
-						
-							// Decode http string
-							j = 0; k = 0;
-							while(j < strlen(http_msg) && k < 18)
-							{
-								if(http_msg[j] == '%' && http_msg[j+1] == '3' && http_msg[j+2] == 'A')
-								{
-									decArr[k] = ':';
-									j+=3; k++;
-								}
-								else
-								{
-									decArr[k] = http_msg[j];
-									j++; k++;
-								}
-							}
-						
-							sscanf(decArr, "%x:%x:%x:%x:%x:%x", &mac1, &mac2, &mac3, &mac4, &mac5, &mac6);
-							Zodiac_Config.MAC_address[0] = mac1;
-							Zodiac_Config.MAC_address[1] = mac2;
-							Zodiac_Config.MAC_address[2] = mac3;
-							Zodiac_Config.MAC_address[3] = mac4;
-							Zodiac_Config.MAC_address[4] = mac5;
-							Zodiac_Config.MAC_address[5] = mac6;
-							TRACE("http.c: MAC address set to %.2X:%.2X:%.2X:%.2X:%.2X:%.2X",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
-						}
-						else
-						{
-							TRACE("http.c: \"&\" cannot be used in form");
-						}
-					}
-					else
-					{
-						TRACE("http.c: no MAC address found");
-					}
-				
-					memset(&http_msg, 0, sizeof(http_msg));
-								
-					// IP Address
-					pdat = strstr(http_payload, "wi_ipAddress");
-					if(pdat != NULL)	// Check that element exists
-					{
-						pdat += (strlen("wi_ipAddress")+1);	// Data format: wi_deviceName=(name)
-									
-						i = 0;
-						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-						{
-							http_msg[i] = pdat[i];	// Store value of element
-							i++;
-						}
-						if(pdat[i+1] == 'w')
-						{
-							int ip1,ip2,ip3,ip4;
-							if (strlen(http_msg) > 15 )
-							{
-								TRACE("http.c: incorrect IP format");
-								return;
-							}
-							sscanf(http_msg, "%d.%d.%d.%d", &ip1, &ip2,&ip3,&ip4);
-							Zodiac_Config.IP_address[0] = ip1;
-							Zodiac_Config.IP_address[1] = ip2;
-							Zodiac_Config.IP_address[2] = ip3;
-							Zodiac_Config.IP_address[3] = ip4;
-							TRACE("http.c: IP address set to %d.%d.%d.%d" , Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1], Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]);
-						}
-						else
-						{
-							TRACE("http.c: \"&\" cannot be used in form");
-						}
-					}
-					else
-					{
-						TRACE("http.c: no IP address found");
-					}
-		
-					memset(&http_msg, 0, sizeof(http_msg));
-								
-					// Netmask
-					pdat = strstr(http_payload, "wi_netmask");
-					if(pdat != NULL)	// Check that element exists
-					{
-						pdat += (strlen("wi_netmask")+1);	// Data format: wi_deviceName=(name)
-									
-						i = 0;
-						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
-						{
-							http_msg[i] = pdat[i];	// Store value of element
-							i++;
-						}
-						if(pdat[i+1] == 'w')
-						{
-							int nm1,nm2,nm3,nm4;
-							if (strlen(http_msg) > 15 )
-							{
-								TRACE("http.c: incorrect netmask format");
-								return;
-							}
-							sscanf(http_msg, "%d.%d.%d.%d", &nm1, &nm2,&nm3,&nm4);
-							Zodiac_Config.netmask[0] = nm1;
-							Zodiac_Config.netmask[1] = nm2;
-							Zodiac_Config.netmask[2] = nm3;
-							Zodiac_Config.netmask[3] = nm4;
-							TRACE("http.c: netmask set to %d.%d.%d.%d" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);				
-						}
-						else
-						{
-							TRACE("http.c: \"&\" cannot be used in form");
-						}
-					}
-					else
-					{
-						TRACE("http.c: no netmask found");
-					}
-				
-					memset(&http_msg, 0, sizeof(http_msg));
+						TRACE("http.c: network configuration successful");
 							
-					// Gateway	
-					pdat = strstr(http_payload, "wi_gateway");
-					if(pdat != NULL)	// Check that element exists
-					{
-						pdat += (strlen("wi_gateway")+1);	// Data format: wi_deviceName=(name)
-									
-						i = 0;
-						while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+						// Send updated config page
+						if(interfaceCreate_Config_Network())
 						{
-							http_msg[i] = pdat[i];	// Store value of element
-							i++;
+							http_send(&shared_buffer, pcb, 1);
+							TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
+							return SUCCESS;
 						}
-					
-						// No next 'w' character check as this is the last element
-					
-						int gw1,gw2,gw3,gw4;
-						if (strlen(http_msg) > 15 )
+						else
 						{
-							TRACE("http.c: incorrect gateway format");
-							return;
+							TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+							return FAILURE;
 						}
-						sscanf(http_msg, "%d.%d.%d.%d", &gw1, &gw2,&gw3,&gw4);
-						Zodiac_Config.gateway_address[0] = gw1;
-						Zodiac_Config.gateway_address[1] = gw2;
-						Zodiac_Config.gateway_address[2] = gw3;
-						Zodiac_Config.gateway_address[3] = gw4;
-						TRACE("http.c: gateway set to %d.%d.%d.%d" , Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
 					}
 					else
 					{
-						TRACE("http.c: no gateway address found");
+						TRACE("http.c: ERROR: network configuration failed");
 					}
-				
-					// Save configuration to EEPROM
-					eeprom_write();
-					TRACE("http.c: config written to EEPROM");
-				
-					// Set update required flag
-					reset_required = true;
-				
-					// Send updated config page
-					if(interfaceCreate_Config_Network())
+				}
+				else if(strcmp(http_msg,"btn_restart") == 0)
+				{
+					if(interfaceCreate_Restart())
 					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
@@ -698,22 +557,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 					}
-								
-					// Send updated header page (with restart button)
-				
-						// ***** Placeholder until frame refresh targeting is implemented
-						//
-						//
-						//
-					
-				}
-				else if(strcmp(http_msg,"btn_restart") == 0)
-				{
-					TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
-					for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-					udc_detach();	// Detach the USB device before restart
-					rstc_start_software_reset(RSTC);	// Software reset
-					while (1);
+					restart_required = true;
 				}
 				else if(strcmp(http_msg,"btn_default") == 0)
 				{
@@ -1305,7 +1149,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			}
 			else
 			{
-				TRACE("http.c: WARNING: unknown HTTP method received");
+				TRACE("http.c: unknown HTTP method received");
 			}
 		}
 	}
@@ -1328,7 +1172,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 /*
 *	HTTP Send function
 *
-*	Parameter:
+*	Parameters:
 *		out - specify whether TCP packet should be sent
 */
 void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
@@ -1344,7 +1188,7 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 	{
 		// Write data to tcp buffer
 		err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
-		TRACE("http.c: sending %d bytes to TCP stack, %d REMAINING in buffer", len, (buf_size - len));
+		TRACE("http.c: tcp buffer %d/%d", len, buf_size);
 
 		// Check if more data needs to be written
 		if(out == true)
@@ -1358,17 +1202,38 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 	return;
 }
 
-static uint8_t upload_handler(char *ppart, int len)
-{	
-	static char page[512] = {0};		// Storage for each page of data
-	static uint16_t saved_bytes = 0;	// Persistent counter of unwritten data
-	uint16_t handled_bytes = 0;			// Counter of handled data
-	static char boundary_ID[50] = {0};	// Storage for boundary ID
+/*
+*	Upload handler function
+*
+*	Details:
+*		Handles part-by-part firmware upload process
+*
+*	Parameters:
+*		payload	- pointer to payload data
+*		len		- length of payload
+*/
+static uint8_t upload_handler(char *payload, int len)
+{
+	static char page[IFLASH_PAGE_SIZE] = {0};			// Storage for each page of data
+	static uint16_t saved_bytes = 0;					// Persistent counter of unwritten data
+	uint16_t handled_bytes = 0;							// Counter of handled data
+	static char boundary_ID[BOUNDARY_MAX_LEN] = {0};	// Storage for boundary ID
+
+	if(payload == NULL || len == 0)
+	{
+		// Clean up upload handler (on interrupted/failed upload)
+		memset(&page, 0, IFLASH_PAGE_SIZE);				// Clear page storage
+		memset(&boundary_ID, 0, BOUNDARY_MAX_LEN);		// Clear boundary storage
+		saved_bytes = 0;								// Clear saved byte counter
+		file_upload = false;							// Clear file upload flag
+		boundary_start = 1;								// Set starting boundary required flag
+		return 1;
+	}
 	
-	char *px;	// Start address pointer
-	char *py;	// End address pointer
+	char *px;			// Start address pointer
+	char *py;			// End address pointer
 	int i = 0;
-	int final = 0;
+	int final = 0;		// Final page flag (set after ending boundary is found)
 	int data_len = 0;	// Length of actual upload data
 	
 	TRACE("http.c: -- upload handler received %d payload bytes", len)
@@ -1382,7 +1247,7 @@ static uint8_t upload_handler(char *ppart, int len)
 		i = 0;
 		while(i < len)
 		{
-			shared_buffer[i] = ppart[i];
+			shared_buffer[i] = payload[i];
 			i++;
 		}
 			
@@ -1394,6 +1259,7 @@ static uint8_t upload_handler(char *ppart, int len)
 		}
 		else
 		{
+			memset(&boundary_ID, 0, BOUNDARY_MAX_LEN);
 			// Traverse forward until the ID begins
 			while(*px == '\x2d')
 			{
@@ -1401,7 +1267,7 @@ static uint8_t upload_handler(char *ppart, int len)
 			}
 			// Store entirety of boundary ID
 			i = 0;
-			while(i < 50 && *px != '\x2d' && *px != '\x0d' && *px != '\x0a')
+			while(i < BOUNDARY_MAX_LEN && *px != '\x2d' && *px != '\x0d' && *px != '\x0a')
 			{
 				boundary_ID[i] = *px;
 			
@@ -1414,29 +1280,29 @@ static uint8_t upload_handler(char *ppart, int len)
 		memset(&shared_buffer, 0, SHARED_BUFFER_LEN);	// Clear shared_buffer
 		
 		// Search for starting boundary (support MIME types)
-		if(strstr(ppart, "application/mac-binary") != NULL)
+		if(strstr(payload, "application/mac-binary") != NULL)
 		{
-			px = strstr(ppart, "application/mac-binary");
+			px = strstr(payload, "application/mac-binary");
 			px += (strlen("application/mac-binary"));
 		}
-		else if(strstr(ppart, "application/macbinary") != NULL)
+		else if(strstr(payload, "application/macbinary") != NULL)
 		{
-			px = strstr(ppart, "application/macbinary");
+			px = strstr(payload, "application/macbinary");
 			px += (strlen("application/macbinary"));
 		}
-		else if(strstr(ppart, "application/octet-stream") != NULL)
+		else if(strstr(payload, "application/octet-stream") != NULL)
 		{
-			px = strstr(ppart, "application/octet-stream");
+			px = strstr(payload, "application/octet-stream");
 			px += (strlen("application/octet-stream"));
 		}
-		else if(strstr(ppart, "application/x-binary") != NULL)
+		else if(strstr(payload, "application/x-binary") != NULL)
 		{
-			px = strstr(ppart, "application/x-binary");
+			px = strstr(payload, "application/x-binary");
 			px += (strlen("application/x-binary"));
 		}
-		else if(strstr(ppart, "application/x-macbinary") != NULL)
+		else if(strstr(payload, "application/x-macbinary") != NULL)
 		{
-			px = strstr(ppart, "application/x-macbinary");
+			px = strstr(payload, "application/x-macbinary");
 			px += (strlen("application/x-macbinary"));
 		}
 		else
@@ -1472,16 +1338,19 @@ static uint8_t upload_handler(char *ppart, int len)
 			
 			// Starting boundary has been handled
 			boundary_start = 0;
+			
+			// Clear page array before use
+			memset(&page, 0, IFLASH_PAGE_SIZE);	// Clear shared_buffer
 		}
 	}
 	else
 	{
 		// Once starting boundary has been handled, the start of each payload is valid
-		px = ppart;
+		px = payload;
 	}
 	
 	// Search for ending boundary
-	py = ppart + len;
+	py = payload + len;
 	
 	i = 128;
 	while(i>0)
@@ -1491,9 +1360,9 @@ static uint8_t upload_handler(char *ppart, int len)
 		if((*(py-1)) == '\x2d' && (*(py-2)) == '\x2d' && (*(py-3)) == '\x2d' && (*(py-4)) == '\x2d')
 		{
 			// Store the discovered boundary
-			char tmpID[50] = {0};
+			char tmpID[BOUNDARY_MAX_LEN] = {0};
 			int z = 0;
-			while(z < 50 && *(py+z) != '\x2d' && *(py+z) != '\x0d' && *(py+z) != '\x0a')
+			while(z < BOUNDARY_MAX_LEN && *(py+z) != '\x2d' && *(py+z) != '\x0d' && *(py+z) != '\x0a')
 			{
 				tmpID[z] = *(py+z);
 				z++;
@@ -1517,6 +1386,7 @@ static uint8_t upload_handler(char *ppart, int len)
 			}
 			else
 			{
+				TRACE("http.c: boundary IDs do not match");
 				i = 1;
 				// 'i' will be decremented to 0 if this line is run
 			}
@@ -1530,7 +1400,7 @@ static uint8_t upload_handler(char *ppart, int len)
 		TRACE("http.c: ending boundary not found - ending data is valid");
 		
 		// Return ending pointer to the end
-		py = ppart + len;
+		py = payload + len;
 	}
 	else
 	{
@@ -1551,7 +1421,7 @@ static uint8_t upload_handler(char *ppart, int len)
 			/* Final page needs to be written */
 			
 			// Fill 512-byte array
-			while(saved_bytes < 512)
+			while(saved_bytes < IFLASH_PAGE_SIZE)
 			{
 				if(px < py)
 				{
@@ -1580,7 +1450,7 @@ static uint8_t upload_handler(char *ppart, int len)
 				TRACE("http.c: final firmware page write FAILED");
 			}
 		}
-		else if(saved_bytes + len < 512)
+		else if(saved_bytes + len < IFLASH_PAGE_SIZE)
 		{
 			int max_len = saved_bytes + len;
 			// Fill existing partially-complete page with new data
@@ -1607,7 +1477,7 @@ static uint8_t upload_handler(char *ppart, int len)
 		else
 		{
 			// Fill existing partially-complete page with new data
-			while(saved_bytes < 512 && handled_bytes < len)
+			while(saved_bytes < IFLASH_PAGE_SIZE && handled_bytes < len)
 			{
 				page[saved_bytes] = *px;
 				if(px < py)
@@ -1643,11 +1513,11 @@ static uint8_t upload_handler(char *ppart, int len)
 
 	while(handled_bytes < data_len)
 	{
-		if(data_len - handled_bytes >= 512)
+		if(data_len - handled_bytes >= IFLASH_PAGE_SIZE)
 		{
 			// Fill 512-byte array
 			int j = 0;
-			while(j < 512)
+			while(j < IFLASH_PAGE_SIZE)
 			{
 				page[j] = *px;
 				if(px < py)
@@ -1704,7 +1574,7 @@ static uint8_t upload_handler(char *ppart, int len)
 			
 			// Fill 512-byte array
 			int j = 0;
-			while(j < 512)
+			while(j < IFLASH_PAGE_SIZE)
 			{
 				if(px < py)
 				{
@@ -1738,25 +1608,237 @@ static uint8_t upload_handler(char *ppart, int len)
 	}	
 			
 	if(final)
-	{
-		// Retrieve version number from binary
-		char *pNN_check = py - NN_VERIFICATION_LEN;
-		int k = 0;
-			
-		while(k < 5)
-		{		
-			uploaded_version[k]	= *(pNN_check+4+k);
-			k++;
-		}
-		
-		TRACE("http.c: NN verification : %s", uploaded_version);
-						
+	{		
 		return 2;
 	}
 	else
 	{
 		return 1;
 	}
+}
+
+static uint8_t Config_Network(char *payload, int len)
+{
+	int i = 0;
+	char *pdat;
+	
+	memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+	
+	// Device Name
+	pdat = strstr(payload, "wi_deviceName");	// Search for element
+	if(pdat != NULL)	// Check that element exists
+	{
+		pdat += (strlen("wi_deviceName")+1);	// Data format: wi_deviceName=(name)
+		
+		i = 0;
+		while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+		{
+			http_msg[i] = pdat[i];	// Store value of element
+			i++;
+		}
+		if(pdat[i+1] == 'w')	// Check that the next parameter directly follows the "&" at end of data
+		{
+			uint8_t namelen = strlen(http_msg);
+			if (namelen > 15 ) namelen = 15; // Make sure name is less than 16 characters
+			sprintf(Zodiac_Config.device_name, http_msg, namelen);
+			TRACE("http.c: device name set to '%s'",Zodiac_Config.device_name);
+		}
+		else
+		{
+			TRACE("http.c: \"&\" cannot be used in device name");
+		}
+	}
+	else
+	{
+		TRACE("http.c: no device name found");
+	}
+	
+	memset(&http_msg, 0, sizeof(http_msg));
+	
+	// MAC Address
+	pdat = strstr(payload, "wi_macAddress");
+	if(pdat != NULL)	// Check that element exists
+	{
+		pdat += (strlen("wi_macAddress")+1);	// Data format: wi_deviceName=(name)
+		
+		i = 0;
+		while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+		{
+			http_msg[i] = pdat[i];	// Store value of element
+			i++;
+		}
+		if(pdat[i+1] == 'w')
+		{
+			int mac1,mac2,mac3,mac4,mac5,mac6;
+			char decArr[18] = "";
+			int j, k;
+			
+			if (strlen(http_msg) != 27 )	// Accounting for ":" as "%3A"
+			{
+				TRACE("http.c: incorrect MAC address format");
+				return;
+			}
+			
+			// Decode http string
+			j = 0; k = 0;
+			while(j < strlen(http_msg) && k < 18)
+			{
+				if(http_msg[j] == '%' && http_msg[j+1] == '3' && http_msg[j+2] == 'A')
+				{
+					decArr[k] = ':';
+					j+=3; k++;
+				}
+				else
+				{
+					decArr[k] = http_msg[j];
+					j++; k++;
+				}
+			}
+			
+			sscanf(decArr, "%x:%x:%x:%x:%x:%x", &mac1, &mac2, &mac3, &mac4, &mac5, &mac6);
+			Zodiac_Config.MAC_address[0] = mac1;
+			Zodiac_Config.MAC_address[1] = mac2;
+			Zodiac_Config.MAC_address[2] = mac3;
+			Zodiac_Config.MAC_address[3] = mac4;
+			Zodiac_Config.MAC_address[4] = mac5;
+			Zodiac_Config.MAC_address[5] = mac6;
+			TRACE("http.c: MAC address set to %.2X:%.2X:%.2X:%.2X:%.2X:%.2X",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
+		}
+		else
+		{
+			TRACE("http.c: \"&\" cannot be used in form");
+		}
+	}
+	else
+	{
+		TRACE("http.c: no MAC address found");
+	}
+	
+	memset(&http_msg, 0, sizeof(http_msg));
+	
+	// IP Address
+	pdat = strstr(payload, "wi_ipAddress");
+	if(pdat != NULL)	// Check that element exists
+	{
+		pdat += (strlen("wi_ipAddress")+1);	// Data format: wi_deviceName=(name)
+		
+		i = 0;
+		while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+		{
+			http_msg[i] = pdat[i];	// Store value of element
+			i++;
+		}
+		if(pdat[i+1] == 'w')
+		{
+			int ip1,ip2,ip3,ip4;
+			if (strlen(http_msg) > 15 )
+			{
+				TRACE("http.c: incorrect IP format");
+				return;
+			}
+			sscanf(http_msg, "%d.%d.%d.%d", &ip1, &ip2,&ip3,&ip4);
+			Zodiac_Config.IP_address[0] = ip1;
+			Zodiac_Config.IP_address[1] = ip2;
+			Zodiac_Config.IP_address[2] = ip3;
+			Zodiac_Config.IP_address[3] = ip4;
+			TRACE("http.c: IP address set to %d.%d.%d.%d" , Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1], Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]);
+		}
+		else
+		{
+			TRACE("http.c: \"&\" cannot be used in form");
+		}
+	}
+	else
+	{
+		TRACE("http.c: no IP address found");
+	}
+	
+	memset(&http_msg, 0, sizeof(http_msg));
+	
+	// Netmask
+	pdat = strstr(payload, "wi_netmask");
+	if(pdat != NULL)	// Check that element exists
+	{
+		pdat += (strlen("wi_netmask")+1);	// Data format: wi_deviceName=(name)
+		
+		i = 0;
+		while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+		{
+			http_msg[i] = pdat[i];	// Store value of element
+			i++;
+		}
+		if(pdat[i+1] == 'w')
+		{
+			int nm1,nm2,nm3,nm4;
+			if (strlen(http_msg) > 15 )
+			{
+				TRACE("http.c: incorrect netmask format");
+				return;
+			}
+			sscanf(http_msg, "%d.%d.%d.%d", &nm1, &nm2,&nm3,&nm4);
+			Zodiac_Config.netmask[0] = nm1;
+			Zodiac_Config.netmask[1] = nm2;
+			Zodiac_Config.netmask[2] = nm3;
+			Zodiac_Config.netmask[3] = nm4;
+			TRACE("http.c: netmask set to %d.%d.%d.%d" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);
+		}
+		else
+		{
+			TRACE("http.c: \"&\" cannot be used in form");
+		}
+	}
+	else
+	{
+		TRACE("http.c: no netmask found");
+	}
+	
+	memset(&http_msg, 0, sizeof(http_msg));
+	
+	// Gateway
+	pdat = strstr(payload, "wi_gateway");
+	if(pdat != NULL)	// Check that element exists
+	{
+		pdat += (strlen("wi_gateway")+1);	// Data format: wi_deviceName=(name)
+		
+		i = 0;
+		while(i < 63 && (pdat[i] != '&') && (pdat[i] >= 31) && (pdat[i] <= 122))
+		{
+			http_msg[i] = pdat[i];	// Store value of element
+			i++;
+		}
+		
+		// No next 'w' character check as this is the last element
+		
+		int gw1,gw2,gw3,gw4;
+		if (strlen(http_msg) > 15 )
+		{
+			TRACE("http.c: incorrect gateway format");
+			return;
+		}
+		sscanf(http_msg, "%d.%d.%d.%d", &gw1, &gw2,&gw3,&gw4);
+		Zodiac_Config.gateway_address[0] = gw1;
+		Zodiac_Config.gateway_address[1] = gw2;
+		Zodiac_Config.gateway_address[2] = gw3;
+		Zodiac_Config.gateway_address[3] = gw4;
+		TRACE("http.c: gateway set to %d.%d.%d.%d" , Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
+	}
+	else
+	{
+		TRACE("http.c: no gateway address found");
+	}
+	
+	// Save configuration to EEPROM
+	eeprom_write();
+	TRACE("http.c: config written to EEPROM");
+	
+	return SUCCESS;
+	
+	// Send updated header page (with restart button)
+	
+	// ***** Placeholder until frame refresh targeting is implemented
+	//
+	//
+	//
 }
 
 /*
@@ -1767,7 +1849,7 @@ static uint8_t interfaceCreate_Frames(void)
 {
 	// Format HTTP response
 	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: close\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
 	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
 	// Send frames
 	strcat(shared_buffer, \
@@ -1813,68 +1895,16 @@ static uint8_t interfaceCreate_Frames(void)
 */
 static uint8_t interfaceCreate_Header(void)
 {
-	reset_required = true;	// ***** Placeholder until frame refresh targeting is implemented
-	
 	int hr = (totaltime/2)/3600;
 	int t = (totaltime/2)%3600;
 	int min = t/60;
 
 	// Send header
-	if(reset_required == false)
-	{
-		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
-				"<!DOCTYPE html>"\
-				"<META http-equiv=\"refresh\" content=\"61\">"\
-				"<html>"\
-					"<head>"\
-					"<style>"\
-						"header {"\
-							"font-family:Sans-serif;"\
-							"position: absolute;"\
-							"top: 0;"\
-							"left: 0;"\
-							"width: 100%%;"\
-							"height: 100%%;"\
-							"overflow: hidden;"\
-							"color: white;"\
-							"background: black;"\
-						"}"\
-						"h1 {"\
-							"margin-top:20px;"\
-							"padding-left: 20px;"\
-						"}"\
-                		".info {"\
-							"font-family:Sans-serif;"\
-							"color: white;"\
-							"position: fixed;"\
-							"right: 150px;"\
-							"top: 30px;"\
-						"}"\
-					"</style>"\
-					"</head>"\
-					"<body>"\
-						"<header>"\
-							"<h1>Zodiac FX</h1>"\
-						"</header>"\
-                		"<div class=\"info\">"\
-							"Uptime: %02d:%02d"\
-						"</div>"\
-					"</body>"\
-				"</html>"\
-					, hr, min) < SHARED_BUFFER_LEN)
-		{
-			TRACE("http.c: html written to buffer");
-			return 1;
-		}
-		else
-		{
-			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
-			return 0;
-		}
-	}
-	else if(reset_required == true)
-	{
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	
+		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+		strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 			"<!DOCTYPE html>"\
 			"<META http-equiv=\"refresh\" content=\"61\">"\
 			"<html>"\
@@ -1917,7 +1947,7 @@ static uint8_t interfaceCreate_Header(void)
 						"<h1>Zodiac FX</h1>"\
 					"</header>"\
 					"<div class=\"wrapper\">"\
-						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart. This may take up to 30 seconds');\">"\
+						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart.');\" target=_top>"\
 							"<button name=\"btn\" value=\"btn_restart\">Restart</button>"\
 						"</form>"\
 					"</div>"\
@@ -1937,7 +1967,6 @@ static uint8_t interfaceCreate_Header(void)
 		return 0;
 	}
 }
-}
 
 /*
 *	Create and format HTML for menu page
@@ -1946,7 +1975,10 @@ static uint8_t interfaceCreate_Header(void)
 static uint8_t interfaceCreate_Menu(void)
 {
 	// Send menu
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -2015,7 +2047,10 @@ static uint8_t interfaceCreate_Home(void)
 	int t = (totaltime/2)%3600;
 	int min = t/60;
 
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<META http-equiv=\"refresh\" content=\"61\">"\
 		"<html>"\
@@ -2062,7 +2097,10 @@ static uint8_t interfaceCreate_Home(void)
 */
 static uint8_t interfaceCreate_Upload(void)
 {
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -2081,9 +2119,9 @@ static uint8_t interfaceCreate_Upload(void)
 					"<h2>Firmware Update</h2>"\
 				"</p>"\
 			"<body>"\
-				"<p>Browser firmware update is currently supported in Windows, with the following browsers:<br> - Chrome<br> - Firefox<br> - Edge<br> - Internet Explorer 11<br><br>"\
+				"<p>Browser firmware update is currently supported in the following browsers:<br> - Chrome (Windows & macOS)<br> - Firefox (Windows & macOS)<br> - Edge (Windows)<br> - Internet Explorer 11 (Windows)<br><br>"\
 				"Do not attempt an update with an unsupported browser.</p>"\
-				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\" onsubmit=\"return confirm('Firmware file will now be uploaded. This may take up to 2 minutes. DO NOT refresh the page while firmware update is in progress.');\">"\
+				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\" onsubmit=\"return confirm('Firmware file will now be uploaded. This may take up to 60 seconds. DO NOT refresh the page while firmware update is in progress.');\">"\
 					"<input type=\"file\" name =\"file\"><br><br>"\
 					"<input type=\"submit\" value=\"Upload File\"/>"\
 				"</form>"\
@@ -2129,15 +2167,13 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 						"</p>"\
 					"<body>"\
 						"<p>Firmware upload successful.<br><br>"\
-						"Current version: %s<br>"\
-						"Uploaded version: %s<br><br>"\
 						"Zodiac FX will be updated on the next restart.</p>"\
-						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart. This may take up to 30 seconds');\">"\
+						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart.');\" target=_top>"\
 							"<button name=\"btn\" value=\"btn_restart\">Restart</button>"\
 						"</form>"\
 					"</body>"\
 				"</html>"\
-			, VERSION, uploaded_version) < SHARED_BUFFER_LEN)
+			) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html written to buffer");
 			return 1;
@@ -2150,7 +2186,7 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 	}
 	else
 	{
-		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 			"<!DOCTYPE html>"\
 				"<html>"\
 					"<head>"\
@@ -2169,11 +2205,30 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 							"<h2>Firmware Update</h2>"\
 						"</p>"\
 					"<body>"\
-						"<p>Firmware upload failed. Please try again.<br><br>"\
-						"Current version: %s<br><br>"\
+				);
+		if(sel == 2)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+						"<p>Firmware upload interrupted. Please try again.<br><br>"\
+				);
+		}
+		else if(sel == 3)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+						"<p>Firmware upload failed. Unable to verify firmware. Please try again, or check the integrity of the firmware.<br><br>"\
+				);
+		}
+		else
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+			"<p>Firmware upload failed. Please try again.<br><br>"\
+			);
+		}
+				
+		if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 					"</body>"\
 				"</html>"\
-			, VERSION) < SHARED_BUFFER_LEN)
+				) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html written to buffer");
 			return 1;
@@ -2192,7 +2247,10 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 */
 static uint8_t interfaceCreate_Display_Home(void)
 {
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -2272,8 +2330,11 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 				vlCtr++;
 			}
 		}
-
-		snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		
+		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+		strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 			"<!DOCTYPE html>"\
 			"<META http-equiv=\"refresh\" content=\"31\">"\
 			"<html>"\
@@ -2498,8 +2559,8 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						  "</tr>"\
 						"</table>"\
 						"<br>"\
-							"<input type=\"submit\" value=\"Save\">"\
-							"<input type=\"reset\" value=\"Cancel\"><br>"\
+							"<input type=\"submit\" name=\"ports_submit\" value=\"Save\">"\
+							"<input type=\"reset\" name=\"ports_cancel\" value=\"Cancel\"><br>"\
 						"</fieldset>"\
 						"</form>"\
 					"</body>"\
@@ -2577,8 +2638,8 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						  "</tr>"\
 						"</table>"\
 						"<br>"\
-							"<input type=\"submit\" value=\"Save\">"\
-							"<input type=\"reset\" value=\"Cancel\"><br>"\
+							"<input type=\"submit\" name=\"ports_submit\" value=\"Save\">"\
+							"<input type=\"reset\" name=\"ports_cancel\" value=\"Cancel\"><br>"\
 						"</fieldset>"\
 						"</form>"\
 					"</body>"\
@@ -2680,7 +2741,10 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 		snprintf(wi_ofVersion, 15, "Auto");
 	}
 	
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<META http-equiv=\"refresh\" content=\"31\">"\
 		"<html>"\
@@ -2737,7 +2801,10 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 */
 static uint8_t interfaceCreate_Display_Flows(void)
 {
-	snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -3232,7 +3299,10 @@ if (iLastFlow > 0)
 */
 static uint8_t interfaceCreate_Config_Home(void)
 {
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -3281,42 +3351,45 @@ static uint8_t interfaceCreate_Config_Home(void)
 */
 static uint8_t interfaceCreate_Config_Network(void)
 {
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
-		"<html>"\
-		"<head>"\
-		"<style>"\
-		"body {"\
-			"overflow: auto;"\
-			"font-family:Sans-serif;"\
-			"line-height: 1.2em;"\
-			"font-size: 17px;"\
-			"margin-left: 20px;"\
-		"}"\
-		"</style>"\
-		"</head>"\
-		"<body>"\
-		"<p>"\
-		"<h1>Network Configuration</h1>"\
-		"</p>"\
-		"<form style=\"width: 200px\" action=\"save_config\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes. Press the restart button on the top right for your changes to take effect.');\">"\
-		"<fieldset>"\
-		"<legend>Connection</legend>"\
-		"Name:<br>"\
-		"<input type=\"text\" name=\"wi_deviceName\" value=\"%s\"><br><br>"\
-		"MAC Address:<br>"\
-		"<input type=\"text\" name=\"wi_macAddress\" value=\"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X\"><br><br>"\
-		"IP Address:<br>"\
-		"<input type=\"text\" name=\"wi_ipAddress\" value=\"%d.%d.%d.%d\"><br><br>"\
-		"Netmask:<br>"\
-		"<input type=\"text\" name=\"wi_netmask\" value=\"%d.%d.%d.%d\"><br><br>"\
-		"Gateway:<br>"\
-		"<input type=\"text\" name=\"wi_gateway\" value=\"%d.%d.%d.%d\"><br><br>"\
-		"<input type=\"submit\" value=\"Save\">"\
-		"<input type=\"reset\" value=\"Cancel\">"\
-		"</fieldset>"\
-		"</form>"\
-		"</body>"\
+			"<html>"\
+				"<head>"\
+					"<style>"\
+					"body {"\
+						"overflow: auto;"\
+						"font-family:Sans-serif;"\
+						"line-height: 1.2em;"\
+						"font-size: 17px;"\
+						"margin-left: 20px;"\
+					"}"\
+					"</style>"\
+				"</head>"\
+			"<body>"\
+				"<p>"\
+					"<h1>Network Configuration</h1>"\
+				"</p>"\
+				"<form style=\"width: 200px\" action=\"save_config\" method=\"post\" onsubmit=\"return confirm('Zodiac FX needs to restart to apply changes. Press the restart button on the top right for your changes to take effect.');\">"\
+					"<fieldset>"\
+						"<legend>Connection</legend>"\
+						"Name:<br>"\
+						"<input type=\"text\" name=\"wi_deviceName\" value=\"%s\"><br><br>"\
+						"MAC Address:<br>"\
+						"<input type=\"text\" name=\"wi_macAddress\" value=\"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X\"><br><br>"\
+						"IP Address:<br>"\
+						"<input type=\"text\" name=\"wi_ipAddress\" value=\"%d.%d.%d.%d\"><br><br>"\
+						"Netmask:<br>"\
+						"<input type=\"text\" name=\"wi_netmask\" value=\"%d.%d.%d.%d\"><br><br>"\
+						"Gateway:<br>"\
+						"<input type=\"text\" name=\"wi_gateway\" value=\"%d.%d.%d.%d\"><br><br>"\
+						"<input type=\"submit\" value=\"Save\">"\
+						"<input type=\"reset\" value=\"Cancel\">"\
+					"</fieldset>"\
+				"</form>"\
+			"</body>"\
 		"</html>"\
 			, Zodiac_Config.device_name\
 			, Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]\
@@ -3346,7 +3419,10 @@ static uint8_t interfaceCreate_Config_VLANs(void)
 	char wi_vlType[10] = "";
 	
 	// Opening tags, and base table
-	snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -3461,7 +3537,10 @@ static uint8_t interfaceCreate_Config_VLANs(void)
 */
 static uint8_t interfaceCreate_Config_OpenFlow(void)
 {	
-	snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -3596,7 +3675,10 @@ static uint8_t interfaceCreate_Config_OpenFlow(void)
 */
 static uint8_t interfaceCreate_About(void)
 {
-	if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
@@ -3622,6 +3704,44 @@ static uint8_t interfaceCreate_About(void)
 						"- Feature<br>"\
 						"- Feature<br>"\
 					"</p>"\		*/
+			"</body>"\
+		"</html>"\
+				) < SHARED_BUFFER_LEN)
+	{
+		TRACE("http.c: html written to buffer");
+		return 1;
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}
+}
+
+static uint8_t interfaceCreate_Restart(void)
+{
+	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
+	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
+	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+		"<!DOCTYPE html>"\
+		"<META http-equiv=\"refresh\" content=\"10; url=frames.html\">"\
+		"<html>"\
+			"<head>"\
+				"<style>"\
+				"body {"\
+					"overflow: auto;"\
+					"font-family:Sans-serif;"\
+					"line-height: 1.2em;"\
+					"font-size: 17px;"\
+					"margin-left: 20px;"\
+				"}"\
+				"</style>"\
+			"</head>"\
+			"<body>"\
+					"<p>"\
+						"Restarting..."\
+					"</p>"\
 			"</body>"\
 		"</html>"\
 				) < SHARED_BUFFER_LEN)
