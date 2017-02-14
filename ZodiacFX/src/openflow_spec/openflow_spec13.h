@@ -449,6 +449,29 @@ enum ofp13_flow_mod_failed_code {
     OFPFMFC13_BAD_FLAGS    = 7,   /* Unsupported or unknown flags. */
 };
 
+/* ofp_error_msg 'code' values for OFPET_METER_MOD_FAILED.  'data' contains
+ * at least the first 64 bytes of the failed request. */
+enum ofp13_meter_mod_failed_code {
+    OFPMMFC13_UNKNOWN       = 0,  /* Unspecified error. */
+    OFPMMFC13_METER_EXISTS  = 1,  /* Meter not added because a Meter ADD
+                                 * attempted to replace an existing Meter. */
+    OFPMMFC13_INVALID_METER = 2,  /* Meter not added because Meter specified
+                                 * is invalid,
+                                 * or invalid meter in meter action. */
+    OFPMMFC13_UNKNOWN_METER = 3,  /* Meter not modified because a Meter MODIFY
+                                 * attempted to modify a non-existent Meter,
+                                 * or bad meter in meter action. */
+    OFPMMFC13_BAD_COMMAND   = 4,  /* Unsupported or unknown command. */
+    OFPMMFC13_BAD_FLAGS     = 5,  /* Flag configuration unsupported. */
+    OFPMMFC13_BAD_RATE      = 6,  /* Rate unsupported. */
+    OFPMMFC13_BAD_BURST     = 7,  /* Burst size unsupported. */
+    OFPMMFC13_BAD_BAND      = 8,  /* Band unsupported. */
+    OFPMMFC13_BAD_BAND_VALUE = 9, /* Band value unsupported. */
+    OFPMMFC13_OUT_OF_METERS = 10, /* No more meters available. */
+    OFPMMFC13_OUT_OF_BANDS  = 11, /* The maximum number of properties
+                                 * for a meter has been exceeded. */
+};
+
 /* ## ----------------- ## */
 /* ## OpenFlow Actions. ## */
 /* ## ----------------- ## */
