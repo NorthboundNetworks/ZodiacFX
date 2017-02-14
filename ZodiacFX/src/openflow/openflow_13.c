@@ -1693,9 +1693,11 @@ void meter_add13(struct ofp_header *msg)
 	}
 	TRACE("openflow_13.c: allocating %d bytes at %p for meter entry #%d", sizeof(struct meter_entry13), meter_entry[iLastMeter], iLastMeter+1);
 	
+	// Allocate space to store meter band(s)
+	
+	
 	// Copy meter configs over
 	
-	// Allocate space to store meter band(s)
 	
 	return;
 }
