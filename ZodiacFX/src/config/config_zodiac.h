@@ -48,4 +48,6 @@
 
 #define MAX_OF_STATS	15		// Maximum number of flows to send to controller
 
+#define MAX_METER_13	128		// Maximum number of meter entries in meter table
+
 #endif /* CONFIG_ZODIAC_H_ */

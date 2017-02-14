@@ -81,8 +81,15 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request * req
 int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *req);
 int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
 int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
+int multi_meter_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
+int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
+int multi_meter_features_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason, int flow);
 void packet_out13(struct ofp_header *msg);
+void meter_mod13(struct ofp_header *msg);
+void meter_add13(struct ofp_header *msg);
+void meter_modify13(struct ofp_header *msg);
+void meter_delete13(struct ofp_header *msg);
 
 /*
 *	Converts a 64bit value from host to network format
@@ -536,6 +543,20 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 			multi_pos += multi_portdesc_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 
+		if ( ntohs(multi_req->type) == OFPMP13_METER )
+		{
+			multi_pos += multi_meter_stats_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+		
+		if ( ntohs(multi_req->type) == OFPMP13_METER_CONFIG )
+		{
+			multi_pos += multi_meter_config_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+		
+		if ( ntohs(multi_req->type) == OFPMP13_METER_FEATURES )
+		{
+			multi_pos += multi_meter_features_reply13(&shared_buffer[multi_pos], multi_req);
+		}
 		
 		if ( htons(multi_req->type) == OFPMP13_TABLE_FEATURES )
 		{
@@ -557,6 +578,10 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 
 		case OFPT13_BARRIER_REQUEST:
 		barrier13_reply(ofph->xid);
+		break;
+		
+		case OFPT13_METER_MOD:
+		meter_mod13(ofph);
 		break;
 	};
 
@@ -1088,6 +1113,42 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 }
 
 /*
+*	Main OpenFlow Meter Statistics message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+int multi_meter_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request * req)
+{
+	TRACE("openflow_13.c: request for meter statistics");
+	return 0;
+}
+
+/*
+*	Main OpenFlow Meter Configuration message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request * req)
+{
+	TRACE("openflow_13.c: request for meter configuration");
+	return 0;
+}
+
+/*
+*	Main OpenFlow Meter Features message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+int multi_meter_features_reply13(uint8_t *buffer, struct ofp13_multipart_request * req)
+{
+	TRACE("openflow_13.c: request for meter features");
+	return 0;
+}
+
+/*
 *	Main OpenFlow FLOW_MOD message function
 *
 *	@param *msg - pointer to the OpenFlow message.
@@ -1559,6 +1620,75 @@ void barrier13_reply(uint32_t xid)
 	of_barrier.type   = OFPT13_BARRIER_REPLY;
 	of_barrier.xid = xid;
 	sendtcp(&of_barrier, sizeof(of_barrier));
+	return;
+}
+
+/*
+*	Main OpenFlow METER_MOD message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+void meter_mod13(struct ofp_header *msg)
+{
+	struct ofp13_meter_mod * ptr_mm;
+	ptr_mm = (struct ofp13_meter_mod *) msg;
+	
+	switch(ntohs(ptr_mm->command))
+	{
+		case OFPMC13_ADD:
+		meter_add13(msg);
+		break;
+
+		case OFPMC13_MODIFY:
+		meter_modify13(msg);
+		break;
+
+		case OFPMC13_DELETE:
+		meter_delete13(msg);
+		break;
+	}
+	
+	return;
+}
+
+/*
+*	OpenFlow METER_ADD function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+void meter_add13(struct ofp_header *msg)
+{
+	// ***** CHECK METER TABLE SIZE *****
+	
+	struct ofp13_meter_mod * ptr_mm;
+	ptr_mm = (struct ofp13_meter_mod *) msg;
+	
+	return;
+}
+
+/*
+*	OpenFlow METER_MODIFY function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+void meter_modify13(struct ofp_header *msg)
+{
+	
+	return;
+}
+
+/*
+*	OpenFlow METER_DELETE function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+void meter_delete13(struct ofp_header *msg)
+{
+	
 	return;
 }
 

@@ -801,10 +801,10 @@ enum ofp13_meter_band_type {
 
 /* Common header for all meter bands */
 struct ofp13_meter_band_header {
-    uint16_t        type;    /* One of OFPMBT_*. */
-    uint16_t        len;     /* Length in bytes of this band. */
-    uint32_t        rate;    /* Rate for this band. */
-    uint32_t        burst_size; /* Size of bursts. */
+    uint16_t        type;		/* One of OFPMBT_*. */
+    uint16_t        len;		/* Length in bytes of this band. */
+    uint32_t        rate;		/* Rate for this band. */
+    uint32_t        burst_size;	/* Size of bursts. */
 };
 
 /* OFPMBT_DROP band - drop packets */
@@ -856,9 +856,9 @@ enum ofp13_meter_flags {
 /* Meter configuration. OFPT_METER_MOD. */
 struct ofp13_meter_mod {
     struct ofp_header	header;
-    uint16_t            command;        /* One of OFPMC_*. */
-    uint16_t            flags;          /* Bitmap of OFPMF_* flags. */
-    uint32_t            meter_id;       /* Meter instance. */
+    uint16_t	command;        /* One of OFPMC_*. */
+    uint16_t	flags;          /* Bitmap of OFPMF_* flags. */
+    uint32_t	meter_id;       /* Meter instance. */
     struct ofp13_meter_band_header bands[0]; /* The band list length is
                                            inferred from the length field
                                            in the header. */
@@ -902,12 +902,12 @@ struct ofp13_meter_config {
 
 /* Body of reply to OFPMP_METER_FEATURES request. Meter features. */
 struct ofp13_meter_features {
-	uint32_t max_meter;		/* Maximum number of meters. */
-	uint32_t band_types;	/* Bitmaps of (1 << OFPMBT_*) values supported. */
-	uint32_t capabilities;	/* Bitmaps of "ofp_meter_flags". */
-	uint8_t max_bands;		/* Maximum bands per meters */
-	uint8_t max_color;		/* Maximum color value */
-	uint8_t pad[2];
+	uint32_t	max_meter;		/* Maximum number of meters. */
+	uint32_t	band_types;		/* Bitmaps of (1 << OFPMBT_*) values supported. */
+	uint32_t	capabilities;	/* Bitmaps of "ofp_meter_flags". */
+	uint8_t		max_bands;		/* Maximum bands per meters */
+	uint8_t		max_color;		/* Maximum color value */
+	uint8_t		pad[2];
 };
 
 /* ## -------------------------- ## */
