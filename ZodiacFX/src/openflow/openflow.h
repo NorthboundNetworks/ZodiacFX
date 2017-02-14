@@ -66,6 +66,24 @@ struct oxm_header13
 	uint8_t oxm_len;
 };
 
+/*
+*	OpenFlow meter entry structure
+*		Meter table is populated with these entries.
+*		The structure contains:
+*			- meter ID
+*			- counters
+*			- meter bands
+*/
+struct meter_entry13
+{
+	uint32_t	meter_id;
+	uint32_t	flow_count;			// Number of flows bound to meter
+	uint64_t	packet_in_count;	// Packets processed by meter
+	uint64_t	byte_in_count;		// Bytes processed by meter
+	uint32_t	duration_sec;		// Time meter has been alive in seconds.
+	struct ofp13_meter_band_stats band_stats[0];	// Bands
+};
+
 void task_openflow(void);
 void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
 void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
