@@ -51,7 +51,7 @@ extern int iLastFlow;
 extern int iLastMeter;
 extern int totaltime;
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
-extern struct meter_entry13 *meter_entries[MAX_METER_13];
+extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
@@ -1635,7 +1635,7 @@ void meter_mod13(struct ofp_header *msg)
 {
 	struct ofp13_meter_mod * ptr_mm;
 	ptr_mm = (struct ofp13_meter_mod *) msg;
-	
+		
 	switch(ntohs(ptr_mm->command))
 	{
 		case OFPMC13_ADD:
@@ -1662,8 +1662,9 @@ void meter_mod13(struct ofp_header *msg)
 */
 void meter_add13(struct ofp_header *msg)
 {
-	if(iLastMeter > (MAX_METER_13-1))
+	if(iLastMeter >= MAX_METER_13)
 	{
+		TRACE("openflow_13.c: unable to add meter - no more meters available");
 		of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_METERS);
 		return;
 	}
