@@ -1672,6 +1672,31 @@ void meter_add13(struct ofp_header *msg)
 	struct ofp13_meter_mod * ptr_mm;
 	ptr_mm = (struct ofp13_meter_mod *) msg;
 	
+	// Check for existing meter
+	for(int q=0;q<iLastMeter;q++)
+	{
+		if(ntohs(ptr_mm->meter_id) == meter_entry[0]->meter_id)
+		{
+			TRACE("openflow_13.c: unable to add meter - meter id already in use");
+			of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_METER_EXISTS);
+			return;
+		}
+	}
+	
+	// Allocate space to store meter entry
+	meter_entry[iLastMeter] = membag_alloc(sizeof(struct meter_entry13));
+	if (meter_entry[iLastMeter] == NULL)
+	{
+		TRACE("openflow_13.c: unable to allocate %d bytes of memory for meter entry #%d", sizeof(struct meter_entry13), iLastMeter+1);
+		of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_METERS);
+		return;
+	}
+	TRACE("openflow_13.c: allocating %d bytes at %p for meter entry #%d", sizeof(struct meter_entry13), meter_entry[iLastMeter], iLastMeter+1);
+	
+	// Copy meter configs over
+	
+	// Allocate space to store meter band(s)
+	
 	return;
 }
 
