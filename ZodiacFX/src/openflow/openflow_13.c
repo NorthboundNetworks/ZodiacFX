@@ -1728,8 +1728,10 @@ void meter_add13(struct ofp_header *msg)
 			ptr_band->rate			= ntohl(ptr_mm->bands[bands_processed].rate);
 			ptr_band->burst_size	= ntohl(ptr_mm->bands[bands_processed].burst_size);
 			
+			// ***** TODO : add error checking for band processing
 			TRACE("openflow_13.c: %d of %d bands processed", bands_processed, bands_received);
 			
+			// ***** TODO : increment ptr_band by size of band (12 or 16?)
 			bands_processed++;
 		} while (bands_processed < bands_received);
 	}
