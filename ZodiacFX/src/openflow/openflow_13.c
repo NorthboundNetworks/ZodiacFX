@@ -1724,7 +1724,7 @@ void meter_add13(struct ofp_header *msg)
 			ptr_band->rate			= ntohl(ptr_mm->bands[bands_processed].rate);
 			ptr_band->burst_size	= ntohl(ptr_mm->bands[bands_processed].burst_size);
 			
-			TRACE("openflow_13.c: %d/%d bands processed", bands_processed, bands_received);
+			TRACE("openflow_13.c: %d of %d bands processed", bands_processed, bands_received);
 			
 			bands_processed++;
 		} while (bands_processed < bands_received);
