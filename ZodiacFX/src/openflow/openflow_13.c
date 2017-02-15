@@ -48,7 +48,6 @@ extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
 extern bool rcv_freq;
 extern int iLastFlow;
-extern int iLastMeter;
 extern int totaltime;
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
@@ -1662,7 +1661,8 @@ void meter_mod13(struct ofp_header *msg)
 */
 void meter_add13(struct ofp_header *msg)
 {
-	if(iLastMeter >= MAX_METER_13)
+	// Check if final table entry is populated
+	if(meter_entry[(MAX_METER_13)-1] != NULL)
 	{
 		TRACE("openflow_13.c: unable to add meter - no more meters available");
 		of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_METERS);
@@ -1673,15 +1673,19 @@ void meter_add13(struct ofp_header *msg)
 	ptr_mm = (struct ofp13_meter_mod *) msg;
 	
 	// Check for existing meter
-	for(int q=0;q<iLastMeter;q++)
+	int meter_index = 0;
+	while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13)
 	{
-		if(ntohs(ptr_mm->meter_id) == meter_entry[0]->meter_id)
+		if(ntohs(ptr_mm->meter_id) == meter_entry[meter_index]->meter_id)
 		{
 			TRACE("openflow_13.c: unable to add meter - meter id already in use");
 			of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_METER_EXISTS);
 			return;
 		}
+		
+		meter_index++;
 	}
+	// meter_index now holds the next available entry in the meter table
 	
 	// Find number of bands
 	uint16_t bands_received = ((ntohs(ptr_mm->header.length) - sizeof(struct ofp_header) - 8))/16;	// FIX
@@ -1689,21 +1693,21 @@ void meter_add13(struct ofp_header *msg)
 	TRACE("openflow_13.c: %d bands found in meter modification message", bands_received);
 	
 	// Allocate space to store meter entry
-	meter_entry[iLastMeter] = membag_alloc(sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_header)));
+	meter_entry[meter_index] = membag_alloc(sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_header)));
 	
 	// Verify memory allocation
-	if (meter_entry[iLastMeter] == NULL)
+	if (meter_entry[meter_index] == NULL)
 	{
-		TRACE("openflow_13.c: unable to allocate %d bytes of memory for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_header)), iLastMeter+1);
+		TRACE("openflow_13.c: unable to allocate %d bytes of memory for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_header)), meter_index+1);
 		of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_METERS);
 		return;
 	}
-	TRACE("openflow_13.c: allocating %d bytes at %p for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_header)), meter_entry[iLastMeter], iLastMeter+1);
+	TRACE("openflow_13.c: allocating %d bytes at %p for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_header)), meter_entry[meter_index], meter_index+1);
 	
 	// Copy meter configs over
-	meter_entry[iLastMeter]->meter_id = ntohl(ptr_mm->meter_id);
-	meter_entry[iLastMeter]->flags = ntohs(ptr_mm->flags);
-	meter_entry[iLastMeter]->band_count = bands_received;
+	meter_entry[meter_index]->meter_id = ntohl(ptr_mm->meter_id);
+	meter_entry[meter_index]->flags = ntohs(ptr_mm->flags);
+	meter_entry[meter_index]->band_count = bands_received;
 	
 	// Copy bands over
 	if(bands_received != 0)
@@ -1712,7 +1716,7 @@ void meter_add13(struct ofp_header *msg)
 		uint16_t bands_processed = 0;
 		
 		// Initialise pointer to first meter band destination
-		ptr_band = &(meter_entry[iLastMeter]->bands);
+		ptr_band = &(meter_entry[meter_index]->bands);
 		int band_size = sizeof(struct ofp13_meter_band_header);
 		
 		do 
@@ -1729,9 +1733,6 @@ void meter_add13(struct ofp_header *msg)
 			bands_processed++;
 		} while (bands_processed < bands_received);
 	}
-	
-	// Increment meter counter
-	iLastMeter++;
 	
 	return;
 }

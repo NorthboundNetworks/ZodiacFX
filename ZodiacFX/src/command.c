@@ -60,7 +60,6 @@ extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_13];
 extern int iLastFlow;
-extern int iLastMeter;
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
@@ -1471,46 +1470,46 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 	{
 		int meter_out_counter = 1;
 		
-		if(iLastMeter > 0)
+		// Check that table is populated
+		if(meter_entry[0] != NULL)
 		{
-			for(int q=0;q<iLastMeter;q++)
+			int meter_index = 0;
+			while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13)
 			{
-				if(meter_entry[q] != NULL)
-				{
 					printf("\r\n-------------------------------------------------------------------------\r\n");
 					printf("\r\nMeter %d\r\n", meter_out_counter);
 					meter_out_counter++;
-					printf("  Meter ID: %"PRIu32"\r\n", meter_entry[q]->meter_id);
+					printf("  Meter ID: %"PRIu32"\r\n", meter_entry[meter_index]->meter_id);
 					printf("  Counters:\r\n");
-					printf("\tBound Flows:\t%"PRIu32"\tDuration:\t%"PRIu32"\r\n", meter_entry[q]->flow_count, meter_entry[q]->duration_sec);
-					printf("\tByte Count:\t%"PRIu64"\tPacket Count:\t%"PRIu64"\r\n", meter_entry[q]->byte_in_count, meter_entry[q]->packet_in_count);
+					printf("\tBound Flows:\t%"PRIu32"\tDuration:\t%"PRIu32"\r\n", meter_entry[meter_index]->flow_count, meter_entry[meter_index]->duration_sec);
+					printf("\tByte Count:\t%"PRIu64"\tPacket Count:\t%"PRIu64"\r\n", meter_entry[meter_index]->byte_in_count, meter_entry[meter_index]->packet_in_count);
 					printf("\tConfiguration:\t");
-					if(((meter_entry[q]->flags) & OFPMF13_KBPS) == OFPMF13_KBPS)
+					if(((meter_entry[meter_index]->flags) & OFPMF13_KBPS) == OFPMF13_KBPS)
 					{
 						printf("KBPS; ");
 					}
-					if(((meter_entry[q]->flags) & OFPMF13_PKTPS) == OFPMF13_PKTPS)
+					if(((meter_entry[meter_index]->flags) & OFPMF13_PKTPS) == OFPMF13_PKTPS)
 					{
 						printf("PKTPS; ");
 					}
-					if(((meter_entry[q]->flags) & OFPMF13_BURST) == OFPMF13_BURST)
+					if(((meter_entry[meter_index]->flags) & OFPMF13_BURST) == OFPMF13_BURST)
 					{
 						printf("BURST; ");
 					}
-					if(((meter_entry[q]->flags) & OFPMF13_STATS) == OFPMF13_STATS)
+					if(((meter_entry[meter_index]->flags) & OFPMF13_STATS) == OFPMF13_STATS)
 					{
 						printf("STATS; ");
 					}
-					if(meter_entry[q]->flags == 0)
+					if(meter_entry[meter_index]->flags == 0)
 					{
 						printf(" NONE;");
 					}
 					
-					printf("\r\n\tNumber of bands:\t%"PRIu16"\r\n", meter_entry[q]->band_count);
+					printf("\r\n\tNumber of bands:\t%"PRIu16"\r\n", meter_entry[meter_index]->band_count);
 					int bands_processed = 0;
 					struct ofp13_meter_band_header * ptr_band;
-					ptr_band = &(meter_entry[q]->bands);
-					while(bands_processed < meter_entry[q]->band_count)
+					ptr_band = &(meter_entry[meter_index]->bands);
+					while(bands_processed < meter_entry[meter_index]->band_count)
 					{
 						printf("\t\tBand %d:\r\n", bands_processed+1);
 						printf("\t\t  Type:\t\t");
@@ -1527,7 +1526,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						
 						bands_processed++;
 					}
-				}
+				meter_index++;
 			}
 			printf("\r\n-------------------------------------------------------------------------\r\n\r\n");
 		}
