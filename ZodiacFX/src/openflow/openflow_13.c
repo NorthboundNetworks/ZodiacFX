@@ -1676,7 +1676,7 @@ void meter_add13(struct ofp_header *msg)
 	int meter_index = 0;
 	while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13)
 	{
-		if(ntohs(ptr_mm->meter_id) == meter_entry[meter_index]->meter_id)
+		if(ntohl(ptr_mm->meter_id) == meter_entry[meter_index]->meter_id)
 		{
 			TRACE("openflow_13.c: unable to add meter - meter id already in use");
 			of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_METER_EXISTS);
@@ -1757,6 +1757,56 @@ void meter_modify13(struct ofp_header *msg)
 */
 void meter_delete13(struct ofp_header *msg)
 {
+	struct ofp13_meter_mod * ptr_mm;
+	ptr_mm = (struct ofp13_meter_mod *) msg;
+	
+	TRACE("openflow_13.c: request to DELETE meter_id %"PRIu32, ntohl(ptr_mm->meter_id));
+	
+	int meter_index = 0;
+	int meter_location = -1;
+	// Loop through existing meters
+	while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13 && meter_location == -1)
+	{
+		// Compare requested meter_id with entry's meter_id
+		if(ntohl(ptr_mm->meter_id) == meter_entry[meter_index]->meter_id)
+		{
+			// Store the index
+			meter_location = meter_index;
+		}
+		
+		meter_index++;
+	}
+	
+	if(meter_location == -1)
+	{
+		TRACE("openflow_13.c: meter_id not found");
+		// No error message required
+		return;
+	}
+	
+	/* Delete entry */
+	// Free allocated memory
+	membag_free(meter_entry[meter_location]);
+	// Clear the pointer
+	meter_entry[meter_location] = NULL;
+	meter_index = meter_location;
+	
+	// Consolidate table
+	if(meter_entry[meter_index+1] == NULL)
+	{
+		TRACE("openflow_13.c: meter table consolidation not required - no trailing entries");
+	}
+	else
+	{
+		TRACE("openflow_13.c: consolidating meter table");
+		while(meter_entry[meter_index+1] != NULL)
+		{
+			meter_index++;
+		}
+		meter_entry[meter_location] = meter_entry[meter_index];	// Move last entry into deleted entry location
+		meter_entry[meter_index] = 0;	// Zero the moved entry
+		TRACE("openflow_13.c: meter table contains %d meter entries", meter_index);
+	}
 	
 	return;
 }
