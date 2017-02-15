@@ -1683,21 +1683,55 @@ void meter_add13(struct ofp_header *msg)
 		}
 	}
 	
+	// Find number of bands
+	uint16_t bands_received = ((ntohs(ptr_mm->header.length) - sizeof(struct ofp_header) - 8))/16;	// FIX
+							// Band list length is inferred from the length field in the header
+	TRACE("openflow_13.c: %d bands found in meter modification message", bands_received);
+	
 	// Allocate space to store meter entry
-	meter_entry[iLastMeter] = membag_alloc(sizeof(struct meter_entry13));
+	meter_entry[iLastMeter] = membag_alloc(sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_header)));
+	
+	// Verify memory allocation
 	if (meter_entry[iLastMeter] == NULL)
 	{
-		TRACE("openflow_13.c: unable to allocate %d bytes of memory for meter entry #%d", sizeof(struct meter_entry13), iLastMeter+1);
+		TRACE("openflow_13.c: unable to allocate %d bytes of memory for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_header)), iLastMeter+1);
 		of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_METERS);
 		return;
 	}
-	TRACE("openflow_13.c: allocating %d bytes at %p for meter entry #%d", sizeof(struct meter_entry13), meter_entry[iLastMeter], iLastMeter+1);
-	
-	// Allocate space to store meter band(s)
-	
+	TRACE("openflow_13.c: allocating %d bytes at %p for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_header)), meter_entry[iLastMeter], iLastMeter+1);
 	
 	// Copy meter configs over
+	meter_entry[iLastMeter]->meter_id = ntohl(ptr_mm->meter_id);
+	meter_entry[iLastMeter]->flags = ntohs(ptr_mm->flags);
+	meter_entry[iLastMeter]->band_count = bands_received;
 	
+	// Copy bands over
+	if(bands_received != 0)
+	{
+		struct ofp13_meter_band_header * ptr_band;
+		uint16_t bands_processed = 0;
+		
+		// Initialise pointer to first meter band destination
+		ptr_band = &(meter_entry[iLastMeter]->bands);
+		int band_size = sizeof(struct ofp13_meter_band_header);
+		
+		do 
+		{
+			// Copy individual band
+				//memcpy((ptr_band + band_size*bands_processed), ((ptr_mm->bands) + band_size*bands_processed), band_size);
+			ptr_band->type			= ntohs(ptr_mm->bands[bands_processed].type);
+			ptr_band->len			= ntohs(ptr_mm->bands[bands_processed].len);
+			ptr_band->rate			= ntohl(ptr_mm->bands[bands_processed].rate);
+			ptr_band->burst_size	= ntohl(ptr_mm->bands[bands_processed].burst_size);
+			
+			TRACE("openflow_13.c: %d/%d bands processed", bands_processed, bands_received);
+			
+			bands_processed++;
+		} while (bands_processed < bands_received);
+	}
+	
+	// Increment meter counter
+	iLastMeter++;
 	
 	return;
 }
