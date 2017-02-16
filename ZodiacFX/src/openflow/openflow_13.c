@@ -119,9 +119,17 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			return;
 		}
 		TRACE("openflow_13.c: Matched flow %d, table %d", i+1, table_id);
+		
+		/* Check meter statistics */
+		int time_delta = sys_get_ms() - flow_counters[i].lastmatch;
+		int meter_kbps = ((packet_size*8)/time_delta);	// bit/ms == kbit/s
+		int meter_pktps = 1000/time_delta;
+		TRACE("openflow_13.c: calculated kbps: %d", meter_kbps);
+		TRACE("openflow_13.c: calculated pktps: %d", meter_pktps);
+		
 		flow_counters[i].hitCount++; // Increment flow hit count
 		flow_counters[i].bytes += packet_size;
-		flow_counters[i].lastmatch = (totaltime/2); // Increment flow hit count
+		flow_counters[i].lastmatch = sys_get_ms(); // Increment flow hit count
 		table_counters[table_id].matched_count++;
 		table_counters[table_id].byte_count += packet_size;
 
