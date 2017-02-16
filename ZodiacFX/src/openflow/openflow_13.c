@@ -38,6 +38,7 @@
 #include "lwip/tcp.h"
 #include "ipv4/lwip/ip.h"
 #include "lwip/inet_chksum.h"
+#include "timers.h"
 
 
 #define ALIGN8(x) (x+7)/8*8
@@ -50,6 +51,7 @@ extern bool rcv_freq;
 extern int iLastFlow;
 extern int totaltime;
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
+extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
@@ -81,8 +83,15 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request * req
 int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *req);
 int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
 int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
+int multi_meter_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
+int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
+int multi_meter_features_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason, int flow);
 void packet_out13(struct ofp_header *msg);
+void meter_mod13(struct ofp_header *msg);
+void meter_add13(struct ofp_header *msg);
+void meter_modify13(struct ofp_header *msg);
+void meter_delete13(struct ofp_header *msg);
 
 /*
 *	Converts a 64bit value from host to network format
@@ -111,9 +120,17 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			return;
 		}
 		TRACE("openflow_13.c: Matched flow %d, table %d", i+1, table_id);
+		
+		/* Check meter statistics */
+		int time_delta = sys_get_ms() - flow_counters[i].lastmatch;
+		int meter_kbps = ((packet_size*8)/time_delta);	// bit/ms == kbit/s
+		int meter_pktps = 1000/time_delta;
+		TRACE("openflow_13.c: calculated kbps: %d", meter_kbps);
+		TRACE("openflow_13.c: calculated pktps: %d", meter_pktps);
+		
 		flow_counters[i].hitCount++; // Increment flow hit count
 		flow_counters[i].bytes += packet_size;
-		flow_counters[i].lastmatch = (totaltime/2); // Increment flow hit count
+		flow_counters[i].lastmatch = sys_get_ms(); // Store current match time (ms)
 		table_counters[table_id].matched_count++;
 		table_counters[table_id].byte_count += packet_size;
 
@@ -536,6 +553,20 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 			multi_pos += multi_portdesc_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 
+		if ( ntohs(multi_req->type) == OFPMP13_METER )
+		{
+			multi_pos += multi_meter_stats_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+		
+		if ( ntohs(multi_req->type) == OFPMP13_METER_CONFIG )
+		{
+			multi_pos += multi_meter_config_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+		
+		if ( ntohs(multi_req->type) == OFPMP13_METER_FEATURES )
+		{
+			multi_pos += multi_meter_features_reply13(&shared_buffer[multi_pos], multi_req);
+		}
 		
 		if ( htons(multi_req->type) == OFPMP13_TABLE_FEATURES )
 		{
@@ -557,6 +588,10 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 
 		case OFPT13_BARRIER_REQUEST:
 		barrier13_reply(ofph->xid);
+		break;
+		
+		case OFPT13_METER_MOD:
+		meter_mod13(ofph);
 		break;
 	};
 
@@ -1088,6 +1123,42 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 }
 
 /*
+*	Main OpenFlow Meter Statistics message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+int multi_meter_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request * req)
+{
+	TRACE("openflow_13.c: request for meter statistics");
+	return 0;
+}
+
+/*
+*	Main OpenFlow Meter Configuration message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request * req)
+{
+	TRACE("openflow_13.c: request for meter configuration");
+	return 0;
+}
+
+/*
+*	Main OpenFlow Meter Features message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+int multi_meter_features_reply13(uint8_t *buffer, struct ofp13_multipart_request * req)
+{
+	TRACE("openflow_13.c: request for meter features");
+	return 0;
+}
+
+/*
 *	Main OpenFlow FLOW_MOD message function
 *
 *	@param *msg - pointer to the OpenFlow message.
@@ -1559,6 +1630,206 @@ void barrier13_reply(uint32_t xid)
 	of_barrier.type   = OFPT13_BARRIER_REPLY;
 	of_barrier.xid = xid;
 	sendtcp(&of_barrier, sizeof(of_barrier));
+	return;
+}
+
+/*
+*	Main OpenFlow METER_MOD message function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+void meter_mod13(struct ofp_header *msg)
+{
+	struct ofp13_meter_mod * ptr_mm;
+	ptr_mm = (struct ofp13_meter_mod *) msg;
+		
+	switch(ntohs(ptr_mm->command))
+	{
+		case OFPMC13_ADD:
+		meter_add13(msg);
+		break;
+
+		case OFPMC13_MODIFY:
+		meter_modify13(msg);
+		break;
+
+		case OFPMC13_DELETE:
+		meter_delete13(msg);
+		break;
+	}
+	
+	return;
+}
+
+/*
+*	OpenFlow METER_ADD function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+void meter_add13(struct ofp_header *msg)
+{
+	// Check if final table entry is populated
+	if(meter_entry[(MAX_METER_13)-1] != NULL)
+	{
+		TRACE("openflow_13.c: unable to add meter - no more meters available");
+		of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_METERS);
+		return;
+	}
+	
+	struct ofp13_meter_mod * ptr_mm;
+	ptr_mm = (struct ofp13_meter_mod *) msg;
+	
+	// Check for existing meter
+	int meter_index = 0;
+	while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13)
+	{
+		if(ntohl(ptr_mm->meter_id) == meter_entry[meter_index]->meter_id)
+		{
+			TRACE("openflow_13.c: unable to add meter - meter id already in use");
+			of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_METER_EXISTS);
+			return;
+		}
+		
+		meter_index++;
+	}
+	// meter_index now holds the next available entry in the meter table
+	
+	// Find number of bands
+	uint16_t bands_received = ((ntohs(ptr_mm->header.length) - sizeof(struct ofp_header) - METER_PARTIAL))/PADDED_BAND_LEN;	// FIX
+							// Band list length is inferred from the length field in the header
+	TRACE("openflow_13.c: %d bands found in meter modification message", bands_received);
+	
+	// Allocate space to store meter entry
+	meter_entry[meter_index] = membag_alloc(sizeof(struct meter_entry13) + (bands_received * PADDED_BAND_LEN));
+	
+	// Verify memory allocation
+	if (meter_entry[meter_index] == NULL)
+	{
+		TRACE("openflow_13.c: unable to allocate %d bytes of memory for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * PADDED_BAND_LEN), meter_index+1);
+		of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_METERS);
+		return;
+	}
+	TRACE("openflow_13.c: allocating %d bytes at %p for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * PADDED_BAND_LEN), meter_entry[meter_index], meter_index+1);
+	
+	// Copy meter configs over
+	meter_entry[meter_index]->meter_id = ntohl(ptr_mm->meter_id);
+	meter_entry[meter_index]->flags = ntohs(ptr_mm->flags);
+	meter_entry[meter_index]->band_count = bands_received;
+	
+	// Copy bands over
+	if(bands_received != 0)
+	{
+		struct ofp13_meter_band_header * ptr_band;
+		uint16_t bands_processed = 0;
+		
+		// Initialise pointer to first meter band destination
+		ptr_band = &(meter_entry[meter_index]->bands);
+		struct ofp13_meter_band_header * ptr_rxband;
+		ptr_rxband = &(ptr_mm->bands);
+		
+		do 
+		{
+			// Copy individual band
+				//memcpy((ptr_band + band_size*bands_processed), ((ptr_mm->bands) + band_size*bands_processed), PADDED_BAND_LEN);
+			//ptr_band->type			= ntohs(ptr_mm->bands[bands_processed].type);
+			//ptr_band->len			= ntohs(ptr_mm->bands[bands_processed].len);
+			//ptr_band->rate			= ntohl(ptr_mm->bands[bands_processed].rate);
+			//ptr_band->burst_size	= ntohl(ptr_mm->bands[bands_processed].burst_size);
+			
+			ptr_band->type			= ntohs(ptr_rxband->type);
+			ptr_band->len			= ntohs(ptr_rxband->len);
+			ptr_band->rate			= ntohl(ptr_rxband->rate);
+			ptr_band->burst_size	= ntohl(ptr_rxband->burst_size);
+			
+			// ***** TODO : add error checking for band processing
+			TRACE("openflow_13.c: %d of %d bands processed", bands_processed, bands_received);
+			
+			// Move up 16 bytes
+			uint8_t *ptr_tmp = ptr_band;
+			ptr_band = ptr_tmp + PADDED_BAND_LEN;
+			ptr_tmp = ptr_rxband;
+			ptr_rxband = ptr_tmp + PADDED_BAND_LEN;
+			
+			bands_processed++;
+		} while (bands_processed < bands_received);
+	}
+	
+	return;
+}
+
+/*
+*	OpenFlow METER_MODIFY function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+void meter_modify13(struct ofp_header *msg)
+{
+	
+	return;
+}
+
+/*
+*	OpenFlow METER_DELETE function
+*
+*	@param *msg - pointer to the OpenFlow message.
+*
+*/
+void meter_delete13(struct ofp_header *msg)
+{
+	struct ofp13_meter_mod * ptr_mm;
+	ptr_mm = (struct ofp13_meter_mod *) msg;
+	
+	TRACE("openflow_13.c: request to DELETE meter_id %"PRIu32, ntohl(ptr_mm->meter_id));
+	
+	int meter_index = 0;
+	int meter_location = -1;
+	// Loop through existing meters
+	while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13 && meter_location == -1)
+	{
+		// Compare requested meter_id with entry's meter_id
+		if(ntohl(ptr_mm->meter_id) == meter_entry[meter_index]->meter_id)
+		{
+			// Store the index
+			meter_location = meter_index;
+		}
+		
+		meter_index++;
+	}
+	
+	if(meter_location == -1)
+	{
+		TRACE("openflow_13.c: meter_id not found");
+		// No error message required
+		return;
+	}
+	
+	/* Delete entry */
+	// Free allocated memory
+	membag_free(meter_entry[meter_location]);
+	// Clear the pointer
+	meter_entry[meter_location] = NULL;
+	meter_index = meter_location;
+	
+	// Consolidate table
+	if(meter_entry[meter_index+1] == NULL)
+	{
+		TRACE("openflow_13.c: meter table consolidation not required - no trailing entries");
+	}
+	else
+	{
+		TRACE("openflow_13.c: consolidating meter table");
+		while(meter_entry[meter_index+1] != NULL)
+		{
+			meter_index++;
+		}
+		meter_entry[meter_location] = meter_entry[meter_index];	// Move last entry into deleted entry location
+		meter_entry[meter_index] = 0;	// Zero the moved entry
+		TRACE("openflow_13.c: meter table contains %d meter entries", meter_index);
+	}
+	
 	return;
 }
 

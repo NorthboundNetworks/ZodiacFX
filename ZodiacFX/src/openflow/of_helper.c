@@ -1126,6 +1126,15 @@ void clear_flows(void)
 		table_counters[x].lookup_count = 0;
 		table_counters[x].matched_count = 0;
 	}
+	
+	/* Clear Meter Table Pointers*/
+	for(int x=0; x<MAX_METER_13;x++)
+	{
+		if(meter_entry[x] != NULL)
+		{
+			meter_entry[x] = NULL;
+		}
+	}
 }
 
 /*
