@@ -1524,7 +1524,9 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						printf("\t\t  Rate:\t\t%"PRIu32"\t\r\n", ptr_band->rate);
 						printf("\t\t  Burst Size:\t%"PRIu32"\t\r\n", ptr_band->burst_size);
 						
-						// ***** TODO : increment ptr_band by size of band (12 or 16?)
+						// Move up 16 bytes
+						uint8_t *ptr_tmp = ptr_band;
+						ptr_band = ptr_tmp + PADDED_BAND_LEN;
 						bands_processed++;
 					}
 				meter_index++;

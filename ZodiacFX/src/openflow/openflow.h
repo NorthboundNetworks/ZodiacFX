@@ -111,4 +111,7 @@ void port_status_message13(uint8_t port);
 
 #define SHARED_BUFFER_LEN 2048
 
+#define PADDED_BAND_LEN	16		// Incoming bands are padded to 16 bytes
+#define	METER_PARTIAL	8		// Meter structure length, excluding header and bands
+
 #endif /* OPENFLOW_H_ */

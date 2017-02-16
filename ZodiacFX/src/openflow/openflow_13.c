@@ -1688,21 +1688,21 @@ void meter_add13(struct ofp_header *msg)
 	// meter_index now holds the next available entry in the meter table
 	
 	// Find number of bands
-	uint16_t bands_received = ((ntohs(ptr_mm->header.length) - sizeof(struct ofp_header) - 8))/16;	// FIX
+	uint16_t bands_received = ((ntohs(ptr_mm->header.length) - sizeof(struct ofp_header) - METER_PARTIAL))/PADDED_BAND_LEN;	// FIX
 							// Band list length is inferred from the length field in the header
 	TRACE("openflow_13.c: %d bands found in meter modification message", bands_received);
 	
 	// Allocate space to store meter entry
-	meter_entry[meter_index] = membag_alloc(sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_header)));
+	meter_entry[meter_index] = membag_alloc(sizeof(struct meter_entry13) + (bands_received * PADDED_BAND_LEN));
 	
 	// Verify memory allocation
 	if (meter_entry[meter_index] == NULL)
 	{
-		TRACE("openflow_13.c: unable to allocate %d bytes of memory for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_header)), meter_index+1);
+		TRACE("openflow_13.c: unable to allocate %d bytes of memory for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * PADDED_BAND_LEN), meter_index+1);
 		of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_METERS);
 		return;
 	}
-	TRACE("openflow_13.c: allocating %d bytes at %p for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_header)), meter_entry[meter_index], meter_index+1);
+	TRACE("openflow_13.c: allocating %d bytes at %p for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * PADDED_BAND_LEN), meter_entry[meter_index], meter_index+1);
 	
 	// Copy meter configs over
 	meter_entry[meter_index]->meter_id = ntohl(ptr_mm->meter_id);
@@ -1717,21 +1717,32 @@ void meter_add13(struct ofp_header *msg)
 		
 		// Initialise pointer to first meter band destination
 		ptr_band = &(meter_entry[meter_index]->bands);
-		int band_size = sizeof(struct ofp13_meter_band_header);
+		struct ofp13_meter_band_header * ptr_rxband;
+		ptr_rxband = &(ptr_mm->bands);
 		
 		do 
 		{
 			// Copy individual band
-				//memcpy((ptr_band + band_size*bands_processed), ((ptr_mm->bands) + band_size*bands_processed), band_size);
-			ptr_band->type			= ntohs(ptr_mm->bands[bands_processed].type);
-			ptr_band->len			= ntohs(ptr_mm->bands[bands_processed].len);
-			ptr_band->rate			= ntohl(ptr_mm->bands[bands_processed].rate);
-			ptr_band->burst_size	= ntohl(ptr_mm->bands[bands_processed].burst_size);
+				//memcpy((ptr_band + band_size*bands_processed), ((ptr_mm->bands) + band_size*bands_processed), PADDED_BAND_LEN);
+			//ptr_band->type			= ntohs(ptr_mm->bands[bands_processed].type);
+			//ptr_band->len			= ntohs(ptr_mm->bands[bands_processed].len);
+			//ptr_band->rate			= ntohl(ptr_mm->bands[bands_processed].rate);
+			//ptr_band->burst_size	= ntohl(ptr_mm->bands[bands_processed].burst_size);
+			
+			ptr_band->type			= ntohs(ptr_rxband->type);
+			ptr_band->len			= ntohs(ptr_rxband->len);
+			ptr_band->rate			= ntohl(ptr_rxband->rate);
+			ptr_band->burst_size	= ntohl(ptr_rxband->burst_size);
 			
 			// ***** TODO : add error checking for band processing
 			TRACE("openflow_13.c: %d of %d bands processed", bands_processed, bands_received);
 			
-			// ***** TODO : increment ptr_band by size of band (12 or 16?)
+			// Move up 16 bytes
+			uint8_t *ptr_tmp = ptr_band;
+			ptr_band = ptr_tmp + PADDED_BAND_LEN;
+			ptr_tmp = ptr_rxband;
+			ptr_rxband = ptr_tmp + PADDED_BAND_LEN;
+			
 			bands_processed++;
 		} while (bands_processed < bands_received);
 	}
