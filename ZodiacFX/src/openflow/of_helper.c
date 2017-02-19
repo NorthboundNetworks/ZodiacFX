@@ -54,6 +54,7 @@ extern uint8_t last_port_status[4];
 extern uint8_t port_status[4];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct table_counter table_counters[MAX_TABLES];
+extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
