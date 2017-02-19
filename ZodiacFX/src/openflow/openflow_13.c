@@ -786,7 +786,7 @@ void multi_flow_more_reply13(void)
 		reply->flags = 0;						// No more replies will follow
 		reply_more_flag = false;				// Notify of_sent that no more messages need to be sent
 		reply_more_xid = 0;						// Clear stored xid
-		startFlow = 0;							// Clear startFlow
+		startFlow = 15;							// Reset startFlow
 	}
 	memcpy(reply->body, &statsbuffer, len);
 	len += 	sizeof(struct ofp13_multipart_reply);
