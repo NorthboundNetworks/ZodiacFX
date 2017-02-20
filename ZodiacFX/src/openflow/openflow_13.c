@@ -65,6 +65,7 @@ extern int multi_pos;
 extern uint8_t NativePortMatrix;
 extern bool reply_more_flag;
 extern uint32_t reply_more_xid;
+extern int meter_handler(uint32_t id, uint16_t bytes);
 
 // Internal functions
 void features_reply13(uint32_t xid);
@@ -145,6 +146,16 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			struct ofp13_instruction *inst_ptr = (struct ofp13_instruction *)(ofp13_oxm_inst[i] + inst_size);
 			insts[ntohs(inst_ptr->type)] = inst_ptr;
 			inst_size += ntohs(inst_ptr->len);
+		}
+		
+		if(insts[OFPIT13_METER] != NULL)
+		{
+			struct ofp13_instruction_meter *inst_meter = insts[OFPIT13_METER];
+			if(meter_handler(htons(inst_meter->meter_id), packet_size) == FAILURE)	// Process meter id (provide byte count for counters)
+			{
+				// Packet must be dropped
+				return;
+			}
 		}
 			
 		if(insts[OFPIT13_APPLY_ACTIONS] != NULL)

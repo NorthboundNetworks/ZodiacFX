@@ -1263,3 +1263,108 @@ int flow_stats_msg13(char *buffer, int first, int last)
 	return (buffer_ptr - buffer);
 
 }
+
+/*
+*	Meter processing for OF 1.3
+*
+*	@param	id		- meter ID to process
+*	@param	bytes	- packet size (for throughput calculations)
+*
+*	@ret	SUCCESS	- packet does not need to be dropped
+*	@ret	FAILURE	- packet needs to be dropped
+*
+*/
+int	meter_handler(uint32_t id, uint16_t bytes)
+{		
+	TRACE("of_helper.c: meter id %d needs processing", id);
+	
+	// Get associated meter entry
+	int meter_index = 0;
+	while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13)
+	{
+		if(meter_entry[meter_index]->meter_id == id)
+		{
+			TRACE("of_helper.c: meter entry found - continuing");
+			break;
+		}
+			
+		meter_index++;
+	}
+	if(meter_entry[meter_index] == NULL || meter_index == MAX_METER_13)
+	{
+		TRACE("of_helper.c: meter entry not found - packet not dropped");
+		return SUCCESS;
+	}
+	// meter_index now holds the meter bound to the current flow
+	
+	// Update meter counters
+	meter_entry[meter_index]->byte_in_count += bytes;
+	(meter_entry[meter_index]->packet_in_count)++;
+	
+	// Check if meter has been used before
+	if(meter_entry[meter_index]->last_packet_in == 0)
+	{
+		// 
+		TRACE("of_helper.c: first hit of meter - packet not dropped");
+		return SUCCESS;
+	}
+	
+	// Find time delta
+	uint64_t time_delta = sys_get_ms() - meter_entry[meter_index]->last_packet_in;
+	
+	// Update timer
+	meter_entry[meter_index]->last_packet_in = sys_get_ms();
+	
+	// Check configuration flags
+	uint32_t calculated_rate = 0;
+	if(((meter_entry[meter_index]->flags) & OFPMF13_KBPS) == OFPMF13_KBPS)
+	{
+		calculated_rate = ((bytes*8)/time_delta);	// bit/ms == kbit/s
+		TRACE("of_helper.c: calculated rate - %d kbps", calculated_rate);
+	}
+	else if(((meter_entry[meter_index]->flags) & OFPMF13_PKTPS) == OFPMF13_PKTPS)
+	{
+		calculated_rate = 1000/time_delta;
+		TRACE("of_helper.c: calculated rate - %d pktps", calculated_rate);
+	}
+	else
+	{
+		TRACE("of_helper.c: unsupported meter configuration - packet not dropped");
+		return SUCCESS;
+	}
+	
+	// Check each band
+	int			bands_processed = 0;
+	uint32_t	highest_rate = 0;			// Highest triggered band rate
+	struct ofp13_meter_band_header * ptr_highest_band = NULL;	// Store pointer to highest triggered band
+	struct ofp13_meter_band_header * ptr_band;
+	ptr_band = &(meter_entry[meter_index]->bands);
+	while(bands_processed < meter_entry[meter_index]->band_count)
+	{
+		if(ptr_band->rate > highest_rate)
+		{
+			highest_rate = ptr_band->rate;	// Update highest triggered band rate
+			ptr_highest_band = ptr_band;	// Update highest triggered band
+		}
+		
+		// Move up 16 bytes
+		uint8_t *ptr_tmp = ptr_band;
+		ptr_band = ptr_tmp + PADDED_BAND_LEN;
+		bands_processed++;
+	}
+	
+	// Check band type
+	if(ptr_highest_band->type != OFPMBT13_DROP)
+	{
+		TRACE("of_helper.c: unsupported band type - not dropping packet");
+		return SUCCESS;
+	}
+	
+	TRACE("of_helper.c: highest triggered band rate:%d", highest_rate);
+	
+	// Update band counters
+	/* ***** TODO ***** */
+
+	TRACE("of_helper.c: packet needs to be dropped");	
+	return FAILURE;
+}
