@@ -38,7 +38,6 @@
 #include "lwip/tcp.h"
 #include "ipv4/lwip/ip.h"
 #include "lwip/inet_chksum.h"
-#include "timers.h"
 
 
 #define ALIGN8(x) (x+7)/8*8
@@ -65,6 +64,7 @@ extern int multi_pos;
 extern uint8_t NativePortMatrix;
 extern bool reply_more_flag;
 extern uint32_t reply_more_xid;
+extern int meter_handler(uint32_t id, uint16_t bytes);
 
 // Internal functions
 void features_reply13(uint32_t xid);
@@ -121,16 +121,9 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 		}
 		TRACE("openflow_13.c: Matched flow %d, table %d", i+1, table_id);
 		
-		/* Check meter statistics */
-		int time_delta = sys_get_ms() - flow_counters[i].lastmatch;
-		int meter_kbps = ((packet_size*8)/time_delta);	// bit/ms == kbit/s
-		int meter_pktps = 1000/time_delta;
-		TRACE("openflow_13.c: calculated kbps: %d", meter_kbps);
-		TRACE("openflow_13.c: calculated pktps: %d", meter_pktps);
-		
 		flow_counters[i].hitCount++; // Increment flow hit count
 		flow_counters[i].bytes += packet_size;
-		flow_counters[i].lastmatch = sys_get_ms(); // Store current match time (ms)
+		flow_counters[i].lastmatch = (totaltime/2); // Increment flow hit count
 		table_counters[table_id].matched_count++;
 		table_counters[table_id].byte_count += packet_size;
 
@@ -145,6 +138,16 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			struct ofp13_instruction *inst_ptr = (struct ofp13_instruction *)(ofp13_oxm_inst[i] + inst_size);
 			insts[ntohs(inst_ptr->type)] = inst_ptr;
 			inst_size += ntohs(inst_ptr->len);
+		}
+		
+		if(insts[OFPIT13_METER] != NULL)
+		{
+			struct ofp13_instruction_meter *inst_meter = insts[OFPIT13_METER];
+			if(meter_handler(ntohl(inst_meter->meter_id), packet_size) == FAILURE)	// Process meter id (provide byte count for counters)
+			{
+				// Packet must be dropped
+				return;
+			}
 		}
 			
 		if(insts[OFPIT13_APPLY_ACTIONS] != NULL)
@@ -786,7 +789,7 @@ void multi_flow_more_reply13(void)
 		reply->flags = 0;						// No more replies will follow
 		reply_more_flag = false;				// Notify of_sent that no more messages need to be sent
 		reply_more_xid = 0;						// Clear stored xid
-		startFlow = 0;							// Clear startFlow
+		startFlow = 15;							// Reset startFlow
 	}
 	memcpy(reply->body, &statsbuffer, len);
 	len += 	sizeof(struct ofp13_multipart_reply);
@@ -1311,7 +1314,6 @@ void flow_add13(struct ofp_header *msg)
 			return;
 		}
 		TRACE("openflow_13.c: Allocating %d bytes at %p for instruction field in flow %d", instruction_size, ofp13_oxm_inst[iLastFlow], iLastFlow+1);
-		//printf("openflow_13.c: Allocating %d bytes at %p for instruction field in flow %d\r\n", instruction_size, ofp13_oxm_inst[iLastFlow], iLastFlow+1);
 		uint8_t *inst_ptr = (uint8_t *)ptr_fm + mod_size;
 		memcpy(ofp13_oxm_inst[iLastFlow], inst_ptr, instruction_size);
 	} else {
