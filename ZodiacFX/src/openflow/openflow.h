@@ -83,6 +83,7 @@ struct meter_entry13
 	uint32_t	duration_sec;		// Time meter has been alive in seconds
 	uint16_t	flags;				// Meter configuration flags
 	uint16_t	band_count;			// Number of bands in this meter
+	uint64_t	last_packet_in;		// Time when meter last processed a packet
 	struct ofp13_meter_band_header bands[0];	// Meter bands
 };
 
