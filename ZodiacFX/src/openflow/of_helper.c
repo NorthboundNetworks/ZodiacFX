@@ -1304,7 +1304,9 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	// Check if meter has been used before
 	if(meter_entry[meter_index]->last_packet_in == 0)
 	{
-		// 
+		// Update timer
+		meter_entry[meter_index]->last_packet_in = sys_get_ms();
+		
 		TRACE("of_helper.c: first hit of meter - packet not dropped");
 		return SUCCESS;
 	}
@@ -1341,16 +1343,26 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	ptr_band = &(meter_entry[meter_index]->bands);
 	while(bands_processed < meter_entry[meter_index]->band_count)
 	{
-		if(ptr_band->rate > highest_rate)
+		if(calculated_rate >= ptr_band->rate)
 		{
-			highest_rate = ptr_band->rate;	// Update highest triggered band rate
-			ptr_highest_band = ptr_band;	// Update highest triggered band
+			if(ptr_band->rate > highest_rate)
+			{
+				highest_rate = ptr_band->rate;	// Update highest triggered band rate
+				ptr_highest_band = ptr_band;	// Update highest triggered band
+			}			
 		}
 		
 		// Move up 16 bytes
 		uint8_t *ptr_tmp = ptr_band;
 		ptr_band = ptr_tmp + PADDED_BAND_LEN;
 		bands_processed++;
+	}
+	
+	// Check if any bands triggered
+	if(highest_rate == 0 || ptr_highest_band == NULL)
+	{
+		TRACE("of_helper.c: no bands triggered - packet not dropped");
+		return SUCCESS;
 	}
 	
 	// Check band type

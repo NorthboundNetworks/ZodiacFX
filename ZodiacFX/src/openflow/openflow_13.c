@@ -143,7 +143,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 		if(insts[OFPIT13_METER] != NULL)
 		{
 			struct ofp13_instruction_meter *inst_meter = insts[OFPIT13_METER];
-			if(meter_handler(htons(inst_meter->meter_id), packet_size) == FAILURE)	// Process meter id (provide byte count for counters)
+			if(meter_handler(ntohl(inst_meter->meter_id), packet_size) == FAILURE)	// Process meter id (provide byte count for counters)
 			{
 				// Packet must be dropped
 				return;
