@@ -1699,21 +1699,21 @@ void meter_add13(struct ofp_header *msg)
 	// meter_index now holds the next available entry in the meter table
 	
 	// Find number of bands
-	uint16_t bands_received = ((ntohs(ptr_mm->header.length) - sizeof(struct ofp_header) - METER_PARTIAL))/PADDED_BAND_LEN;	// FIX
+	uint16_t bands_received = ((ntohs(ptr_mm->header.length) - sizeof(struct ofp_header) - METER_PARTIAL))/sizeof(struct ofp13_meter_band_drop);	// FIX
 							// Band list length is inferred from the length field in the header
 	TRACE("openflow_13.c: %d bands found in meter modification message", bands_received);
 	
 	// Allocate space to store meter entry
-	meter_entry[meter_index] = membag_alloc(sizeof(struct meter_entry13) + (bands_received * PADDED_BAND_LEN));
+	meter_entry[meter_index] = membag_alloc(sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_drop)));
 	
 	// Verify memory allocation
 	if (meter_entry[meter_index] == NULL)
 	{
-		TRACE("openflow_13.c: unable to allocate %d bytes of memory for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * PADDED_BAND_LEN), meter_index+1);
+		TRACE("openflow_13.c: unable to allocate %d bytes of memory for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_drop)), meter_index+1);
 		of_error13(msg, OFPET13_METER_MOD_FAILED, OFPMMFC13_OUT_OF_METERS);
 		return;
 	}
-	TRACE("openflow_13.c: allocating %d bytes at %p for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * PADDED_BAND_LEN), meter_entry[meter_index], meter_index+1);
+	TRACE("openflow_13.c: allocating %d bytes at %p for meter entry #%d", sizeof(struct meter_entry13) + (bands_received * sizeof(struct ofp13_meter_band_drop)), meter_entry[meter_index], meter_index+1);
 	
 	// Copy meter configs over
 	meter_entry[meter_index]->meter_id = ntohl(ptr_mm->meter_id);
@@ -1723,7 +1723,7 @@ void meter_add13(struct ofp_header *msg)
 	// Copy bands over
 	if(bands_received != 0)
 	{
-		struct ofp13_meter_band_header * ptr_band;
+		struct ofp13_meter_band_drop * ptr_band;
 		uint16_t bands_processed = 0;
 		
 		// Initialise pointer to first meter band destination
