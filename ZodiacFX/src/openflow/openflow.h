@@ -115,4 +115,7 @@ void port_status_message13(uint8_t port);
 #define PADDED_BAND_LEN	16		// Incoming bands are padded to 16 bytes
 #define	METER_PARTIAL	8		// Meter structure length, excluding header and bands
 
+#define SUCCESS		0
+#define FAILURE		1
+
 #endif /* OPENFLOW_H_ */

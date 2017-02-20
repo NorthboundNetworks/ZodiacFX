@@ -34,8 +34,6 @@
 #define FLOW_LIMIT	4		// Displayable flows per page
 #define BOUNDARY_MAX_LEN	70
 
-#define SUCCESS		0
-#define FAILURE		1
 void http_init(void);
 
 #endif /* HTTP_H_ */
