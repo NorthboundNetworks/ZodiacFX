@@ -1479,9 +1479,9 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf("\r\n-------------------------------------------------------------------------\r\n");
 					printf("\r\nMeter %d\r\n", meter_out_counter);
 					meter_out_counter++;
-					printf("  Meter ID: %"PRIu32"\r\n", meter_entry[meter_index]->meter_id);
+					printf("  Meter ID: %d\r\n", meter_entry[meter_index]->meter_id);
 					printf("  Counters:\r\n");
-					printf("\tBound Flows:\t%"PRIu32"\tDuration:\t%"PRIu32"\r\n", meter_entry[meter_index]->flow_count, meter_entry[meter_index]->duration_sec);
+					printf("\tBound Flows:\t%d\tDuration:\t%d\r\n", meter_entry[meter_index]->flow_count, meter_entry[meter_index]->duration_sec);
 					printf("\tByte Count:\t%"PRIu64"\tPacket Count:\t%"PRIu64"\r\n", meter_entry[meter_index]->byte_in_count, meter_entry[meter_index]->packet_in_count);
 					printf("\tConfiguration:\t");
 					if(((meter_entry[meter_index]->flags) & OFPMF13_KBPS) == OFPMF13_KBPS)

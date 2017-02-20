@@ -1784,7 +1784,7 @@ void meter_delete13(struct ofp_header *msg)
 	struct ofp13_meter_mod * ptr_mm;
 	ptr_mm = (struct ofp13_meter_mod *) msg;
 	
-	TRACE("openflow_13.c: request to DELETE meter_id %"PRIu32, ntohl(ptr_mm->meter_id));
+	TRACE("openflow_13.c: request to DELETE meter_id %d", ntohl(ptr_mm->meter_id));
 	
 	int meter_index = 0;
 	int meter_location = -1;
