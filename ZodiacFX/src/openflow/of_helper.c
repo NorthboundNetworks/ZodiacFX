@@ -42,6 +42,7 @@
 #include "lwip/tcp_impl.h"
 #include "lwip/udp.h"
 #include "switch.h"
+#include "timers.h"
 
 #define ALIGN8(x) (x+7)/8*8
 

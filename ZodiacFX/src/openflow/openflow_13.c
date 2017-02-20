@@ -123,7 +123,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 		
 		flow_counters[i].hitCount++; // Increment flow hit count
 		flow_counters[i].bytes += packet_size;
-		flow_counters[i].lastmatch = sys_get_ms(); // Increment flow hit count
+		flow_counters[i].lastmatch = (totaltime/2); // Increment flow hit count
 		table_counters[table_id].matched_count++;
 		table_counters[table_id].byte_count += packet_size;
 
