@@ -1311,7 +1311,6 @@ void flow_add13(struct ofp_header *msg)
 			return;
 		}
 		TRACE("openflow_13.c: Allocating %d bytes at %p for instruction field in flow %d", instruction_size, ofp13_oxm_inst[iLastFlow], iLastFlow+1);
-		//printf("openflow_13.c: Allocating %d bytes at %p for instruction field in flow %d\r\n", instruction_size, ofp13_oxm_inst[iLastFlow], iLastFlow+1);
 		uint8_t *inst_ptr = (uint8_t *)ptr_fm + mod_size;
 		memcpy(ofp13_oxm_inst[iLastFlow], inst_ptr, instruction_size);
 	} else {
