@@ -39,7 +39,6 @@
 #include "ipv4/lwip/ip.h"
 #include "lwip/tcp_impl.h"
 #include "lwip/udp.h"
-#include "timers.h"
 
 // Global variables
 extern struct zodiac_config Zodiac_Config;
@@ -148,7 +147,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 		{
 			flow_counters[i].hitCount++; // Increment flow hit count
 			flow_counters[i].bytes += packet_size;
-			flow_counters[i].lastmatch = sys_get_ms();
+			flow_counters[i].lastmatch = (totaltime/2); // Increment flow hit count
 			table_counters[0].matched_count++;
 			table_counters[0].byte_count += packet_size;
 
@@ -898,7 +897,7 @@ void flow_add(struct ofp_header *msg)
 	}
 
 	flow_counters[iLastFlow].duration = (totaltime/2);
-	flow_counters[iLastFlow].lastmatch = sys_get_ms();;
+	flow_counters[iLastFlow].lastmatch = (totaltime/2);
 	flow_counters[iLastFlow].active = true;
 	iLastFlow++;
 	return;

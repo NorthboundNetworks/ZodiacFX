@@ -1322,7 +1322,7 @@ void flow_add13(struct ofp_header *msg)
 	}
 	ofp13_oxm_inst_size[iLastFlow] = instruction_size;
 	flow_counters[iLastFlow].duration = (totaltime/2);
-	flow_counters[iLastFlow].lastmatch = sys_get_ms();
+	flow_counters[iLastFlow].lastmatch = (totaltime/2);
 	flow_counters[iLastFlow].active = true;
 	iLastFlow++;
 	TRACE("openflow_13.c: New flow added at %d into table %d : priority %d : cookie 0x%" PRIx64, iLastFlow+1, ptr_fm->table_id, ntohs(ptr_fm->priority), htonll(ptr_fm->cookie));
