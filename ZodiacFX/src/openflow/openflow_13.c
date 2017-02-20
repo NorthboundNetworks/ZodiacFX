@@ -38,7 +38,6 @@
 #include "lwip/tcp.h"
 #include "ipv4/lwip/ip.h"
 #include "lwip/inet_chksum.h"
-#include "timers.h"
 
 
 #define ALIGN8(x) (x+7)/8*8
@@ -124,7 +123,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 		
 		flow_counters[i].hitCount++; // Increment flow hit count
 		flow_counters[i].bytes += packet_size;
-		flow_counters[i].lastmatch = sys_get_ms(); // Store current match time (ms)
+		flow_counters[i].lastmatch = sys_get_ms(); // Increment flow hit count
 		table_counters[table_id].matched_count++;
 		table_counters[table_id].byte_count += packet_size;
 
