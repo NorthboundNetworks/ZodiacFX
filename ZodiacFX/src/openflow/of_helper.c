@@ -42,6 +42,7 @@
 #include "lwip/tcp_impl.h"
 #include "lwip/udp.h"
 #include "switch.h"
+#include "timers.h"
 
 #define ALIGN8(x) (x+7)/8*8
 
@@ -1050,7 +1051,7 @@ void flow_timeouts()
 		{
 			if (OF_Version == 1)
 			{
-				if (&flow_match10[i]->idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(&flow_match10[i]->idle_timeout))
+				if (&flow_match10[i]->idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((sys_get_ms() - flow_counters[i].lastmatch)/1000) >= ntohs(&flow_match10[i]->idle_timeout))
 				{
 					if (ntohs(flow_match10[i]->flags) &  OFPFF10_SEND_FLOW_REM) flowrem_notif10(i,OFPRR10_IDLE_TIMEOUT);
 					// Clear flow counters and actions
@@ -1069,7 +1070,7 @@ void flow_timeouts()
 				}
 			} else if (OF_Version == 4)
 			{
-				if (flow_match13[i]->idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((totaltime/2) - flow_counters[i].lastmatch) >= ntohs(flow_match13[i]->idle_timeout))
+				if (flow_match13[i]->idle_timeout != OFP_FLOW_PERMANENT && flow_counters[i].lastmatch > 0 && ((sys_get_ms() - flow_counters[i].lastmatch)/1000) >= ntohs(flow_match13[i]->idle_timeout))
 				{
 					if (ntohs(flow_match13[i]->flags) &  OFPFF13_SEND_FLOW_REM) flowrem_notif13(i,OFPRR13_IDLE_TIMEOUT);
 					remove_flow13(i);

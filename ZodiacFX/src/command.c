@@ -1142,7 +1142,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf("  Priority: %d\t\t\t\tDuration: %d secs\r\n",ntohs(flow_match13[i]->priority), (totaltime/2) - flow_counters[i].duration);
 					printf("  Hard Timeout: %d secs\t\t\tIdle Timeout: %d secs\r\n",ntohs(flow_match13[i]->hard_timeout), ntohs(flow_match13[i]->idle_timeout));
 					printf("  Byte Count: %d\t\t\tPacket Count: %d\r\n",flow_counters[i].bytes, flow_counters[i].hitCount);
-					int lm = (totaltime/2) - flow_counters[i].lastmatch;
+					int lm = (sys_get_ms() - flow_counters[i].lastmatch)/1000;
 					int hr = lm/3600;
 					int t = lm%3600;
 					int min = t/60;
