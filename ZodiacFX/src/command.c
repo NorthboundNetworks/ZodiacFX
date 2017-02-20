@@ -1519,10 +1519,14 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						}
 						else if(ptr_band->type == OFPMBT13_DSCP_REMARK)
 						{
-							printf("DSCP REMARK\r\n");
+							printf("DSCP REMARK (unsupported)\r\n");
 						}
-						printf("\t\t  Rate:\t\t%"PRIu32"\t\r\n", ptr_band->rate);
-						printf("\t\t  Burst Size:\t%"PRIu32"\t\r\n", ptr_band->burst_size);
+						else
+						{
+							printf("unsupported type\r\n");
+						}
+						printf("\t\t  Rate:\t\t%d\t\r\n", ptr_band->rate);
+						printf("\t\t  Burst Size:\t%d\t\r\n", ptr_band->burst_size);
 						
 						// Move up 16 bytes
 						uint8_t *ptr_tmp = ptr_band;
