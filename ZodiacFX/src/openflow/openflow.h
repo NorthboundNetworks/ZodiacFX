@@ -33,6 +33,7 @@
 #include "openflow_spec/openflow_spec10.h"
 #include "openflow_spec/openflow_spec13.h"
 #include "of_helper.h"
+#include "config_zodiac.h"
 #include <lwip/err.h>
 
 struct flows_counter
@@ -85,6 +86,18 @@ struct meter_entry13
 	uint16_t	band_count;			// Number of bands in this meter
 	uint64_t	last_packet_in;		// Time when meter last processed a packet (milliseconds)
 	struct ofp13_meter_band_drop bands[0];	// Meter bands
+};
+
+/*
+*	Meter band counters
+*		Each instance of meter_band_stats_array contains
+*		statistics for the maximum number of supported
+*		bands.
+*
+*/
+struct meter_band_stats_array
+{
+	struct ofp13_meter_band_stats band_stats[MAX_METER_BANDS_13];
 };
 
 void task_openflow(void);
