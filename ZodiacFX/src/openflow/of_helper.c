@@ -1378,3 +1378,18 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	TRACE("of_helper.c: packet needs to be dropped");	
 	return FAILURE;
 }
+
+/*
+*	Retrieve number of flows bound to the specified meter
+*
+*	@param	id		- meter ID to check
+*
+*	@ret	count	- number of associated flows
+*
+*/
+uint32_t get_bound_flows(uint32_t id)
+{
+	uint32_t count = 0;
+	
+	return count;
+}

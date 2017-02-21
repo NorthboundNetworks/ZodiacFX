@@ -1134,7 +1134,102 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 */
 int multi_meter_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request * req)
 {
-	TRACE("openflow_13.c: request for meter statistics");
+	struct ofp13_meter_stats meter_stats;
+	struct ofp13_multipart_reply reply;
+	struct ofp13_meter_multipart_request *meter_stats_req = req->body;
+	uint32_t req_id = ntohl(meter_stats_req->meter_id);
+	uint8_t *buffer_ptr = buffer;
+		
+	if(req_id == OFPM13_ALL)
+	{
+		TRACE("openflow_13.c: request for all meter statistics");
+
+		// Reply with all meter stats
+		/* ***** TODO ***** */
+			
+		//return (value);
+	}
+		
+	TRACE("openflow_13.c: request for meter statistics (meter id %d)", req_id);
+	// Find meter entry with specified meter id
+	int meter_index = 0;
+	while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13)
+	{
+		if(meter_entry[meter_index]->meter_id == req_id)
+		{
+			TRACE("of_helper.c: meter entry found - continuing");
+			break;
+		}
+			
+		meter_index++;
+	}
+	if(meter_entry[meter_index] == NULL || meter_index == MAX_METER_13)
+	{
+		TRACE("of_helper.c: error - meter entry not found");
+			
+		of_error13(req, OFPET13_METER_MOD_FAILED, OFPMMFC13_UNKNOWN_METER);
+
+		return 0;	// return length
+	}
+		
+	// Calculate total size
+	uint16_t total_size = sizeof(struct ofp13_multipart_reply) + sizeof(struct ofp13_meter_stats) + (meter_entry[meter_index]->band_count*sizeof(struct ofp13_meter_band_stats));
+		
+	// Format reply
+	reply.type				= htons(OFPMP13_METER);
+	reply.flags				= 0;	// Single reply
+		
+	// Format header
+	reply.header.version	= OF_Version;
+	reply.header.type		= OFPT13_MULTIPART_REPLY;
+	reply.header.length		= htons(total_size);
+	reply.header.xid		= req->header.xid;
+		
+	// Copy reply
+	memcpy(buffer_ptr, &reply, sizeof(struct ofp13_multipart_reply));
+	buffer_ptr += sizeof(struct ofp13_multipart_reply);
+		
+	// Format reply with specified meter statistics
+	meter_stats.meter_id		= htonl(req_id);
+	meter_stats.len				= htons(total_size - sizeof(struct ofp13_multipart_reply));
+	
+	meter_entry[meter_index]->flow_count = get_bound_flows;
+	meter_stats.flow_count		= htonl(meter_entry[meter_index]->flow_count);
+	
+	meter_stats.packet_in_count = htonll(meter_entry[meter_index]->packet_in_count);
+	meter_stats.byte_in_count	= htonll(meter_entry[meter_index]->byte_in_count);
+	meter_stats.duration_sec	= htonl((sys_get_ms()-meter_entry[meter_index]->time_added)/1000);
+	meter_stats.duration_nsec	= 0;	// nanosecond accuracy unsupported
+
+		
+	// Copy configuration
+	memcpy(buffer_ptr, &meter_stats, sizeof(struct ofp13_meter_stats));
+	buffer_ptr += sizeof(struct ofp13_meter_stats);
+		
+	//// Format bands
+	//int bands_processed = 0;
+	//struct ofp13_meter_band_stats * ptr_band;
+	//ptr_band = &(meter_entry[meter_index]->bands);
+	//struct ofp13_meter_band_stats * ptr_buffer_band;
+	//ptr_buffer_band = buffer_ptr;
+		//
+	//while(bands_processed < meter_entry[meter_index]->band_count)
+	//{
+		//ptr_buffer_band->type		= htons(ptr_band->type);
+		//ptr_buffer_band->len		= htons(sizeof(struct ofp13_meter_band_drop));
+		//ptr_buffer_band->rate		= htonl(ptr_band->rate);
+		//ptr_buffer_band->burst_size	= htonl(ptr_band->burst_size);
+			//
+		//ptr_buffer_band++;
+		//ptr_band++;	// Move to next band
+		//bands_processed++;
+	//}
+		//
+	//// update buffer pointer
+	//buffer_ptr = ptr_buffer_band;
+		
+	return (buffer_ptr - buffer);	// return length
+	
 	return 0;
 }
 
