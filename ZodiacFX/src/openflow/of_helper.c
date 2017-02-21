@@ -56,6 +56,7 @@ extern uint8_t port_status[4];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct table_counter table_counters[MAX_TABLES];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
+extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
@@ -1372,8 +1373,13 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	
 	TRACE("of_helper.c: highest triggered band rate:%d", highest_rate);
 	
-	// Update band counters
-	/* ***** TODO ***** */
+	/* Update band counters */
+	// Find band index
+	int band_index = ((uint8_t*)ptr_highest_band - (uint8_t*)&(meter_entry[meter_index]->bands)) / sizeof(struct ofp13_meter_band_drop);
+	
+	// Update counters
+	band_stats_array[meter_index].band_stats[band_index].byte_band_count += bytes;
+	band_stats_array[meter_index].band_stats[band_index].packet_band_count++;
 
 	TRACE("of_helper.c: packet needs to be dropped");	
 	return FAILURE;
