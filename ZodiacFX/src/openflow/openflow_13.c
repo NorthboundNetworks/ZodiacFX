@@ -1193,7 +1193,7 @@ int multi_meter_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request * 
 	meter_stats.meter_id		= htonl(req_id);
 	meter_stats.len				= htons(total_size - sizeof(struct ofp13_multipart_reply));
 	
-	meter_entry[meter_index]->flow_count = get_bound_flows;
+	meter_entry[meter_index]->flow_count = get_bound_flows(req_id);
 	meter_stats.flow_count		= htonl(meter_entry[meter_index]->flow_count);
 	
 	meter_stats.packet_in_count = htonll(meter_entry[meter_index]->packet_in_count);
