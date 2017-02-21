@@ -1185,7 +1185,7 @@ int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request *
 	}
 	
 	// Calculate total size (with 12-byte band headers)
-	uint16_t total_size = sizeof(struct ofp13_multipart_reply) + sizeof(struct ofp13_meter_config) + (meter_entry[meter_index]->band_count*sizeof(struct ofp13_meter_band_header));
+	uint16_t total_size = sizeof(struct ofp13_multipart_reply) + sizeof(struct ofp13_meter_config) + (meter_entry[meter_index]->band_count*sizeof(struct ofp13_meter_band_drop));
 	
 	// Format reply
 	reply.type				= htons(OFPMP13_METER_CONFIG);
@@ -1214,13 +1214,13 @@ int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request *
 	int bands_processed = 0;
 	struct ofp13_meter_band_drop * ptr_band;
 	ptr_band = &(meter_entry[meter_index]->bands);
-	struct ofp13_meter_band_header * ptr_buffer_band;
+	struct ofp13_meter_band_drop * ptr_buffer_band;
 	ptr_buffer_band = buffer_ptr;
 	
 	while(bands_processed < meter_entry[meter_index]->band_count)
 	{
 		ptr_buffer_band->type		= htons(ptr_band->type);
-		ptr_buffer_band->len		= htons(sizeof(struct ofp13_meter_band_header));	// 12-byte header, not 16-byte drop header
+		ptr_buffer_band->len		= htons(sizeof(struct ofp13_meter_band_drop));	// 12-byte header, not 16-byte drop header
 		ptr_buffer_band->rate		= htonl(ptr_band->rate);
 		ptr_buffer_band->burst_size	= htonl(ptr_band->burst_size);
 		
