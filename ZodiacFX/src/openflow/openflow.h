@@ -80,7 +80,7 @@ struct meter_entry13
 	uint32_t	flow_count;			// Number of flows bound to meter
 	uint64_t	packet_in_count;	// Packets processed by meter
 	uint64_t	byte_in_count;		// Bytes processed by meter
-	uint32_t	duration_sec;		// Time meter has been alive in seconds
+	uint32_t	time_added;			// Time meter was added in ms (time alive calculated when required)
 	uint16_t	flags;				// Meter configuration flags
 	uint16_t	band_count;			// Number of bands in this meter
 	uint64_t	last_packet_in;		// Time when meter last processed a packet (milliseconds)

@@ -38,6 +38,7 @@
 #include "lwip/tcp.h"
 #include "ipv4/lwip/ip.h"
 #include "lwip/inet_chksum.h"
+#include "timers.h"
 
 
 #define ALIGN8(x) (x+7)/8*8
@@ -1804,6 +1805,9 @@ void meter_add13(struct ofp_header *msg)
 	meter_entry[meter_index]->meter_id = ntohl(ptr_mm->meter_id);
 	meter_entry[meter_index]->flags = ntohs(ptr_mm->flags);
 	meter_entry[meter_index]->band_count = bands_received;
+	
+	// Initialise time added
+	meter_entry[meter_index]->time_added = sys_get_ms();
 	
 	// Copy bands over
 	if(bands_received != 0)
