@@ -1257,7 +1257,7 @@ int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request *
 		//return (value);
 	}
 	
-	TRACE("openflow_13.c: request for all meter configurations");
+	TRACE("openflow_13.c: request for meter configuration (meter id %d)", req_id);
 	// Find meter entry with specified meter id
 	int meter_index = 0;
 	while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13)
@@ -1279,7 +1279,7 @@ int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request *
 		return 0;	// return length
 	}
 	
-	// Calculate total size (with 12-byte band headers)
+	// Calculate total size
 	uint16_t total_size = sizeof(struct ofp13_multipart_reply) + sizeof(struct ofp13_meter_config) + (meter_entry[meter_index]->band_count*sizeof(struct ofp13_meter_band_drop));
 	
 	// Format reply
@@ -1315,7 +1315,7 @@ int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request *
 	while(bands_processed < meter_entry[meter_index]->band_count)
 	{
 		ptr_buffer_band->type		= htons(ptr_band->type);
-		ptr_buffer_band->len		= htons(sizeof(struct ofp13_meter_band_drop));	// 12-byte header, not 16-byte drop header
+		ptr_buffer_band->len		= htons(sizeof(struct ofp13_meter_band_drop));
 		ptr_buffer_band->rate		= htonl(ptr_band->rate);
 		ptr_buffer_band->burst_size	= htonl(ptr_band->burst_size);
 		
