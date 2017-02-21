@@ -1481,6 +1481,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					meter_out_counter++;
 					printf("  Meter ID: %d\r\n", meter_entry[meter_index]->meter_id);
 					printf("  Counters:\r\n");
+					meter_entry[meter_index]->flow_count = get_bound_flows(meter_entry[meter_index]->meter_id);
 					printf("\tBound Flows:\t%d\tDuration:\t%d sec\r\n", meter_entry[meter_index]->flow_count, (sys_get_ms()-meter_entry[meter_index]->time_added)/1000);
 					printf("\tByte Count:\t%"PRIu64"\tPacket Count:\t%"PRIu64"\r\n", meter_entry[meter_index]->byte_in_count, meter_entry[meter_index]->packet_in_count);
 					printf("\tConfiguration:\t");

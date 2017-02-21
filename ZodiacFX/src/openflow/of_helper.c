@@ -1391,5 +1391,29 @@ uint32_t get_bound_flows(uint32_t id)
 {
 	uint32_t count = 0;
 	
+	// Loop through flows
+	for (int i=0;i<iLastFlow;i++)
+	{
+		void *insts[8] = {0};
+		int inst_size = 0;
+		while(inst_size < ofp13_oxm_inst_size[i]){
+			struct ofp13_instruction *inst_ptr = (struct ofp13_instruction *)(ofp13_oxm_inst[i] + inst_size);
+			insts[ntohs(inst_ptr->type)] = inst_ptr;
+			inst_size += ntohs(inst_ptr->len);
+		}
+		
+		// Check if metering instruction is present
+		if(insts[OFPIT13_METER] != NULL)
+		{
+			struct ofp13_instruction_meter *inst_meter = insts[OFPIT13_METER];
+			// Check the found meter id
+			if(ntohl(inst_meter->meter_id) == id)
+			{
+				// The flow's instruction matches the specified meter id
+				count++;	// increment the counter
+			}
+		}
+	}
+	
 	return count;
 }
