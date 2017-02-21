@@ -1158,7 +1158,7 @@ int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request *
 		// Reply with all meter configurations
 		/* ***** TODO ***** */
 		
-		return SUCCESS;
+		//return (value);
 	}
 	
 	TRACE("openflow_13.c: request for all meter configurations");
@@ -1178,10 +1178,9 @@ int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request *
 	{
 		TRACE("of_helper.c: error - meter entry not found");
 		
-		of_error13(&(reply.header), OFPET13_METER_MOD_FAILED, OFPMMFC13_UNKNOWN_METER);
+		of_error13(req, OFPET13_METER_MOD_FAILED, OFPMMFC13_UNKNOWN_METER);
 
-		memcpy(buffer, &reply, sizeof(struct ofp13_multipart_reply));
-		return (buffer_ptr - buffer);	// return length
+		return 0;	// return length
 	}
 	
 	// Calculate total size (with 12-byte band headers)
@@ -1220,7 +1219,7 @@ int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request *
 	while(bands_processed < meter_entry[meter_index]->band_count)
 	{
 		ptr_buffer_band->type		= htons(ptr_band->type);
-		ptr_buffer_band->len		= htons(ptr_band->len);
+		ptr_buffer_band->len		= htons(sizeof(struct ofp13_meter_band_header));	// 12-byte header, not 16-byte drop header
 		ptr_buffer_band->rate		= htonl(ptr_band->rate);
 		ptr_buffer_band->burst_size	= htonl(ptr_band->burst_size);
 		
