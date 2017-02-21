@@ -1339,7 +1339,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	int			bands_processed = 0;
 	uint32_t	highest_rate = 0;			// Highest triggered band rate
 	struct ofp13_meter_band_drop * ptr_highest_band = NULL;	// Store pointer to highest triggered band
-	struct ofp13_meter_band_header * ptr_band;
+	struct ofp13_meter_band_drop * ptr_band;
 	ptr_band = &(meter_entry[meter_index]->bands);
 	while(bands_processed < meter_entry[meter_index]->band_count)
 	{
@@ -1352,9 +1352,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 			}			
 		}
 		
-		// Move up 16 bytes
-		uint8_t *ptr_tmp = ptr_band;
-		ptr_band = ptr_tmp + PADDED_BAND_LEN;
+		ptr_band++;	// Move to next band
 		bands_processed++;
 	}
 	

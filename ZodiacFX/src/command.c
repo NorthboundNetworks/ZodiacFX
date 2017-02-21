@@ -1507,7 +1507,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					
 					printf("\r\n\tNumber of bands:\t%"PRIu16"\r\n", meter_entry[meter_index]->band_count);
 					int bands_processed = 0;
-					struct ofp13_meter_band_header * ptr_band;
+					struct ofp13_meter_band_drop * ptr_band;
 					ptr_band = &(meter_entry[meter_index]->bands);
 					while(bands_processed < meter_entry[meter_index]->band_count)
 					{
@@ -1528,9 +1528,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						printf("\t\t  Rate:\t\t%d\t\r\n", ptr_band->rate);
 						printf("\t\t  Burst Size:\t%d\t\r\n", ptr_band->burst_size);
 						
-						// Move up 16 bytes
-						uint8_t *ptr_tmp = ptr_band;
-						ptr_band = ptr_tmp + PADDED_BAND_LEN;
+						ptr_band++;	// Move to next band
 						bands_processed++;
 					}
 				meter_index++;

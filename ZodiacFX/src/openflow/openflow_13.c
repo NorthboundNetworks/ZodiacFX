@@ -1728,7 +1728,7 @@ void meter_add13(struct ofp_header *msg)
 		
 		// Initialise pointer to first meter band destination
 		ptr_band = &(meter_entry[meter_index]->bands);
-		struct ofp13_meter_band_header * ptr_rxband;
+		struct ofp13_meter_band_drop * ptr_rxband;
 		ptr_rxband = &(ptr_mm->bands);
 		
 		do 
@@ -1748,12 +1748,8 @@ void meter_add13(struct ofp_header *msg)
 			// ***** TODO : add error checking for band processing
 			TRACE("openflow_13.c: %d of %d bands processed", bands_processed, bands_received);
 			
-			// Move up 16 bytes
-			uint8_t *ptr_tmp = ptr_band;
-			ptr_band = ptr_tmp + PADDED_BAND_LEN;
-			ptr_tmp = ptr_rxband;
-			ptr_rxband = ptr_tmp + PADDED_BAND_LEN;
-			
+			ptr_band++;		// Move to next band storage location
+			ptr_rxband++;	// Move to next received band
 			bands_processed++;
 		} while (bands_processed < bands_received);
 	}
