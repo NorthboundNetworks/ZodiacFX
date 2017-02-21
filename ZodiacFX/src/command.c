@@ -1505,7 +1505,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						printf(" NONE;");
 					}
 					
-					printf("\r\n\tNumber of bands:\t%"PRIu16"\r\n", meter_entry[meter_index]->band_count);
+					printf("\r\n\tNumber of bands:\t%d\r\n", meter_entry[meter_index]->band_count);
 					int bands_processed = 0;
 					struct ofp13_meter_band_drop * ptr_band;
 					ptr_band = &(meter_entry[meter_index]->bands);
