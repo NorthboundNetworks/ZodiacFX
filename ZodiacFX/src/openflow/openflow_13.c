@@ -1244,7 +1244,38 @@ int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request *
 int multi_meter_features_reply13(uint8_t *buffer, struct ofp13_multipart_request * req)
 {
 	TRACE("openflow_13.c: request for meter features");
-	return 0;
+	
+	struct ofp13_meter_features meter_features;
+	struct ofp13_multipart_reply reply;
+	uint8_t *buffer_ptr = buffer;
+	
+	// Format reply
+	reply.type				= htons(OFPMP13_METER_FEATURES);
+	reply.flags				= 0;	// Single reply
+	
+	// Format header
+	reply.header.version	= OF_Version;
+	reply.header.type		= OFPT13_MULTIPART_REPLY;
+	reply.header.length		= htons(sizeof(struct ofp13_meter_features) + sizeof(struct ofp13_multipart_reply));
+	reply.header.xid		= req->header.xid;
+	
+	// Copy reply
+	memcpy(buffer_ptr, &reply, sizeof(struct ofp13_multipart_reply));
+	buffer_ptr += sizeof(struct ofp13_multipart_reply);
+	
+	// Format reply with meter features
+	meter_features.max_meter	= htonl(MAX_METER_13);
+	meter_features.band_types	= htonl(2);		// Only OFPMBT_DROP supported
+	meter_features.capabilities	= htonl(OFPMF13_KBPS | OFPMF13_PKTPS);
+	meter_features.max_bands	= MAX_METER_BANDS_13;
+	meter_features.max_color	= 0;
+	
+	// Copy configuration
+	
+	memcpy(buffer_ptr, &meter_features, sizeof(struct ofp13_meter_features));
+	buffer_ptr += sizeof(struct ofp13_meter_features);
+	
+	return (buffer_ptr - buffer);	// return length
 }
 
 /*
