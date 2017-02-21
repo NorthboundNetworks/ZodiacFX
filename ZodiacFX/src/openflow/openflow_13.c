@@ -52,6 +52,7 @@ extern int iLastFlow;
 extern int totaltime;
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
+extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
