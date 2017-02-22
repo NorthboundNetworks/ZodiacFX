@@ -2035,7 +2035,7 @@ void meter_delete13(struct ofp_header *msg)
 	{
 		TRACE("openflow_13.c: consolidating meter table");
 		// Increment the index until the last meter entry is found
-		while(meter_entry[meter_index+1] != NULL)
+		while(meter_entry[meter_index+1] != NULL && (meter_index+1) < MAX_METER_13)
 		{
 			meter_index++;
 		}
