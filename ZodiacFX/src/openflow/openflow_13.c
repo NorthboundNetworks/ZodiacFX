@@ -1181,7 +1181,7 @@ int multi_meter_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request * 
 		{
 			// Format reply with specified meter statistics
 			meter_stats.meter_id		= htonl(meter_entry[meter_index]->meter_id);
-			meter_stats.len				= htons(sizeof(struct ofp13_meter_stats) + (meter_entry[meter_index]->band_count*sizeof(struct ofp13_meter_band_drop)));
+			meter_stats.len				= htons(sizeof(struct ofp13_meter_stats) + (meter_entry[meter_index]->band_count*sizeof(struct ofp13_meter_band_stats)));
 			
 			meter_entry[meter_index]->flow_count = get_bound_flows(req_id);
 			meter_stats.flow_count		= htonl(meter_entry[meter_index]->flow_count);
