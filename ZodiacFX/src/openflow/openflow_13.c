@@ -1207,31 +1207,24 @@ int multi_meter_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request * 
 	memcpy(buffer_ptr, &meter_stats, sizeof(struct ofp13_meter_stats));
 	buffer_ptr += sizeof(struct ofp13_meter_stats);
 		
-	//// Format bands
-	//int bands_processed = 0;
-	//struct ofp13_meter_band_stats * ptr_band;
-	//ptr_band = &(meter_entry[meter_index]->bands);
-	//struct ofp13_meter_band_stats * ptr_buffer_band;
-	//ptr_buffer_band = buffer_ptr;
-		//
-	//while(bands_processed < meter_entry[meter_index]->band_count)
-	//{
-		//ptr_buffer_band->type		= htons(ptr_band->type);
-		//ptr_buffer_band->len		= htons(sizeof(struct ofp13_meter_band_drop));
-		//ptr_buffer_band->rate		= htonl(ptr_band->rate);
-		//ptr_buffer_band->burst_size	= htonl(ptr_band->burst_size);
-			//
-		//ptr_buffer_band++;
-		//ptr_band++;	// Move to next band
-		//bands_processed++;
-	//}
-		//
-	//// update buffer pointer
-	//buffer_ptr = ptr_buffer_band;
+	// Format bands
+	int bands_processed = 0;
+	struct ofp13_meter_band_stats * ptr_buffer_band;
+	ptr_buffer_band = buffer_ptr;
+
+	while(bands_processed < meter_entry[meter_index]->band_count)
+	{
+		ptr_buffer_band->packet_band_count	= htonll(band_stats_array[meter_index].band_stats[bands_processed].byte_band_count);
+		ptr_buffer_band->byte_band_count	= htonll(band_stats_array[meter_index].band_stats[bands_processed].packet_band_count);
+			
+		ptr_buffer_band++;
+		bands_processed++;
+	}
+		
+	// update buffer pointer
+	buffer_ptr = ptr_buffer_band;
 		
 	return (buffer_ptr - buffer);	// return length
-	
-	return 0;
 }
 
 /*
