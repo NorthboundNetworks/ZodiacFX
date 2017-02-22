@@ -2020,6 +2020,12 @@ void meter_delete13(struct ofp_header *msg)
 	meter_entry[meter_location] = NULL;
 	meter_index = meter_location;
 	
+	/* Delete band counters */
+	// Create temporary empty structure
+	struct meter_band_stats_array empty_stats_array = {0};
+	// Copy over the existing structure
+	band_stats_array[meter_index] = empty_stats_array;
+	
 	// Consolidate table
 	if(meter_entry[meter_index+1] == NULL)
 	{
@@ -2028,12 +2034,20 @@ void meter_delete13(struct ofp_header *msg)
 	else
 	{
 		TRACE("openflow_13.c: consolidating meter table");
+		// Increment the index until the last meter entry is found
 		while(meter_entry[meter_index+1] != NULL)
 		{
 			meter_index++;
 		}
 		meter_entry[meter_location] = meter_entry[meter_index];	// Move last entry into deleted entry location
 		meter_entry[meter_index] = 0;	// Zero the moved entry
+		
+		/* Consolidate meter bands */
+		// Copy last meter's band counters into the deleted entry's band counters
+		band_stats_array[meter_location] = band_stats_array[meter_index];
+		// Zero the moved band counters
+		band_stats_array[meter_index] = empty_stats_array;
+		
 		TRACE("openflow_13.c: meter table contains %d meter entries", meter_index);
 	}
 	
