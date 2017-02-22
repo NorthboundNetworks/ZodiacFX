@@ -1145,10 +1145,77 @@ int multi_meter_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request * 
 	{
 		TRACE("openflow_13.c: request for all meter statistics");
 
-		// Reply with all meter stats
-		/* ***** TODO ***** */
+		/* Reply with all meter stats*/
+		
+		// Count the number of meters configured, and the total number of bands
+		int meter_index = 0;
+		uint16_t bands_counter = 0;
+		while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13)
+		{
+			bands_counter += meter_entry[meter_index]->band_count;
+			meter_index++;
+		};
+		
+		TRACE("openflow_13.c: %d meters in meter table, %d bands", meter_index, (int)bands_counter);
+				
+		// Calculate total size - replysize + (number of meters)*statssize + (total number of bands)*bandsize
+		uint16_t	total_size = sizeof(struct ofp13_multipart_reply) + (meter_index*sizeof(struct ofp13_meter_stats)) + (bands_counter*sizeof(struct ofp13_meter_band_stats));
+					
+		// Format reply
+		reply.type				= htons(OFPMP13_METER);
+		reply.flags				= 0;	// Single reply
+					
+		// Format header
+		reply.header.version	= OF_Version;
+		reply.header.type		= OFPT13_MULTIPART_REPLY;
+		reply.header.length		= htons(total_size);
+		reply.header.xid		= req->header.xid;
+		
+		// Copy reply
+		memcpy(buffer_ptr, &reply, sizeof(struct ofp13_multipart_reply));
+		buffer_ptr += sizeof(struct ofp13_multipart_reply);
+		
+		meter_index = 0;
+		// Loop & format each meter stats reply
+		while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13)
+		{
+			// Format reply with specified meter statistics
+			meter_stats.meter_id		= htonl(meter_entry[meter_index]->meter_id);
+			meter_stats.len				= htons(sizeof(struct ofp13_meter_stats) + (meter_entry[meter_index]->band_count*sizeof(struct ofp13_meter_band_drop)));
 			
-		//return (value);
+			meter_entry[meter_index]->flow_count = get_bound_flows(req_id);
+			meter_stats.flow_count		= htonl(meter_entry[meter_index]->flow_count);
+			
+			meter_stats.packet_in_count = htonll(meter_entry[meter_index]->packet_in_count);
+			meter_stats.byte_in_count	= htonll(meter_entry[meter_index]->byte_in_count);
+			meter_stats.duration_sec	= htonl((sys_get_ms()-meter_entry[meter_index]->time_added)/1000);
+			meter_stats.duration_nsec	= 0;	// nanosecond accuracy unsupported
+
+			// Copy configuration
+			memcpy(buffer_ptr, &meter_stats, sizeof(struct ofp13_meter_stats));
+			buffer_ptr += sizeof(struct ofp13_meter_stats);
+			
+			// Format bands
+			int bands_processed = 0;
+			struct ofp13_meter_band_stats * ptr_buffer_band;
+			ptr_buffer_band = buffer_ptr;
+
+			while(bands_processed < meter_entry[meter_index]->band_count)
+			{
+				ptr_buffer_band->packet_band_count	= htonll(band_stats_array[meter_index].band_stats[bands_processed].byte_band_count);
+				ptr_buffer_band->byte_band_count	= htonll(band_stats_array[meter_index].band_stats[bands_processed].packet_band_count);
+				
+				ptr_buffer_band++;
+				bands_processed++;
+			}
+			
+			// update buffer pointer
+			buffer_ptr = ptr_buffer_band;
+			
+			meter_index++;
+		}
+		
+		return (buffer_ptr - buffer);	// return length
 	}
 		
 	TRACE("openflow_13.c: request for meter statistics (meter id %d)", req_id);
