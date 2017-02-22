@@ -64,6 +64,7 @@ extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
+extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
 extern bool masterselect;
 extern bool stackenabled = false;
 extern bool trace = false;
@@ -1479,9 +1480,10 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					printf("\r\n-------------------------------------------------------------------------\r\n");
 					printf("\r\nMeter %d\r\n", meter_out_counter);
 					meter_out_counter++;
-					printf("  Meter ID: %"PRIu32"\r\n", meter_entry[meter_index]->meter_id);
+					printf("  Meter ID: %d\r\n", meter_entry[meter_index]->meter_id);
 					printf("  Counters:\r\n");
-					printf("\tBound Flows:\t%"PRIu32"\tDuration:\t%"PRIu32"\r\n", meter_entry[meter_index]->flow_count, meter_entry[meter_index]->duration_sec);
+					meter_entry[meter_index]->flow_count = get_bound_flows(meter_entry[meter_index]->meter_id);
+					printf("\tBound Flows:\t%d\tDuration:\t%d sec\r\n", meter_entry[meter_index]->flow_count, (sys_get_ms()-meter_entry[meter_index]->time_added)/1000);
 					printf("\tByte Count:\t%"PRIu64"\tPacket Count:\t%"PRIu64"\r\n", meter_entry[meter_index]->byte_in_count, meter_entry[meter_index]->packet_in_count);
 					printf("\tConfiguration:\t");
 					if(((meter_entry[meter_index]->flags) & OFPMF13_KBPS) == OFPMF13_KBPS)
@@ -1505,9 +1507,9 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						printf(" NONE;");
 					}
 					
-					printf("\r\n\tNumber of bands:\t%"PRIu16"\r\n", meter_entry[meter_index]->band_count);
+					printf("\r\n\tNumber of bands:\t%d\r\n", meter_entry[meter_index]->band_count);
 					int bands_processed = 0;
-					struct ofp13_meter_band_header * ptr_band;
+					struct ofp13_meter_band_drop * ptr_band;
 					ptr_band = &(meter_entry[meter_index]->bands);
 					while(bands_processed < meter_entry[meter_index]->band_count)
 					{
@@ -1519,14 +1521,23 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						}
 						else if(ptr_band->type == OFPMBT13_DSCP_REMARK)
 						{
-							printf("DSCP REMARK\r\n");
+							printf("DSCP REMARK (unsupported)\r\n");
 						}
-						printf("\t\t  Rate:\t\t%"PRIu32"\t\r\n", ptr_band->rate);
-						printf("\t\t  Burst Size:\t%"PRIu32"\t\r\n", ptr_band->burst_size);
+						else
+						{
+							printf("unsupported type\r\n");
+						}
+						printf("\t\t  Rate:\t\t%d\t\r\n", ptr_band->rate);
+						printf("\t\t  Burst Size:\t%d\t\r\n", ptr_band->burst_size);
 						
-						// Move up 16 bytes
-						uint8_t *ptr_tmp = ptr_band;
-						ptr_band = ptr_tmp + PADDED_BAND_LEN;
+						// Find band index
+						int band_index = ((uint8_t*)ptr_band - (uint8_t*)&(meter_entry[meter_index]->bands)) / sizeof(struct ofp13_meter_band_drop);
+						
+						// Display counters
+						printf("\t\t  Byte count:\t%"PRIu64"\t\r\n", band_stats_array[meter_index].band_stats[band_index].byte_band_count);
+						printf("\t\t  Packet count:\t%"PRIu64"\t\r\n", band_stats_array[meter_index].band_stats[band_index].packet_band_count);
+						
+						ptr_band++;	// Move to next band
 						bands_processed++;
 					}
 				meter_index++;

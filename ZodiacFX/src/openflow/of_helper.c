@@ -56,6 +56,7 @@ extern uint8_t port_status[4];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct table_counter table_counters[MAX_TABLES];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
+extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
@@ -1338,8 +1339,8 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	// Check each band
 	int			bands_processed = 0;
 	uint32_t	highest_rate = 0;			// Highest triggered band rate
-	struct ofp13_meter_band_header * ptr_highest_band = NULL;	// Store pointer to highest triggered band
-	struct ofp13_meter_band_header * ptr_band;
+	struct ofp13_meter_band_drop * ptr_highest_band = NULL;	// Store pointer to highest triggered band
+	struct ofp13_meter_band_drop * ptr_band;
 	ptr_band = &(meter_entry[meter_index]->bands);
 	while(bands_processed < meter_entry[meter_index]->band_count)
 	{
@@ -1352,9 +1353,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 			}			
 		}
 		
-		// Move up 16 bytes
-		uint8_t *ptr_tmp = ptr_band;
-		ptr_band = ptr_tmp + PADDED_BAND_LEN;
+		ptr_band++;	// Move to next band
 		bands_processed++;
 	}
 	
@@ -1374,9 +1373,53 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	
 	TRACE("of_helper.c: highest triggered band rate:%d", highest_rate);
 	
-	// Update band counters
-	/* ***** TODO ***** */
+	/* Update band counters */
+	// Find band index
+	int band_index = ((uint8_t*)ptr_highest_band - (uint8_t*)&(meter_entry[meter_index]->bands)) / sizeof(struct ofp13_meter_band_drop);
+	
+	// Update counters
+	band_stats_array[meter_index].band_stats[band_index].byte_band_count += bytes;
+	band_stats_array[meter_index].band_stats[band_index].packet_band_count++;
 
 	TRACE("of_helper.c: packet needs to be dropped");	
 	return FAILURE;
+}
+
+/*
+*	Retrieve number of flows bound to the specified meter
+*
+*	@param	id		- meter ID to check
+*
+*	@ret	count	- number of associated flows
+*
+*/
+uint32_t get_bound_flows(uint32_t id)
+{
+	uint32_t count = 0;
+	
+	// Loop through flows
+	for (int i=0;i<iLastFlow;i++)
+	{
+		void *insts[8] = {0};
+		int inst_size = 0;
+		while(inst_size < ofp13_oxm_inst_size[i]){
+			struct ofp13_instruction *inst_ptr = (struct ofp13_instruction *)(ofp13_oxm_inst[i] + inst_size);
+			insts[ntohs(inst_ptr->type)] = inst_ptr;
+			inst_size += ntohs(inst_ptr->len);
+		}
+		
+		// Check if metering instruction is present
+		if(insts[OFPIT13_METER] != NULL)
+		{
+			struct ofp13_instruction_meter *inst_meter = insts[OFPIT13_METER];
+			// Check the found meter id
+			if(ntohl(inst_meter->meter_id) == id)
+			{
+				// The flow's instruction matches the specified meter id
+				count++;	// increment the counter
+			}
+		}
+	}
+	
+	return count;
 }

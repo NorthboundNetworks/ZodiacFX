@@ -58,6 +58,7 @@ struct flow_tbl_actions *flow_actions10[MAX_FLOWS_10];
 struct table_counter table_counters[MAX_TABLES];
 int iLastFlow = 0;
 struct meter_entry13 *meter_entry[MAX_METER_13];
+struct meter_band_stats_array band_stats_array[MAX_METER_13];
 uint8_t shared_buffer[SHARED_BUFFER_LEN];
 char sysbuf[64];
 struct ip_addr serverIP;

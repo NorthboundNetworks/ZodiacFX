@@ -33,6 +33,7 @@
 #include "openflow_spec/openflow_spec10.h"
 #include "openflow_spec/openflow_spec13.h"
 #include "of_helper.h"
+#include "config_zodiac.h"
 #include <lwip/err.h>
 
 struct flows_counter
@@ -80,11 +81,23 @@ struct meter_entry13
 	uint32_t	flow_count;			// Number of flows bound to meter
 	uint64_t	packet_in_count;	// Packets processed by meter
 	uint64_t	byte_in_count;		// Bytes processed by meter
-	uint32_t	duration_sec;		// Time meter has been alive in seconds
+	uint32_t	time_added;			// Time meter was added in ms (time alive calculated when required)
 	uint16_t	flags;				// Meter configuration flags
 	uint16_t	band_count;			// Number of bands in this meter
 	uint64_t	last_packet_in;		// Time when meter last processed a packet (milliseconds)
-	struct ofp13_meter_band_header bands[0];	// Meter bands
+	struct ofp13_meter_band_drop bands[0];	// Meter bands
+};
+
+/*
+*	Meter band counters
+*		Each instance of meter_band_stats_array contains
+*		statistics for the maximum number of supported
+*		bands.
+*
+*/
+struct meter_band_stats_array
+{
+	struct ofp13_meter_band_stats band_stats[MAX_METER_BANDS_13];
 };
 
 void task_openflow(void);
@@ -112,7 +125,6 @@ void port_status_message13(uint8_t port);
 
 #define SHARED_BUFFER_LEN 2048
 
-#define PADDED_BAND_LEN	16		// Incoming bands are padded to 16 bytes
 #define	METER_PARTIAL	8		// Meter structure length, excluding header and bands
 
 #define SUCCESS		0
