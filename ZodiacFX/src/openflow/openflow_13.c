@@ -2036,9 +2036,7 @@ void meter_add13(struct ofp_header *msg)
 		meter_index++;
 	}
 	// meter_index now holds the next available entry in the meter table
-	
-	iLastMeter = meter_index;	// Store index to last meter
-	
+		
 	// Find number of bands
 	uint16_t bands_received = ((ntohs(ptr_mm->header.length) - sizeof(struct ofp_header) - METER_PARTIAL))/sizeof(struct ofp13_meter_band_drop);	// FIX
 							// Band list length is inferred from the length field in the header
@@ -2103,6 +2101,8 @@ void meter_add13(struct ofp_header *msg)
 			bands_processed++;
 		} while (bands_processed < bands_received);
 	}
+	
+	iLastMeter++;	// Decrement last meter count
 	
 	return;
 }
