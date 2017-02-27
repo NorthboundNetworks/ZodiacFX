@@ -3285,7 +3285,60 @@ if (iLastFlow > 0)
 		return 0;
 	}
 }
-			
+		
+/*
+*	Create and format HTML for display meters page
+*
+*/
+static uint8_t interfaceCreate_Display_Meters(uint8_t more)
+{
+	sprintf(shared_buffer, http_header);
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+		"<!DOCTYPE html>"\
+		"<html>"\
+			"<head>"\
+				"<style>"\
+				"body {"\
+					"overflow: auto;"\
+					"font-family:Sans-serif;"\
+					"line-height: 1.2em;"\
+					"font-size: 17px;"\
+					"margin-left: 20px;"\
+				"}"\
+				"</style>"\
+			"</head>"\
+			"<body>"\
+				"<p>"\
+					"<h2>Meters</h2>"\
+				"</p>"\
+				"<pre><span style=\"font-size: 12px; line-height: 1\">"\
+			);
+
+// Begin Meter formatting
+// End Meter formatting
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+				"</span></pre>"\
+	);
+	
+		
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+			"</body>"\
+		"</html>"\
+	) < SHARED_BUFFER_LEN)
+	{
+		TRACE("http.c: html written to buffer");
+		return 1;
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}
+	
+}	
+
 /*
 *	Create and format HTML for config help page
 *
