@@ -3501,7 +3501,7 @@ static uint8_t interfaceCreate_Display_Meters(void)
 
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</span></pre>"\
-				"<form action=\"btn_meterPage\" method=\"post\"><br>"\
+				"<form action=\"btn_meterPage\" method=\"post\">"\
 	);
 	
 	// Check if "previous page" button needs to be created
