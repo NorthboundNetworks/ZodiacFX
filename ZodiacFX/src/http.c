@@ -3359,6 +3359,12 @@ static uint8_t interfaceCreate_Display_Meters(void)
 {
 	/* Prepare meter counters */
 	
+	// Check status of start of range
+	if(meterBase > iLastMeter)
+	{
+		meterBase = 0;
+	}
+	
 	// Find number of meters
 	int meterCount;
 	if(meter_entry[0] == NULL)
