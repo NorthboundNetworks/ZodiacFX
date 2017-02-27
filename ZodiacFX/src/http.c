@@ -3098,6 +3098,14 @@ if (iLastFlow > 0)
 				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r Instructions:\r\n");
 				inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
 				inst_size = ntohs(inst_ptr->len);
+				
+				// Check for optional metering instruction
+				if(ntohs(inst_ptr->type) == OFPIT13_METER)
+				{
+					struct ofp13_instruction_meter *inst_meter = inst_ptr;
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), "  Meter: %d\r\n", ntohl(inst_meter->meter_id));
+				}
+				
 				if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
 				{
 					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Apply Actions:\r\n");
