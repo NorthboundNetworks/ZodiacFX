@@ -79,6 +79,7 @@ static char http_msg[64];			// Buffer for HTTP message filtering
 static int page_ctr = 1;
 static int boundary_start = 1;		// Check for start of data
 static uint8_t flowBase = 0;		// Current set of flows to display
+static uint8_t meterBase = 0;		// Current set of meters to display
 
 // Flag variables
 static bool restart_required = false;		// Track if any configuration changes are pending a restart
@@ -3306,6 +3307,38 @@ if (iLastFlow > 0)
 */
 static uint8_t interfaceCreate_Display_Meters(void)
 {
+	/* Prepare meter counters */
+	
+	// Find number of meters
+	int meterCount;
+	if(meter_entry[0] == NULL)
+	{
+		meterCount = 0;
+	}
+	else
+	{
+		meterCount = iLastMeter+1;
+	}
+	
+	// Find end of display range (exclusive) - meterBase indexes the start of the range
+	int meterEnd;
+	if(meterBase == 0)
+	{
+		meterEnd = METER_DISPLAY_LIMIT;
+	}
+	else
+	{
+		if(meterBase + METER_DISPLAY_LIMIT >= iLastMeter)
+		{
+			meterEnd = iLastMeter+1;
+		}
+		else
+		{
+			meterEnd = meterBase + METER_DISPLAY_LIMIT;
+		}
+	}
+	
+	// Format header
 	sprintf(shared_buffer, http_header);
 
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
@@ -3325,11 +3358,96 @@ static uint8_t interfaceCreate_Display_Meters(void)
 			"<body>"\
 				"<p>"\
 					"<h2>Meters</h2>"\
+					"%d meters configured<br>"\
+			, meterCount);
+			
+	if(meterCount != 0)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+				"Showing meters %d - %d<br>"\
+			, meterBase+1, meterEnd);
+	}
+	
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</p>"\
 				"<pre><span style=\"font-size: 12px; line-height: 1\">"\
 			);
 
 // Begin Meter formatting
+		
+	// Check that table is populated
+	if(meter_entry[0] != NULL)
+	{
+		int meter_index = meterBase;
+		while(meter_entry[meter_index] != NULL && meter_index < meterEnd)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"_______\r\n");
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\nMeter %d\r\n", meter_index+1);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Meter ID: %d\r\n", meter_entry[meter_index]->meter_id);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Counters:\r\n");
+			meter_entry[meter_index]->flow_count = get_bound_flows(meter_entry[meter_index]->meter_id);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\tBound Flows:\t%d\tDuration:\t%d sec\r\n", meter_entry[meter_index]->flow_count, (sys_get_ms()-meter_entry[meter_index]->time_added)/1000);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\tByte Count:\t%"PRIu64"\tPacket Count:\t%"PRIu64"\r\n", meter_entry[meter_index]->byte_in_count, meter_entry[meter_index]->packet_in_count);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\tConfiguration:\t");
+			if(((meter_entry[meter_index]->flags) & OFPMF13_KBPS) == OFPMF13_KBPS)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"KBPS; ");
+			}
+			if(((meter_entry[meter_index]->flags) & OFPMF13_PKTPS) == OFPMF13_PKTPS)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"PKTPS; ");
+			}
+			if(((meter_entry[meter_index]->flags) & OFPMF13_BURST) == OFPMF13_BURST)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"BURST; ");
+			}
+			if(((meter_entry[meter_index]->flags) & OFPMF13_STATS) == OFPMF13_STATS)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"STATS; ");
+			}
+			if(meter_entry[meter_index]->flags == 0)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer)," NONE;");
+			}
+				
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n\tNumber of bands:\t%d\r\n", meter_entry[meter_index]->band_count);
+			int bands_processed = 0;
+			struct ofp13_meter_band_drop * ptr_band;
+			ptr_band = &(meter_entry[meter_index]->bands);
+			while(bands_processed < meter_entry[meter_index]->band_count)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\tBand %d:\r\n", bands_processed+1);
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Type:\t\t");
+				if(ptr_band->type == OFPMBT13_DROP)
+				{
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"DROP\r\n");
+				}
+				else if(ptr_band->type == OFPMBT13_DSCP_REMARK)
+				{
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"DSCP REMARK (unsupported)\r\n");
+				}
+				else
+				{
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"unsupported type\r\n");
+				}
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Rate:\t\t%d\t\r\n", ptr_band->rate);
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Burst Size:\t%d\t\r\n", ptr_band->burst_size);
+					
+				// Find band index
+				int band_index = ((uint8_t*)ptr_band - (uint8_t*)&(meter_entry[meter_index]->bands)) / sizeof(struct ofp13_meter_band_drop);
+					
+				// Display counters
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Byte count:\t%"PRIu64"\t\r\n", band_stats_array[meter_index].band_stats[band_index].byte_band_count);
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Packet count:\t%"PRIu64"\t\r\n", band_stats_array[meter_index].band_stats[band_index].packet_band_count);
+					
+				ptr_band++;	// Move to next band
+				bands_processed++;
+			}
+			meter_index++;
+		}
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n_______\r\n\r\n");
+	}
+	
 // End Meter formatting
 
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
