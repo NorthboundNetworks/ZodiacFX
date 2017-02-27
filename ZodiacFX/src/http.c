@@ -3705,6 +3705,10 @@ static uint8_t interfaceCreate_About(void)
 	}
 }
 
+/*
+*	Create and format HTML for interstitial restart page
+*
+*/
 static uint8_t interfaceCreate_Restart(void)
 {
 	sprintf(shared_buffer, http_header);
