@@ -65,6 +65,7 @@ extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_13];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
 extern int iLastFlow;
+extern int iLastMeter;
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];

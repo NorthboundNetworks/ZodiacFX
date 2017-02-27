@@ -49,6 +49,7 @@ extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
 extern bool rcv_freq;
 extern int iLastFlow;
+extern int iLastMeter;
 extern int totaltime;
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
@@ -2034,6 +2035,8 @@ void meter_add13(struct ofp_header *msg)
 	}
 	// meter_index now holds the next available entry in the meter table
 	
+	iLastMeter = meter_index;	// Store index to last meter
+	
 	// Find number of bands
 	uint16_t bands_received = ((ntohs(ptr_mm->header.length) - sizeof(struct ofp_header) - METER_PARTIAL))/sizeof(struct ofp13_meter_band_drop);	// FIX
 							// Band list length is inferred from the length field in the header
@@ -2288,6 +2291,8 @@ void meter_delete13(struct ofp_header *msg)
 		
 		TRACE("openflow_13.c: meter table contains %d meter entries", meter_index);
 	}
+	
+	iLastMeter--;	// Decrement last meter count
 	
 	return;
 }
