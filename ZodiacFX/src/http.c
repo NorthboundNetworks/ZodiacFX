@@ -736,10 +736,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						TRACE("http.c: request for next page of flows");
 						TRACE("http.c: current flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
-						if(flowBase < iLastFlow-FLOW_LIMIT)
+						if(flowBase < iLastFlow-FLOW_DISPLAY_LIMIT)
 						{
 							// Increment flow base (display next set on page send)
-							flowBase += FLOW_LIMIT;
+							flowBase += FLOW_DISPLAY_LIMIT;
 							TRACE("http.c: new flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
 						}
 						else
@@ -751,10 +751,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						TRACE("http.c: request for previous page of flows");
 						TRACE("http.c: current flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
-						if(flowBase >= FLOW_LIMIT)
+						if(flowBase >= FLOW_DISPLAY_LIMIT)
 						{
 							// Decrement flow base (display previous set on page send)
-							flowBase -= FLOW_LIMIT;
+							flowBase -= FLOW_DISPLAY_LIMIT;
 							TRACE("http.c: new flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
 						}
 						else
@@ -2818,7 +2818,7 @@ static uint8_t interfaceCreate_Display_Flows(void)
 // Begin Flow formatting
 
 int i;
-uint8_t flowEnd = flowBase + FLOW_LIMIT;
+uint8_t flowEnd = flowBase + FLOW_DISPLAY_LIMIT;
 struct ofp_action_header * act_hdr;
 
 // Ensure page correctly displays end of flows
@@ -3240,7 +3240,7 @@ if (iLastFlow > 0)
 	);
 	
 	// Check if "previous page" button needs to be created
-	if(flowBase >= FLOW_LIMIT)
+	if(flowBase >= FLOW_DISPLAY_LIMIT)
 	{
 		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 					"<button name=\"btn\" value=\"btn_ofPrev\">Previous</button>"\
