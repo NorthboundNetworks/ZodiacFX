@@ -54,6 +54,7 @@ extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];	// SHARED_BUFFER_LEN must never be reduced below 2048
 extern struct integrity_check verify;
+extern int tcp_con_state;	// Check connection state
 
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
@@ -2729,11 +2730,7 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 	// Status
 	char wi_ofStatus[15] = "";
 	
-	if (tcp_pcb->state != ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED)
-	{
-		snprintf(wi_ofStatus, 15, "Disconnected");
-	}
-	else if (tcp_pcb->state == ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED)
+	if (tcp_con_state == 1 && tcp_pcb->state == ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED)
 	{
 		snprintf(wi_ofStatus, 15, "Connected");
 	}
@@ -2743,7 +2740,7 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 	}
 	else
 	{
-		snprintf(wi_ofStatus, 15, "Error: unknown");
+		snprintf(wi_ofStatus, 15, "Disconnected");
 	}
 	
 	// Version, Tables, Flows, Lookups, Matches
