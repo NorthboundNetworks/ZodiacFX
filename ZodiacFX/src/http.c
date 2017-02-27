@@ -102,7 +102,7 @@ static uint8_t interfaceCreate_Display_Home(void);
 static uint8_t interfaceCreate_Display_Ports(uint8_t step);
 static uint8_t interfaceCreate_Display_OpenFlow(void);
 static uint8_t interfaceCreate_Display_Flows(void);
-static uint8_t interfaceCreate_Display_Meters(uint8_t more);
+static uint8_t interfaceCreate_Display_Meters(void);
 static uint8_t interfaceCreate_Config_Home(void);
 static uint8_t interfaceCreate_Config_Network(void);
 static uint8_t interfaceCreate_Config_VLANs(void);
@@ -3291,7 +3291,7 @@ if (iLastFlow > 0)
 *	Create and format HTML for display meters page
 *
 */
-static uint8_t interfaceCreate_Display_Meters(uint8_t more)
+static uint8_t interfaceCreate_Display_Meters(void)
 {
 	sprintf(shared_buffer, http_header);
 
