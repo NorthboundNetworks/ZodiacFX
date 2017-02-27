@@ -3360,7 +3360,7 @@ static uint8_t interfaceCreate_Display_Meters(void)
 	/* Prepare meter counters */
 	
 	// Check status of start of range
-	if(meterBase > iLastMeter)
+	if(meterBase >= iLastMeter)
 	{
 		meterBase = 0;
 	}
@@ -3373,14 +3373,14 @@ static uint8_t interfaceCreate_Display_Meters(void)
 	}
 	else
 	{
-		meterCount = iLastMeter+1;
+		meterCount = iLastMeter;
 	}
 	
 	// Find end of display range (exclusive) - meterBase indexes the start of the range
 	int meterEnd;
 	if(meterBase + METER_DISPLAY_LIMIT >= iLastMeter)
 	{
-		meterEnd = iLastMeter+1;
+		meterEnd = iLastMeter;
 	}
 	else
 	{
