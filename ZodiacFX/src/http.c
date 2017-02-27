@@ -3378,20 +3378,13 @@ static uint8_t interfaceCreate_Display_Meters(void)
 	
 	// Find end of display range (exclusive) - meterBase indexes the start of the range
 	int meterEnd;
-	if(meterBase == 0)
+	if(meterBase + METER_DISPLAY_LIMIT >= iLastMeter)
 	{
-		meterEnd = METER_DISPLAY_LIMIT;
+		meterEnd = iLastMeter+1;
 	}
 	else
 	{
-		if(meterBase + METER_DISPLAY_LIMIT >= iLastMeter)
-		{
-			meterEnd = iLastMeter+1;
-		}
-		else
-		{
-			meterEnd = meterBase + METER_DISPLAY_LIMIT;
-		}
+		meterEnd = meterBase + METER_DISPLAY_LIMIT;
 	}
 	
 	// Format header
