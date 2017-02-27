@@ -431,6 +431,18 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
+				else if(strcmp(http_msg,"d_meters.htm") == 0)
+				{
+					if(interfaceCreate_Display_Meters())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
       			else if(strcmp(http_msg,"cfg_home.htm") == 0)
 				{
 					if(interfaceCreate_Config_Home())
@@ -2017,6 +2029,7 @@ static uint8_t interfaceCreate_Menu(void)
 						"<li id=\"sub\"><a href=\"d_ports.htm\" target=\"page\">Ports</a></li>"\
 						"<li id=\"sub\"><a href=\"d_of.htm\" target=\"page\">OpenFlow</a></li>"\
 						"<li id=\"sub\"><a href=\"d_flo.htm\" target=\"page\">Flows</a></li>"\
+						"<li id=\"sub\"><a href=\"d_meters.htm\" target=\"page\">Meters</a></li>"\
 						"<li><a href=\"cfg_home.htm\" target=\"page\">Config</a></li>"\
 						"<li id=\"sub\"><a href=\"cfg_net.htm\" target=\"page\">Network</a></li>"\
 						"<li id=\"sub\"><a href=\"cfg_vlan.htm\" target=\"page\">VLANs</a></li>"\
