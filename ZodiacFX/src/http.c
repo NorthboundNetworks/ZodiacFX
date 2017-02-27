@@ -813,6 +813,56 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
+				else if(strcmp(http_msg,"btn_meterPage") == 0)
+				{
+					// Display: Meters, Previous and Next meter page buttons
+					
+					if(strstr(http_payload, "btn_meterNext") != NULL)	// Check that element exists
+					{
+						TRACE("http.c: request for next page of meters");
+						TRACE("http.c: current meterBase: %d; current iLastMeter: %d;", meterBase, iLastMeter)
+						if(meterBase < iLastMeter-METER_DISPLAY_LIMIT)
+						{
+							// Increment flow base (display next set on page send)
+							meterBase += METER_DISPLAY_LIMIT;
+							TRACE("http.c: new meterBase: %d; current iLastMeter: %d;", meterBase, iLastMeter)
+						}
+						else
+						{
+							TRACE("http.c: meterBase already reaches end - NOT incremented")
+						}
+					}
+					else if(strstr(http_payload, "btn_meterPrev") != NULL)
+					{
+						TRACE("http.c: request for previous page of meters");
+						TRACE("http.c: current meterBase: %d; current iLastMeter: %d;", meterBase, iLastMeter)
+						if(meterBase >= METER_DISPLAY_LIMIT)
+						{
+							// Decrement meter base (display previous set on page send)
+							meterBase -= METER_DISPLAY_LIMIT;
+							TRACE("http.c: new meterBase: %d; current iLastMeter: %d;", meterBase, iLastMeter)
+						}
+						else
+						{
+							TRACE("http.c: meterBase already at start - NOT decremented")
+						}
+					}
+					else
+					{
+						TRACE("http.c: ERROR: invalid request");
+					}
+					
+					// Send updated page
+					if(interfaceCreate_Display_Meters())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
 				else if(strcmp(http_msg,"save_vlan") == 0)
 				{
 					// Config: VLANs, Add and Delete buttons
@@ -3452,8 +3502,27 @@ static uint8_t interfaceCreate_Display_Meters(void)
 
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</span></pre>"\
+				"<form action=\"btn_meterPage\" method=\"post\"><br>"\
 	);
 	
+	// Check if "previous page" button needs to be created
+	if(meterBase >= METER_DISPLAY_LIMIT)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+					"<button name=\"btn\" value=\"btn_meterPrev\">Previous</button>"\
+				);
+	}
+	
+	// Check if "next page" button needs to be created
+	if(meterEnd < iLastMeter)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+					"<button name=\"btn\" value=\"btn_meterNext\">Next</button>"\
+				);
+	}
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+				"</form>");
 		
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 			"</body>"\
