@@ -2232,6 +2232,35 @@ void meter_delete13(struct ofp_header *msg)
 	struct ofp13_meter_mod * ptr_mm;
 	ptr_mm = (struct ofp13_meter_mod *) msg;
 	
+	// Check if all meters need to be deleted
+	if(ntohl(ptr_mm->meter_id) == OFPM13_ALL)
+	{
+		TRACE("openflow_13.c: request to delete all meters");
+		
+		int meter_index = 0;
+		
+		// Create temporary empty structure
+		struct meter_band_stats_array empty_stats_array = {0};
+		
+		// Loop through all meters
+		while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13)
+		{
+			/* Delete entry */
+			// Free allocated memory
+			membag_free(meter_entry[meter_index]);
+			// Clear the pointer
+			meter_entry[meter_index] = NULL;
+			
+			/* Delete band counters */
+			// Copy over the existing structure
+			band_stats_array[meter_index] = empty_stats_array;
+						
+			meter_index++;
+		}
+		
+		return;
+	}
+	
 	TRACE("openflow_13.c: request to DELETE meter_id %d", ntohl(ptr_mm->meter_id));
 	
 	int meter_index = 0;
