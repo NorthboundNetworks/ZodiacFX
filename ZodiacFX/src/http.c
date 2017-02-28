@@ -2187,8 +2187,7 @@ static uint8_t interfaceCreate_Upload(void)
 					"<h2>Firmware Update</h2>"\
 				"</p>"\
 			"<body>"\
-				"<p>Browser firmware update is currently supported in the following browsers:<br> - Chrome (Windows & macOS)<br> - Firefox (Windows & macOS)<br> - Edge (Windows)<br> - Internet Explorer 11 (Windows)<br><br>"\
-				"Do not attempt an update with an unsupported browser.</p>"\
+				"<p>Browser firmware update supports official binaries (version 0.80 and later).<br><br>Please find the latest version in the <a href=\"http://forums.northboundnetworks.com/index.php?PHPSESSID=39c9227476da4ef211c9c3b1fa235951&topic=52.0\">forums</a>.</p>"\
 				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\" onsubmit=\"return confirm('Firmware file will now be uploaded. This may take up to 60 seconds. DO NOT refresh the page while firmware update is in progress.');\">"\
 					"<input type=\"file\" name =\"file\"><br><br>"\
 					"<input type=\"submit\" value=\"Upload File\"/>"\
