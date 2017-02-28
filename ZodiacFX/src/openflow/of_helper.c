@@ -49,6 +49,7 @@
 // Global variables
 extern struct zodiac_config Zodiac_Config;
 extern int iLastFlow;
+extern int iLastMeter;
 extern int OF_Version;
 extern int totaltime;
 extern uint8_t last_port_status[4];
@@ -1097,6 +1098,7 @@ void flow_timeouts()
 void clear_flows(void)
 {
 	iLastFlow = 0;
+	iLastMeter = 0;
 	membag_init();
 
 	/*	Clear OpenFlow 1.0 flow table	*/

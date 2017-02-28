@@ -31,7 +31,8 @@
 #ifndef HTTP_H_
 #define HTTP_H_
 
-#define FLOW_LIMIT	4		// Displayable flows per page
+#define FLOW_DISPLAY_LIMIT	4	// Displayable flows per page
+#define	METER_DISPLAY_LIMIT	3	// Displayable meters per page
 #define BOUNDARY_MAX_LEN	70
 
 void http_init(void);

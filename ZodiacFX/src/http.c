@@ -54,6 +54,7 @@ extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];	// SHARED_BUFFER_LEN must never be reduced below 2048
 extern struct integrity_check verify;
+extern int tcp_con_state;	// Check connection state
 
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
@@ -62,7 +63,10 @@ extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_13];
+extern struct meter_entry13 *meter_entry[MAX_METER_13];
+extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
 extern int iLastFlow;
+extern int iLastMeter;
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
@@ -76,6 +80,7 @@ static char http_msg[64];			// Buffer for HTTP message filtering
 static int page_ctr = 1;
 static int boundary_start = 1;		// Check for start of data
 static uint8_t flowBase = 0;		// Current set of flows to display
+static uint8_t meterBase = 0;		// Current set of meters to display
 
 // Flag variables
 static bool restart_required = false;		// Track if any configuration changes are pending a restart
@@ -99,12 +104,25 @@ static uint8_t interfaceCreate_Display_Home(void);
 static uint8_t interfaceCreate_Display_Ports(uint8_t step);
 static uint8_t interfaceCreate_Display_OpenFlow(void);
 static uint8_t interfaceCreate_Display_Flows(void);
+static uint8_t interfaceCreate_Display_Meters(void);
 static uint8_t interfaceCreate_Config_Home(void);
 static uint8_t interfaceCreate_Config_Network(void);
 static uint8_t interfaceCreate_Config_VLANs(void);
 static uint8_t interfaceCreate_Config_OpenFlow(void);
 static uint8_t interfaceCreate_About(void);
 static uint8_t interfaceCreate_Restart(void);
+
+static uint8_t http_header[] =		"HTTP/1.1 200 OK\r\n"\
+									"Connection: Keep-Alive\r\n"\
+									"Content-Type: text/html; charset=UTF-8\r\n\r\n";
+
+static uint8_t html_style_body[] =	"body {"\
+										"overflow: auto;"\
+										"font-family:Sans-serif;"\
+										"line-height: 1.2em;"\
+										"font-size: 17px;"\
+										"margin-left: 20px;"\
+									"}";
 
 // Configuration functions
 static uint8_t Config_Network(char *payload, int len);
@@ -425,6 +443,18 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
+				else if(strcmp(http_msg,"d_meters.htm") == 0)
+				{
+					if(interfaceCreate_Display_Meters())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
       			else if(strcmp(http_msg,"cfg_home.htm") == 0)
 				{
 					if(interfaceCreate_Config_Home())
@@ -734,10 +764,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						TRACE("http.c: request for next page of flows");
 						TRACE("http.c: current flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
-						if(flowBase < iLastFlow-FLOW_LIMIT)
+						if(flowBase < iLastFlow-FLOW_DISPLAY_LIMIT)
 						{
 							// Increment flow base (display next set on page send)
-							flowBase += FLOW_LIMIT;
+							flowBase += FLOW_DISPLAY_LIMIT;
 							TRACE("http.c: new flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
 						}
 						else
@@ -749,10 +779,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						TRACE("http.c: request for previous page of flows");
 						TRACE("http.c: current flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
-						if(flowBase >= FLOW_LIMIT)
+						if(flowBase >= FLOW_DISPLAY_LIMIT)
 						{
 							// Decrement flow base (display previous set on page send)
-							flowBase -= FLOW_LIMIT;
+							flowBase -= FLOW_DISPLAY_LIMIT;
 							TRACE("http.c: new flowBase: %d; current iLastFlow: %d;", flowBase, iLastFlow)
 						}
 						else
@@ -785,6 +815,56 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 
 					// Send updated page
 					if(interfaceCreate_Display_Flows())
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+				else if(strcmp(http_msg,"btn_meterPage") == 0)
+				{
+					// Display: Meters, Previous and Next meter page buttons
+					
+					if(strstr(http_payload, "btn_meterNext") != NULL)	// Check that element exists
+					{
+						TRACE("http.c: request for next page of meters");
+						TRACE("http.c: current meterBase: %d; current iLastMeter: %d;", meterBase, iLastMeter)
+						if(meterBase < iLastMeter-METER_DISPLAY_LIMIT)
+						{
+							// Increment flow base (display next set on page send)
+							meterBase += METER_DISPLAY_LIMIT;
+							TRACE("http.c: new meterBase: %d; current iLastMeter: %d;", meterBase, iLastMeter)
+						}
+						else
+						{
+							TRACE("http.c: meterBase already reaches end - NOT incremented")
+						}
+					}
+					else if(strstr(http_payload, "btn_meterPrev") != NULL)
+					{
+						TRACE("http.c: request for previous page of meters");
+						TRACE("http.c: current meterBase: %d; current iLastMeter: %d;", meterBase, iLastMeter)
+						if(meterBase >= METER_DISPLAY_LIMIT)
+						{
+							// Decrement meter base (display previous set on page send)
+							meterBase -= METER_DISPLAY_LIMIT;
+							TRACE("http.c: new meterBase: %d; current iLastMeter: %d;", meterBase, iLastMeter)
+						}
+						else
+						{
+							TRACE("http.c: meterBase already at start - NOT decremented")
+						}
+					}
+					else
+					{
+						TRACE("http.c: ERROR: invalid request");
+					}
+					
+					// Send updated page
+					if(interfaceCreate_Display_Meters())
 					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: updated page sent successfully - %d bytes", strlen(shared_buffer));
@@ -1155,7 +1235,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 	}
 	else
 	{
-		TRACE("http.c: receive error");
+		if(err != ERR_OK)
+		{
+			TRACE("http.c: receive error - %d", err);
+		}
 	}
 
 	pbuf_free(p);
@@ -1848,9 +1931,7 @@ static uint8_t Config_Network(char *payload, int len)
 static uint8_t interfaceCreate_Frames(void)
 {
 	// Format HTTP response
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	sprintf(shared_buffer, http_header);
 	// Send frames
 	strcat(shared_buffer, \
 			"<!DOCTYPE html>"\
@@ -1900,10 +1981,7 @@ static uint8_t interfaceCreate_Header(void)
 	int min = t/60;
 
 	// Send header
-	
-		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-		strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	sprintf(shared_buffer, http_header);
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 			"<!DOCTYPE html>"\
 			"<META http-equiv=\"refresh\" content=\"61\">"\
@@ -1975,9 +2053,8 @@ static uint8_t interfaceCreate_Header(void)
 static uint8_t interfaceCreate_Menu(void)
 {
 	// Send menu
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	sprintf(shared_buffer, http_header);
+
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
@@ -2017,6 +2094,7 @@ static uint8_t interfaceCreate_Menu(void)
 						"<li id=\"sub\"><a href=\"d_ports.htm\" target=\"page\">Ports</a></li>"\
 						"<li id=\"sub\"><a href=\"d_of.htm\" target=\"page\">OpenFlow</a></li>"\
 						"<li id=\"sub\"><a href=\"d_flo.htm\" target=\"page\">Flows</a></li>"\
+						"<li id=\"sub\"><a href=\"d_meters.htm\" target=\"page\">Meters</a></li>"\
 						"<li><a href=\"cfg_home.htm\" target=\"page\">Config</a></li>"\
 						"<li id=\"sub\"><a href=\"cfg_net.htm\" target=\"page\">Network</a></li>"\
 						"<li id=\"sub\"><a href=\"cfg_vlan.htm\" target=\"page\">VLANs</a></li>"\
@@ -2047,22 +2125,17 @@ static uint8_t interfaceCreate_Home(void)
 	int t = (totaltime/2)%3600;
 	int min = t/60;
 
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
-	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+	sprintf(shared_buffer, http_header);
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<META http-equiv=\"refresh\" content=\"61\">"\
 		"<html>"\
 			"<head>"\
 				"<style>"\
-				"body {"\
-					"overflow: auto;"\
-					"font-family:Sans-serif;"\
-					"line-height: 1.2em;"\
-					"font-size: 17px;"\
-					"margin-left: 20px;"\
-				"}"\
+		);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</style>"\
 			"</head>"\
 			"<body>"\
@@ -2097,21 +2170,16 @@ static uint8_t interfaceCreate_Home(void)
 */
 static uint8_t interfaceCreate_Upload(void)
 {
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
-	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+	sprintf(shared_buffer, http_header);
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
 				"<style>"\
-				"body {"\
-					"overflow: auto;"\
-					"font-family:Sans-serif;"\
-					"line-height: 1.2em;"\
-					"font-size: 17px;"\
-					"margin-left: 20px;"\
-				"}"\
+		);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</style>"\
 			"</head>"\
 			"<body>"\
@@ -2119,8 +2187,7 @@ static uint8_t interfaceCreate_Upload(void)
 					"<h2>Firmware Update</h2>"\
 				"</p>"\
 			"<body>"\
-				"<p>Browser firmware update is currently supported in the following browsers:<br> - Chrome (Windows & macOS)<br> - Firefox (Windows & macOS)<br> - Edge (Windows)<br> - Internet Explorer 11 (Windows)<br><br>"\
-				"Do not attempt an update with an unsupported browser.</p>"\
+				"<p>Browser firmware update supports official binaries (version 0.80 and later).<br><br>Please find the latest version in the <a href=\"http://forums.northboundnetworks.com/index.php?PHPSESSID=39c9227476da4ef211c9c3b1fa235951&topic=52.0\">forums</a>.</p>"\
 				"<form action=\"upload\" method =\"post\" enctype=\"multipart/form-data\" onsubmit=\"return confirm('Firmware file will now be uploaded. This may take up to 60 seconds. DO NOT refresh the page while firmware update is in progress.');\">"\
 					"<input type=\"file\" name =\"file\"><br><br>"\
 					"<input type=\"submit\" value=\"Upload File\"/>"\
@@ -2191,13 +2258,9 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 				"<html>"\
 					"<head>"\
 						"<style>"\
-						"body {"\
-							"overflow: auto;"\
-							"font-family:Sans-serif;"\
-							"line-height: 1.2em;"\
-							"font-size: 17px;"\
-							"margin-left: 20px;"\
-						"}"\
+				);
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 						"</style>"\
 					"</head>"\
 					"<body>"\
@@ -2247,21 +2310,16 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 */
 static uint8_t interfaceCreate_Display_Home(void)
 {
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
-	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+	sprintf(shared_buffer, http_header);
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
 				"<style>"\
-				"body {"\
-					"overflow: auto;"\
-					"font-family:Sans-serif;"\
-					"line-height: 1.2em;"\
-					"font-size: 17px;"\
-					"margin-left: 20px;"\
-				"}"\
+			);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</style>"\
 			"</head>"\
 			"<body>"\
@@ -2279,6 +2337,10 @@ static uint8_t interfaceCreate_Display_Home(void)
 				"<h3>Flows</h3>"\
 					"<p>"\
 						"View the current flows in the flow table. 4 flows are displayed per page."\
+					"</p>"\
+				"<h3>Meters</h3>"\
+					"<p>"\
+						"View the current meters in the meter table. 3 meters are displayed per page. Up to 8 meters can be configured, with up to 3 meter bands each."\
 					"</p>"\
 			"</body>"\
 		"</html>"\
@@ -2331,23 +2393,17 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 			}
 		}
 		
-		sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-		strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-		strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+		sprintf(shared_buffer, http_header);
+
 		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 			"<!DOCTYPE html>"\
 			"<META http-equiv=\"refresh\" content=\"31\">"\
 			"<html>"\
 				"<head>"\
 					"<style>"\
-					"body {"\
-						"overflow: auto;"\
-						"font-family:Sans-serif;"\
-						"line-height: 1.2em;"\
-						"font-size: 17px;"\
-						"margin-left: 20px;"\
-					"}"\
-					""\
+				);
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 					"table {"\
 						"border-collapse: collapse;"\
 						"border: 1px solid black;"\
@@ -2680,11 +2736,7 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 	// Status
 	char wi_ofStatus[15] = "";
 	
-	if (tcp_pcb->state != ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED)
-	{
-		snprintf(wi_ofStatus, 15, "Disconnected");
-	}
-	else if (tcp_pcb->state == ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED)
+	if (tcp_con_state == 1 && tcp_pcb->state == ESTABLISHED && Zodiac_Config.OFEnabled == OF_ENABLED)
 	{
 		snprintf(wi_ofStatus, 15, "Connected");
 	}
@@ -2694,7 +2746,7 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 	}
 	else
 	{
-		snprintf(wi_ofStatus, 15, "Error: unknown");
+		snprintf(wi_ofStatus, 15, "Disconnected");
 	}
 	
 	// Version, Tables, Flows, Lookups, Matches
@@ -2741,22 +2793,18 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 		snprintf(wi_ofVersion, 15, "Auto");
 	}
 	
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
-	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+	sprintf(shared_buffer, http_header);
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<META http-equiv=\"refresh\" content=\"31\">"\
 		"<html>"\
 			"<head>"\
 				"<style>"\
-				"body {"\
-					"overflow: auto;"\
-					"font-family:Sans-serif;"\
-					"line-height: 1.2em;"\
-					"font-size: 17px;"\
-					"margin-left: 20px;"\
-				"}"\
+			);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+
 				"</style>"\
 			"</head>"\
 			"<body>"\
@@ -2801,21 +2849,17 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 */
 static uint8_t interfaceCreate_Display_Flows(void)
 {
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	sprintf(shared_buffer, http_header);
+
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
 				"<style>"\
-				"body {"\
-					"overflow: auto;"\
-					"font-family:Sans-serif;"\
-					"line-height: 1.2em;"\
-					"font-size: 17px;"\
-					"margin-left: 20px;"\
-				"}"\
+			);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+
 				"</style>"\
 			"</head>"\
 			"<body>"\
@@ -2828,7 +2872,7 @@ static uint8_t interfaceCreate_Display_Flows(void)
 // Begin Flow formatting
 
 int i;
-uint8_t flowEnd = flowBase + FLOW_LIMIT;
+uint8_t flowEnd = flowBase + FLOW_DISPLAY_LIMIT;
 struct ofp_action_header * act_hdr;
 
 // Ensure page correctly displays end of flows
@@ -3057,6 +3101,14 @@ if (iLastFlow > 0)
 				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r Instructions:\r\n");
 				inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
 				inst_size = ntohs(inst_ptr->len);
+				
+				// Check for optional metering instruction
+				if(ntohs(inst_ptr->type) == OFPIT13_METER)
+				{
+					struct ofp13_instruction_meter *inst_meter = inst_ptr;
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), "  Meter: %d\r\n", ntohl(inst_meter->meter_id));
+				}
+				
 				if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
 				{
 					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Apply Actions:\r\n");
@@ -3250,7 +3302,7 @@ if (iLastFlow > 0)
 	);
 	
 	// Check if "previous page" button needs to be created
-	if(flowBase >= FLOW_LIMIT)
+	if(flowBase >= FLOW_DISPLAY_LIMIT)
 	{
 		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 					"<button name=\"btn\" value=\"btn_ofPrev\">Previous</button>"\
@@ -3292,28 +3344,207 @@ if (iLastFlow > 0)
 		return 0;
 	}
 }
+		
+/*
+*	Create and format HTML for display meters page
+*
+*/
+static uint8_t interfaceCreate_Display_Meters(void)
+{
+	/* Prepare meter counters */
+	
+	// Check status of start of range
+	if(meterBase >= iLastMeter)
+	{
+		meterBase = 0;
+	}
+	
+	// Find number of meters
+	int meterCount;
+	if(meter_entry[0] == NULL)
+	{
+		meterCount = 0;
+	}
+	else
+	{
+		meterCount = iLastMeter;
+	}
+	
+	// Find end of display range (exclusive) - meterBase indexes the start of the range
+	int meterEnd;
+	if(meterBase + METER_DISPLAY_LIMIT >= iLastMeter)
+	{
+		meterEnd = iLastMeter;
+	}
+	else
+	{
+		meterEnd = meterBase + METER_DISPLAY_LIMIT;
+	}
+	
+	// Format header
+	sprintf(shared_buffer, http_header);
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+		"<!DOCTYPE html>"\
+		"<html>"\
+			"<head>"\
+				"<style>"\
+			);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+				"</style>"\
+			"</head>"\
+			"<body>"\
+				"<p>"\
+					"<h2>Meters</h2>"\
+					"%d meters configured<br>"\
+			, meterCount);
 			
+	if(meterCount != 0)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+				"Showing meters %d - %d<br>"\
+			, meterBase+1, meterEnd);
+	}
+	
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+				"</p>"\
+				"<pre><span style=\"font-size: 12px; line-height: 1\">"\
+			);
+
+// Begin Meter formatting
+		
+	// Check that table is populated
+	if(meter_entry[0] != NULL)
+	{
+		int meter_index = meterBase;
+		while(meter_entry[meter_index] != NULL && meter_index < meterEnd)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"_______\r\n");
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\nMeter %d\r\n", meter_index+1);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Meter ID: %d\r\n", meter_entry[meter_index]->meter_id);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Counters:\r\n");
+			meter_entry[meter_index]->flow_count = get_bound_flows(meter_entry[meter_index]->meter_id);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\tBound Flows:\t%d\tDuration:\t%d sec\r\n", meter_entry[meter_index]->flow_count, (sys_get_ms()-meter_entry[meter_index]->time_added)/1000);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\tByte Count:\t%"PRIu64"\tPacket Count:\t%"PRIu64"\r\n", meter_entry[meter_index]->byte_in_count, meter_entry[meter_index]->packet_in_count);
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\tConfiguration:\t");
+			if(((meter_entry[meter_index]->flags) & OFPMF13_KBPS) == OFPMF13_KBPS)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"KBPS; ");
+			}
+			if(((meter_entry[meter_index]->flags) & OFPMF13_PKTPS) == OFPMF13_PKTPS)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"PKTPS; ");
+			}
+			if(((meter_entry[meter_index]->flags) & OFPMF13_BURST) == OFPMF13_BURST)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"BURST; ");
+			}
+			if(((meter_entry[meter_index]->flags) & OFPMF13_STATS) == OFPMF13_STATS)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"STATS; ");
+			}
+			if(meter_entry[meter_index]->flags == 0)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer)," NONE;");
+			}
+				
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n\tNumber of bands:\t%d\r\n", meter_entry[meter_index]->band_count);
+			int bands_processed = 0;
+			struct ofp13_meter_band_drop * ptr_band;
+			ptr_band = &(meter_entry[meter_index]->bands);
+			while(bands_processed < meter_entry[meter_index]->band_count)
+			{
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\tBand %d:\r\n", bands_processed+1);
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Type:\t\t");
+				if(ptr_band->type == OFPMBT13_DROP)
+				{
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"DROP\r\n");
+				}
+				else if(ptr_band->type == OFPMBT13_DSCP_REMARK)
+				{
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"DSCP REMARK (unsupported)\r\n");
+				}
+				else
+				{
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"unsupported type\r\n");
+				}
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Rate:\t\t%d\t\r\n", ptr_band->rate);
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Burst Size:\t%d\t\r\n", ptr_band->burst_size);
+					
+				// Find band index
+				int band_index = ((uint8_t*)ptr_band - (uint8_t*)&(meter_entry[meter_index]->bands)) / sizeof(struct ofp13_meter_band_drop);
+					
+				// Display counters
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Byte count:\t%"PRIu64"\t\r\n", band_stats_array[meter_index].band_stats[band_index].byte_band_count);
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Packet count:\t%"PRIu64"\t\r\n", band_stats_array[meter_index].band_stats[band_index].packet_band_count);
+					
+				ptr_band++;	// Move to next band
+				bands_processed++;
+			}
+			meter_index++;
+		}
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r\n_______\r\n\r\n");
+	}
+	
+// End Meter formatting
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+				"</span></pre>"\
+				"<form action=\"btn_meterPage\" method=\"post\">"\
+	);
+	
+	// Check if "previous page" button needs to be created
+	if(meterBase >= METER_DISPLAY_LIMIT)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+					"<button name=\"btn\" value=\"btn_meterPrev\">Previous</button>"\
+				);
+	}
+	
+	// Check if "next page" button needs to be created
+	if(meterEnd < iLastMeter)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+					"<button name=\"btn\" value=\"btn_meterNext\">Next</button>"\
+				);
+	}
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+				"</form>");
+		
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+			"</body>"\
+		"</html>"\
+	) < SHARED_BUFFER_LEN)
+	{
+		TRACE("http.c: html written to buffer");
+		return 1;
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}
+	
+}	
+
 /*
 *	Create and format HTML for config help page
 *
 */
 static uint8_t interfaceCreate_Config_Home(void)
 {
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
-	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+	sprintf(shared_buffer, http_header);
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
 				"<style>"\
-				"body {"\
-					"overflow: auto;"\
-					"font-family:Sans-serif;"\
-					"line-height: 1.2em;"\
-					"font-size: 17px;"\
-					"margin-left: 20px;"\
-				"}"\
+			);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</style>"\
 			"</head>"\
 			"<body>"\
@@ -3351,21 +3582,16 @@ static uint8_t interfaceCreate_Config_Home(void)
 */
 static uint8_t interfaceCreate_Config_Network(void)
 {
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
-	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+	sprintf(shared_buffer, http_header);
+
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 			"<html>"\
 				"<head>"\
 					"<style>"\
-					"body {"\
-						"overflow: auto;"\
-						"font-family:Sans-serif;"\
-						"line-height: 1.2em;"\
-						"font-size: 17px;"\
-						"margin-left: 20px;"\
-					"}"\
+			);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 					"</style>"\
 				"</head>"\
 			"<body>"\
@@ -3419,21 +3645,16 @@ static uint8_t interfaceCreate_Config_VLANs(void)
 	char wi_vlType[10] = "";
 	
 	// Opening tags, and base table
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	sprintf(shared_buffer, http_header);
+
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
 			"<style>"\
-			"body {"\
-				"overflow: auto;"\
-				"font-family:Sans-serif;"\
-				"line-height: 1.2em;"\
-				"font-size: 17px;"\
-				"margin-left: 20px;"\
-			"}"\
+			);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 			"table {"\
 				"border-collapse: collapse;"\
 				"border: 1px solid black;"\
@@ -3537,21 +3758,16 @@ static uint8_t interfaceCreate_Config_VLANs(void)
 */
 static uint8_t interfaceCreate_Config_OpenFlow(void)
 {	
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
+	sprintf(shared_buffer, http_header);
+
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
 				"<style>"\
-				"body {"\
-					"overflow: auto;"\
-					"font-family:Sans-serif;"\
-					"line-height: 1.2em;"\
-					"font-size: 17px;"\
-					"margin-left: 20px;"\
-				"}"\
+			);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</style>"\
 			"</head>"\
 			"<body>"\
@@ -3675,21 +3891,15 @@ static uint8_t interfaceCreate_Config_OpenFlow(void)
 */
 static uint8_t interfaceCreate_About(void)
 {
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
-	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+	sprintf(shared_buffer, http_header);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<html>"\
 			"<head>"\
 				"<style>"\
-				"body {"\
-					"overflow: auto;"\
-					"font-family:Sans-serif;"\
-					"line-height: 1.2em;"\
-					"font-size: 17px;"\
-					"margin-left: 20px;"\
-				"}"\
+			);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</style>"\
 			"</head>"\
 			"<body>"\
@@ -3718,24 +3928,22 @@ static uint8_t interfaceCreate_About(void)
 	}
 }
 
+/*
+*	Create and format HTML for interstitial restart page
+*
+*/
 static uint8_t interfaceCreate_Restart(void)
 {
-	sprintf(shared_buffer,"HTTP/1.1 200 OK\r\n");
-	strcat(shared_buffer,"Connection: Keep-Alive\r\n");
-	strcat(shared_buffer,"Content-Type: text/html; charset=UTF-8\r\n\r\n");
-	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+	sprintf(shared_buffer, http_header);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 		"<!DOCTYPE html>"\
 		"<META http-equiv=\"refresh\" content=\"10; url=frames.html\">"\
 		"<html>"\
 			"<head>"\
 				"<style>"\
-				"body {"\
-					"overflow: auto;"\
-					"font-family:Sans-serif;"\
-					"line-height: 1.2em;"\
-					"font-size: 17px;"\
-					"margin-left: 20px;"\
-				"}"\
+			);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</style>"\
 			"</head>"\
 			"<body>"\
