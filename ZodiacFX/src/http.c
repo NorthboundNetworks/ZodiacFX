@@ -2338,6 +2338,10 @@ static uint8_t interfaceCreate_Display_Home(void)
 					"<p>"\
 						"View the current flows in the flow table. 4 flows are displayed per page."\
 					"</p>"\
+				"<h3>Meters</h3>"\
+					"<p>"\
+						"View the current meters in the meter table. 3 meters are displayed per page. Up to 8 meters can be configured, with up to 3 meter bands each."\
+					"</p>"\
 			"</body>"\
 		"</html>"\
 	) < SHARED_BUFFER_LEN)
