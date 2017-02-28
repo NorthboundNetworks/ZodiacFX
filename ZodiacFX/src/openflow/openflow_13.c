@@ -2093,12 +2093,13 @@ void meter_add13(struct ofp_header *msg)
 			ptr_band->rate			= ntohl(ptr_rxband->rate);
 			ptr_band->burst_size	= ntohl(ptr_rxband->burst_size);
 			
-			// ***** TODO : add error checking for band processing
-			TRACE("openflow_13.c: %d of %d bands processed", bands_processed, bands_received);
-			
 			ptr_band++;		// Move to next band storage location
 			ptr_rxband++;	// Move to next received band
 			bands_processed++;
+			
+			// ***** TODO : add error checking for band processing
+			TRACE("openflow_13.c: %d of %d bands processed", bands_processed, bands_received);
+			
 		} while (bands_processed < bands_received);
 	}
 	
