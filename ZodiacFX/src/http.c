@@ -1235,7 +1235,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 	}
 	else
 	{
-		TRACE("http.c: receive error");
+		if(err != ERR_OK)
+		{
+			TRACE("http.c: receive error - %d", err);
+		}
 	}
 
 	pbuf_free(p);
