@@ -227,14 +227,21 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			{
 				TRACE("http.c: incoming connection ignored - upload currently in progress");
 				
-				// Check 10-second timeout
-				if(sys_get_ms() - upload_timer > UPLOAD_TIMEOUT)
+				/* Header request check */
+				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+				
+				// Specified resource directly follows GET
+				i = 0;
+				while(i < 63 && (http_payload[i+5] != ' '))
 				{
-					TRACE("http.c: firmware upload has timed out");
-					
-					// Stop upload operation
-					upload_handler(NULL, 0);	// Clean up upload operation
-					if(interfaceCreate_Upload_Status(2))
+					http_msg[i] = http_payload[i+5];	// Offset http_payload to isolate resource
+					i++;
+				}
+				
+				// The "upload in progress" message does not need to show up in the header
+				if(strcmp(http_msg,"header.htm") != 0)
+				{
+					if(interfaceCreate_Upload_Status(4))
 					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
@@ -248,8 +255,42 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				return ERR_OK;
 			}
 			
-			TRACE("http.c: %d seconds since last firmware packet received", (sys_get_ms() - upload_timer));
-			// Set timer value
+			// Check upload timeout
+			if(sys_get_ms() - upload_timer > UPLOAD_TIMEOUT)
+			{
+				TRACE("http.c: firmware upload has timed out");
+				
+				/* Header request check */
+				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+				
+				// Specified resource directly follows GET
+				i = 0;
+				while(i < 63 && (http_payload[i+5] != ' '))
+				{
+					http_msg[i] = http_payload[i+5];	// Offset http_payload to isolate resource
+					i++;
+				}
+				
+				// The "upload failed" message does not need to show up in the header
+				if(strcmp(http_msg,"header.htm") != 0)
+				{
+					// Stop upload operation
+					upload_handler(NULL, 0);	// Clean up upload operation
+					if(interfaceCreate_Upload_Status(2))
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+			}
+			
+			TRACE("http.c: %d ms since last firmware packet received", (sys_get_ms() - upload_timer));
+			
+			// Update timer value
 			upload_timer = sys_get_ms();
 			
 			int ret = 0;
@@ -2284,6 +2325,12 @@ static uint8_t interfaceCreate_Upload_Status(uint8_t sel)
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 						"<p>Firmware upload failed. Unable to verify firmware. Please try again, or check the integrity of the firmware.<br><br>"\
 				);
+		}
+		else if(sel == 4)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+			"<p>Firmware upload in progress. Please try again in 30 seconds.<br><br>"\
+			);
 		}
 		else
 		{
