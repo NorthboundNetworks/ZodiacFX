@@ -101,7 +101,7 @@ static uint8_t interfaceCreate_Header(void);
 static uint8_t interfaceCreate_Menu(void);
 static uint8_t interfaceCreate_Home(void);
 static uint8_t interfaceCreate_Upload(void);
-static uint8_t interfaceCreate_Upload_Complete(uint8_t sel);
+static uint8_t interfaceCreate_Upload_Status(uint8_t sel);
 static uint8_t interfaceCreate_Display_Home(void);
 static uint8_t interfaceCreate_Display_Ports(uint8_t step);
 static uint8_t interfaceCreate_Display_OpenFlow(void);
@@ -234,7 +234,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					
 					// Stop upload operation
 					upload_handler(NULL, 0);	// Clean up upload operation
-					if(interfaceCreate_Upload_Complete(2))
+					if(interfaceCreate_Upload_Status(2))
 					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
@@ -264,7 +264,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				if(verification_check() == 0)
 				{
 					upload_handler(NULL, 0);	// Clean up upload operation
-					if(interfaceCreate_Upload_Complete(1))
+					if(interfaceCreate_Upload_Status(1))
 					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
@@ -277,7 +277,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				else
 				{
 					upload_handler(NULL, 0);	// Clean up upload operation
-					if(interfaceCreate_Upload_Complete(3))
+					if(interfaceCreate_Upload_Status(3))
 					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
@@ -2211,10 +2211,10 @@ static uint8_t interfaceCreate_Upload(void)
 }
 
 /*
-*	Create and format HTML for firmware update complete page
+*	Create and format HTML for firmware update status page
 *
 */
-static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
+static uint8_t interfaceCreate_Upload_Status(uint8_t sel)
 {
 	if(sel == 1)
 	{	
