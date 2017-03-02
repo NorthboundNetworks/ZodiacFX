@@ -34,6 +34,7 @@
 #define FLOW_DISPLAY_LIMIT	4	// Displayable flows per page
 #define	METER_DISPLAY_LIMIT	3	// Displayable meters per page
 #define BOUNDARY_MAX_LEN	70
+#define UPLOAD_TIMEOUT		20000	// (ms) timeout window between each firmware update packet
 
 void http_init(void);
 

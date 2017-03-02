@@ -81,6 +81,8 @@ static int page_ctr = 1;
 static int boundary_start = 1;		// Check for start of data
 static uint8_t flowBase = 0;		// Current set of flows to display
 static uint8_t meterBase = 0;		// Current set of meters to display
+static struct tcp_pcb * upload_pcb;	// Firmware upload connection check (pcb pointer)
+static int upload_timer = 0;		// Timer for firmware upload timeout
 
 // Flag variables
 static bool restart_required = false;		// Track if any configuration changes are pending a restart
@@ -208,7 +210,8 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		http_payload = (char*)p->payload;
 		len = p->tot_len;
 		
-		TRACE("http.c: -- HTTP recv received %d payload bytes", len)
+		TRACE("http.c: -- HTTP recv received %d payload bytes", len);
+		TRACE("http.c: -> pcb @ addr: 0x%08x, remote port %d", pcb, pcb->remote_port);
 		
 		if(file_upload == true)
 		{
@@ -220,24 +223,15 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				i++;
 			}
 			
-			if(strcmp(http_msg,"GET") == 0)
+			if(upload_pcb != pcb)
 			{
-				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+				TRACE("http.c: incoming connection ignored - upload currently in progress");
 				
-				// Specified resource directly follows GET
-				i = 0;
-				while(i < 63 && (http_payload[i+5] != ' '))
+				// Check 10-second timeout
+				if(sys_get_ms() - upload_timer > UPLOAD_TIMEOUT)
 				{
-					http_msg[i] = http_payload[i+5];	// Offset http_payload to isolate resource
-					i++;
-				}
-				
-				if(strcmp(http_msg,"header.htm") == 0)
-				{
-					return ERR_OK;
-				}
-				else
-				{
+					TRACE("http.c: firmware upload has timed out");
+					
 					// Stop upload operation
 					upload_handler(NULL, 0);	// Clean up upload operation
 					if(interfaceCreate_Upload_Complete(2))
@@ -250,43 +244,47 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
+				
+				return ERR_OK;
 			}
-			else
+			
+			TRACE("http.c: %d seconds since last firmware packet received", (sys_get_ms() - upload_timer));
+			// Set timer value
+			upload_timer = sys_get_ms();
+			
+			int ret = 0;
+			// Handle multi-part file data
+			ret = upload_handler(http_payload, len);
+			if(ret == 2)
 			{
-				int ret = 0;
-				// Handle multi-part file data
-				ret = upload_handler(http_payload, len);
-				if(ret == 2)
+				file_upload = false;
+				boundary_start = 1;
+				//flash_clear_gpnvm(1);
+				// upload check
+				if(verification_check() == 0)
 				{
-					file_upload = false;
-					boundary_start = 1;
-					//flash_clear_gpnvm(1);
-					// upload check
-					if(verification_check() == 0)
+					upload_handler(NULL, 0);	// Clean up upload operation
+					if(interfaceCreate_Upload_Complete(1))
 					{
-						upload_handler(NULL, 0);	// Clean up upload operation
-						if(interfaceCreate_Upload_Complete(1))
-						{
-							http_send(&shared_buffer, pcb, 1);
-							TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-						}
-						else
-						{
-							TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-						}
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
 					}
 					else
 					{
-						upload_handler(NULL, 0);	// Clean up upload operation
-						if(interfaceCreate_Upload_Complete(3))
-						{
-							http_send(&shared_buffer, pcb, 1);
-							TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-						}
-						else
-						{
-							TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-						}
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+				else
+				{
+					upload_handler(NULL, 0);	// Clean up upload operation
+					if(interfaceCreate_Upload_Complete(3))
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
 			}
@@ -549,6 +547,10 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					
 					// All following packets will contain multi-part file data
 					file_upload = true;
+					// Store pcb pointer value for this connection
+					upload_pcb = pcb;
+					// Initialise timeout value
+					upload_timer = sys_get_ms();
 					
 					upload_handler(http_payload, len);
 				}
@@ -1310,6 +1312,8 @@ static uint8_t upload_handler(char *payload, int len)
 		saved_bytes = 0;								// Clear saved byte counter
 		file_upload = false;							// Clear file upload flag
 		boundary_start = 1;								// Set starting boundary required flag
+		upload_pcb = NULL;								// Clear pcb connection pointer
+		upload_timer = 0;								// Clear upload timeout
 		return 1;
 	}
 	
