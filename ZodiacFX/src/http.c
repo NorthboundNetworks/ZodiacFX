@@ -101,7 +101,7 @@ static uint8_t interfaceCreate_Header(void);
 static uint8_t interfaceCreate_Menu(void);
 static uint8_t interfaceCreate_Home(void);
 static uint8_t interfaceCreate_Upload(void);
-static uint8_t interfaceCreate_Upload_Complete(uint8_t sel);
+static uint8_t interfaceCreate_Upload_Status(uint8_t sel);
 static uint8_t interfaceCreate_Display_Home(void);
 static uint8_t interfaceCreate_Display_Ports(uint8_t step);
 static uint8_t interfaceCreate_Display_OpenFlow(void);
@@ -227,14 +227,21 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 			{
 				TRACE("http.c: incoming connection ignored - upload currently in progress");
 				
-				// Check 10-second timeout
-				if(sys_get_ms() - upload_timer > UPLOAD_TIMEOUT)
+				/* Header request check */
+				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+				
+				// Specified resource directly follows GET
+				i = 0;
+				while(i < 63 && (http_payload[i+5] != ' '))
 				{
-					TRACE("http.c: firmware upload has timed out");
-					
-					// Stop upload operation
-					upload_handler(NULL, 0);	// Clean up upload operation
-					if(interfaceCreate_Upload_Complete(2))
+					http_msg[i] = http_payload[i+5];	// Offset http_payload to isolate resource
+					i++;
+				}
+				
+				// The "upload in progress" message does not need to show up in the header
+				if(strcmp(http_msg,"header.htm") != 0)
+				{
+					if(interfaceCreate_Upload_Status(4))
 					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
@@ -248,8 +255,42 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				return ERR_OK;
 			}
 			
-			TRACE("http.c: %d seconds since last firmware packet received", (sys_get_ms() - upload_timer));
-			// Set timer value
+			// Check upload timeout
+			if(sys_get_ms() - upload_timer > UPLOAD_TIMEOUT)
+			{
+				TRACE("http.c: firmware upload has timed out");
+				
+				/* Header request check */
+				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+				
+				// Specified resource directly follows GET
+				i = 0;
+				while(i < 63 && (http_payload[i+5] != ' '))
+				{
+					http_msg[i] = http_payload[i+5];	// Offset http_payload to isolate resource
+					i++;
+				}
+				
+				// The "upload failed" message does not need to show up in the header
+				if(strcmp(http_msg,"header.htm") != 0)
+				{
+					// Stop upload operation
+					upload_handler(NULL, 0);	// Clean up upload operation
+					if(interfaceCreate_Upload_Status(2))
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+			}
+			
+			TRACE("http.c: %d ms since last firmware packet received", (sys_get_ms() - upload_timer));
+			
+			// Update timer value
 			upload_timer = sys_get_ms();
 			
 			int ret = 0;
@@ -264,7 +305,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				if(verification_check() == 0)
 				{
 					upload_handler(NULL, 0);	// Clean up upload operation
-					if(interfaceCreate_Upload_Complete(1))
+					if(interfaceCreate_Upload_Status(1))
 					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
@@ -277,7 +318,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				else
 				{
 					upload_handler(NULL, 0);	// Clean up upload operation
-					if(interfaceCreate_Upload_Complete(3))
+					if(interfaceCreate_Upload_Status(3))
 					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
@@ -2211,10 +2252,10 @@ static uint8_t interfaceCreate_Upload(void)
 }
 
 /*
-*	Create and format HTML for firmware update complete page
+*	Create and format HTML for firmware update status page
 *
 */
-static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
+static uint8_t interfaceCreate_Upload_Status(uint8_t sel)
 {
 	if(sel == 1)
 	{	
@@ -2284,6 +2325,12 @@ static uint8_t interfaceCreate_Upload_Complete(uint8_t sel)
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 						"<p>Firmware upload failed. Unable to verify firmware. Please try again, or check the integrity of the firmware.<br><br>"\
 				);
+		}
+		else if(sel == 4)
+		{
+			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+			"<p>Firmware upload in progress. Please try again in 30 seconds.<br><br>"\
+			);
 		}
 		else
 		{
