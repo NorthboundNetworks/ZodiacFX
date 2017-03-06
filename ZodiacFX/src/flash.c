@@ -247,7 +247,8 @@ int verification_check(void)
 int xmodem_xfer(void)
 {
 	char ch;
-	int timeout_clock = 0;
+	int timeout_clock = 0;	// protocol (NAK) timeout counter
+	int timeout_upload = 0;	// upload timeout counter
 	int buff_ctr = 1;
 	int byte_ctr = 1;
 	int block_ctr = 0;
@@ -325,10 +326,15 @@ int xmodem_xfer(void)
 			byte_ctr++;
 		}
 		timeout_clock++;
-		if (timeout_clock > 1000000)	// Timeout, send <NAK>
+		if(timeout_upload > 6)
+		{
+			return;
+		}
+		else if (timeout_clock > 1000000)	// Timeout, send <NAK>
 		{
 			printf("%c", X_NAK);
 			timeout_clock = 0;
+			timeout_upload++;
 		}
 	}
 }
