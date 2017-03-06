@@ -39,7 +39,7 @@
 
 // Global variables
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
-extern struct integrity_check verify;
+struct verification_data verify;
 
 // Static variables
 static uint32_t page_addr;
@@ -149,7 +149,7 @@ void cli_update(void)
 	{
 		printf("Error: failed to write firmware to memory\r\n");
 	}
-	if(verification_check() == 0)
+	if(verification_check() == SUCCESS)
 	{
 		printf("Firmware upload complete - Restarting the Zodiac FX.\r\n");
 		for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
@@ -167,75 +167,77 @@ void cli_update(void)
 }
 
 /*
-*	Check test verification value in flash
-*
-*/
-int get_verification(void)
-{
-	char* pflash = (char*)(FLASH_BUFFER_END-1);
-	char* buffer_start = (char*)FLASH_BUFFER;
-	
-	while(((*pflash) == '\xFF' || (*pflash) == '\0') && pflash > buffer_start)
-	{
-		pflash--;
-	}
-
-	if(pflash > buffer_start)
-	{
-		pflash-=7;
-
-		//memcpy(value, pflash, 8);
-		memcpy(&verify, pflash, 8);
-		
-		return 1;
-	}
-	else
-	{
-		return 0;
-	}
-}
-
-/*
 *	Verify firmware data
 *
 */
 int verification_check(void)
 {
-	// Populate integrity_check verify structure variable
-	get_verification();
+	char* fw_end_pmem	= (char*)FLASH_BUFFER_END;	// Buffer pointer to store the last address
+	char* fw_step_pmem  = (char*)FLASH_BUFFER;		// Buffer pointer to the starting address
+	uint32_t crc_sum	= 0;						// Store CRC sum
+	uint8_t	 pad_error	= 0;						// Set when padding is not found
 	
-	if(!(verify.signature[0] == 'N' && verify.signature[1] == 'N'))
+	/* Add all bytes of the uploaded firmware */
+	// Decrement the pointer until the previous address has data in it (not 0xFF)
+	while(*(fw_end_pmem-1) == '\xFF' && fw_end_pmem > FLASH_BUFFER)
 	{
-		return 1;
+		fw_end_pmem--;
 	}
-	else if(!(verify.device[0] == 'F' && verify.device[1] == 'X'))
+
+	for(int sig=1; sig<=4; sig++)
 	{
-		return 2;
+		if(*(fw_end_pmem-sig) != NULL)
+		{
+			TRACE("signature padding %d not found - last address: %08x", sig, fw_end_pmem);
+			pad_error = 1;
+		}
+		else
+		{
+			TRACE("signature padding %d found", sig);
+		}
+	}
+	
+	// Start summing all bytes
+	if(pad_error)
+	{
+		// Calculate CRC for debug
+		while(fw_step_pmem < fw_end_pmem)
+		{
+			crc_sum += *fw_step_pmem;
+			fw_step_pmem++;
+		}
 	}
 	else
 	{
-		// Compare specified length and uploaded binary length
-		char* pflash = (char*)(FLASH_BUFFER_END-1);
-		char* buffer_start = (char*)FLASH_BUFFER;
-		
-		while(*(pflash-1) == '\xFF' || *(pflash-1) == '\0')
+		// Exclude CRC & padding from calculation
+		while(fw_step_pmem < (fw_end_pmem-8))
 		{
-			if(pflash == buffer_start)
-			{
-				return 3;
-			}
-			pflash--;
+			crc_sum += *fw_step_pmem;
+			fw_step_pmem++;
 		}
-
-		if((pflash-buffer_start) != (char*)verify.length)
-		{
-			return 4;
-		}
-		
 	}
 	
-	return 0;
-
+	TRACE("fw_step_pmem %08x; fw_end_pmem %08x;", fw_step_pmem, fw_end_pmem);
+	
+	// Update structure entry
+	TRACE("CRC sum:   %04x", crc_sum);
+	verify.calculated = crc_sum;
+	
+	/* Compare with last 4 bytes of firmware */
+	// Get last 4 bytes of firmware	(4-byte CRC, 4-byte padding)
+	verify.found = *(uint32_t*)(fw_end_pmem - 8);
+	
+	TRACE("CRC found: %04x", verify.found);
+	
+	// Compare calculated and found CRC
+	if(verify.found == verify.calculated)
+	{
+		return SUCCESS;
+	}
+	else
+	{
+		return FAILURE;
+	}
 }
 
 /*
@@ -245,7 +247,8 @@ int verification_check(void)
 int xmodem_xfer(void)
 {
 	char ch;
-	int timeout_clock = 0;
+	int timeout_clock = 0;	// protocol (NAK) timeout counter
+	int timeout_upload = 0;	// upload timeout counter
 	int buff_ctr = 1;
 	int byte_ctr = 1;
 	int block_ctr = 0;
@@ -323,10 +326,15 @@ int xmodem_xfer(void)
 			byte_ctr++;
 		}
 		timeout_clock++;
-		if (timeout_clock > 1000000)	// Timeout, send <NAK>
+		if(timeout_upload > 6)
+		{
+			return;
+		}
+		else if (timeout_clock > 1000000)	// Timeout, send <NAK>
 		{
 			printf("%c", X_NAK);
 			timeout_clock = 0;
+			timeout_upload++;
 		}
 	}
 }

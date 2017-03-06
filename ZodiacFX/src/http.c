@@ -53,7 +53,6 @@ extern uint32_t uid_buf[4];	// Unique identifier
 extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];	// SHARED_BUFFER_LEN must never be reduced below 2048
-extern struct integrity_check verify;
 extern int tcp_con_state;	// Check connection state
 
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
@@ -302,7 +301,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				boundary_start = 1;
 				//flash_clear_gpnvm(1);
 				// upload check
-				if(verification_check() == 0)
+				if(verification_check() == SUCCESS)
 				{
 					upload_handler(NULL, 0);	// Clean up upload operation
 					if(interfaceCreate_Upload_Status(1))
