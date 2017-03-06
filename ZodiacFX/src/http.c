@@ -302,7 +302,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				boundary_start = 1;
 				//flash_clear_gpnvm(1);
 				// upload check
-				if(verification_check() == 0)
+				if(verification_check() == SUCCESS)
 				{
 					upload_handler(NULL, 0);	// Clean up upload operation
 					if(interfaceCreate_Upload_Status(1))

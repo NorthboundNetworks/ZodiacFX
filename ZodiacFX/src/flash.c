@@ -149,7 +149,7 @@ void cli_update(void)
 	{
 		printf("Error: failed to write firmware to memory\r\n");
 	}
-	if(verification_check() == 0)
+	if(verification_check() == SUCCESS)
 	{
 		printf("Firmware upload complete - Restarting the Zodiac FX.\r\n");
 		for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
