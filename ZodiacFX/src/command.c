@@ -48,7 +48,6 @@
 
 // Global variables
 extern struct zodiac_config Zodiac_Config;
-extern struct integrity_check verify;
 extern bool debug_output;
 
 extern int charcount, charcount_last;

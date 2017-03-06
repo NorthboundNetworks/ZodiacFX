@@ -39,7 +39,7 @@
 
 // Global variables
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
-extern struct verification_data verify;
+struct verification_data verify;
 
 // Static variables
 static uint32_t page_addr;

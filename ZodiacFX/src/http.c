@@ -53,7 +53,6 @@ extern uint32_t uid_buf[4];	// Unique identifier
 extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];	// SHARED_BUFFER_LEN must never be reduced below 2048
-extern struct integrity_check verify;
 extern int tcp_con_state;	// Check connection state
 
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
