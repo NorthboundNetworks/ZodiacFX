@@ -40,7 +40,6 @@ __no_inline RAMFUNC void firmware_update(void);
 int xmodem_xfer(void);
 void xmodem_clear_padding(uint8_t *buff);
 
-int get_verification(void);
 int verification_check(void);
 
 #define X_EOT 0x04

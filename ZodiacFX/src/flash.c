@@ -167,72 +167,12 @@ void cli_update(void)
 }
 
 /*
-*	Check test verification value in flash
-*
-*/
-int get_verification(void)
-{
-	char* pflash = (char*)(FLASH_BUFFER_END-1);
-	char* buffer_start = (char*)FLASH_BUFFER;
-	
-	while(((*pflash) == '\xFF' || (*pflash) == '\0') && pflash > buffer_start)
-	{
-		pflash--;
-	}
-
-	if(pflash > buffer_start)
-	{
-		pflash-=7;
-
-		//memcpy(value, pflash, 8);
-		memcpy(&verify, pflash, 8);
-		
-		return 1;
-	}
-	else
-	{
-		return 0;
-	}
-}
-
-/*
 *	Verify firmware data
 *
 */
 int verification_check(void)
 {
-	// Populate integrity_check verify structure variable
-	get_verification();
-	
-	if(!(verify.signature[0] == 'N' && verify.signature[1] == 'N'))
-	{
-		return 1;
-	}
-	else if(!(verify.device[0] == 'F' && verify.device[1] == 'X'))
-	{
-		return 2;
-	}
-	else
-	{
-		// Compare specified length and uploaded binary length
-		char* pflash = (char*)(FLASH_BUFFER_END-1);
-		char* buffer_start = (char*)FLASH_BUFFER;
-		
-		while(*(pflash-1) == '\xFF' || *(pflash-1) == '\0')
-		{
-			if(pflash == buffer_start)
-			{
-				return 3;
-			}
-			pflash--;
-		}
 
-		if((pflash-buffer_start) != (char*)verify.length)
-		{
-			return 4;
-		}
-		
-	}
 	
 	return 0;
 
