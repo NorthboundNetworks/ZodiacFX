@@ -48,6 +48,7 @@
 
 // Global variables
 extern struct zodiac_config Zodiac_Config;
+extern struct verification_data verify;
 extern bool debug_output;
 
 extern int charcount, charcount_last;
@@ -440,6 +441,15 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		udc_detach();	// Detach the USB device before restart
 		rstc_start_software_reset(RSTC);	// Software reset
 		while (1);
+	}
+
+	// Get CRC
+	if (strcmp(command, "get")==0 && strcmp(param1, "crc")==0)
+	{
+		verification_check();
+		printf("Calculated verification: %08x\r\n", verify.calculated);
+		printf("Append [%08x 00000000] to the binary\r\n", ntohl(verify.calculated));
+		return;
 	}
 
 	// Unknown Command
