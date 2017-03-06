@@ -39,7 +39,7 @@
 
 // Global variables
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
-extern struct integrity_check verify;
+extern struct verification_data verify;
 
 // Static variables
 static uint32_t page_addr;
@@ -172,10 +172,72 @@ void cli_update(void)
 */
 int verification_check(void)
 {
-
+	char* fw_end_pmem	= (char*)FLASH_BUFFER_END;	// Buffer pointer to store the last address
+	char* fw_step_pmem  = (char*)FLASH_BUFFER;		// Buffer pointer to the starting address
+	uint32_t crc_sum	= 0;						// Store CRC sum
+	uint8_t	 pad_error	= 0;						// Set when padding is not found
 	
-	return 0;
+	/* Add all bytes of the uploaded firmware */
+	// Decrement the pointer until the previous address has data in it (not 0xFF)
+	while(*(fw_end_pmem-1) == '\xFF' && fw_end_pmem > FLASH_BUFFER)
+	{
+		fw_end_pmem--;
+	}
 
+	for(int sig=1; sig<=4; sig++)
+	{
+		if(*(fw_end_pmem-sig) != NULL)
+		{
+			TRACE("signature padding %d not found - last address: %08x\r\n", sig, fw_end_pmem);
+			pad_error = 1;
+		}
+		else
+		{
+			TRACE("signature padding %d found\r\n", sig);
+		}
+	}
+	
+	// Start summing all bytes
+	if(pad_error)
+	{
+		// Calculate CRC for debug
+		while(fw_step_pmem < fw_end_pmem)
+		{
+			crc_sum += *fw_step_pmem;
+			fw_step_pmem++;
+		}
+	}
+	else
+	{
+		// Exclude CRC & padding from calculation
+		while(fw_step_pmem < (fw_end_pmem-8))
+		{
+			crc_sum += *fw_step_pmem;
+			fw_step_pmem++;
+		}
+	}
+	
+	TRACE("fw_step_pmem %08x; fw_end_pmem %08x;\r\n", fw_step_pmem, fw_end_pmem);
+	
+	// Update structure entry
+	TRACE("CRC sum:   %04x\r\n", crc_sum);
+	verify.calculated = crc_sum;
+	
+	/* Compare with last 4 bytes of firmware */
+	// Get last 4 bytes of firmware	(4-byte CRC, 4-byte padding)
+	verify.found = *(uint32_t*)(fw_end_pmem - 8);
+	
+	TRACE("CRC found: %04x\r\n", verify.found);
+	
+	// Compare calculated and found CRC
+	if(verify.found == verify.calculated)
+	{
+		return SUCCESS;
+	}
+	else
+	{
+		return FAILURE;
+	}
 }
 
 /*
