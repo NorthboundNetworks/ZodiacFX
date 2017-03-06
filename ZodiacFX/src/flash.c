@@ -188,12 +188,12 @@ int verification_check(void)
 	{
 		if(*(fw_end_pmem-sig) != NULL)
 		{
-			TRACE("signature padding %d not found - last address: %08x\r\n", sig, fw_end_pmem);
+			TRACE("signature padding %d not found - last address: %08x", sig, fw_end_pmem);
 			pad_error = 1;
 		}
 		else
 		{
-			TRACE("signature padding %d found\r\n", sig);
+			TRACE("signature padding %d found", sig);
 		}
 	}
 	
@@ -217,17 +217,17 @@ int verification_check(void)
 		}
 	}
 	
-	TRACE("fw_step_pmem %08x; fw_end_pmem %08x;\r\n", fw_step_pmem, fw_end_pmem);
+	TRACE("fw_step_pmem %08x; fw_end_pmem %08x;", fw_step_pmem, fw_end_pmem);
 	
 	// Update structure entry
-	TRACE("CRC sum:   %04x\r\n", crc_sum);
+	TRACE("CRC sum:   %04x", crc_sum);
 	verify.calculated = crc_sum;
 	
 	/* Compare with last 4 bytes of firmware */
 	// Get last 4 bytes of firmware	(4-byte CRC, 4-byte padding)
 	verify.found = *(uint32_t*)(fw_end_pmem - 8);
 	
-	TRACE("CRC found: %04x\r\n", verify.found);
+	TRACE("CRC found: %04x", verify.found);
 	
 	// Compare calculated and found CRC
 	if(verify.found == verify.calculated)
