@@ -210,7 +210,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		http_payload = (char*)p->payload;
 		len = p->tot_len;
 		
-		TRACE("http.c: -- HTTP recv received %d payload bytes", len);
+		TRACE("http.c: -- HTTP recv received %d/%d payload bytes in this pbuf", p->len, p->tot_len);
 		TRACE("http.c: -> pcb @ addr: 0x%08x, remote port %d", pcb, pcb->remote_port);
 		
 		if(file_upload == true)
@@ -1337,6 +1337,7 @@ static uint8_t upload_handler(char *payload, int len)
 	static char page[IFLASH_PAGE_SIZE] = {0};			// Storage for each page of data
 	static uint16_t saved_bytes = 0;					// Persistent counter of unwritten data
 	uint16_t handled_bytes = 0;							// Counter of handled data
+	static uint32_t total_handled_bytes = 0;			// Counter of total handled data
 	static char boundary_ID[BOUNDARY_MAX_LEN] = {0};	// Storage for boundary ID
 
 	if(payload == NULL || len == 0)
@@ -1349,6 +1350,7 @@ static uint8_t upload_handler(char *payload, int len)
 		boundary_start = 1;								// Set starting boundary required flag
 		upload_pcb = NULL;								// Clear pcb connection pointer
 		upload_timer = 0;								// Clear upload timeout
+		total_handled_bytes = 0;
 		return 1;
 	}
 	
@@ -1594,6 +1596,8 @@ static uint8_t upload_handler(char *payload, int len)
 			// Handle edge-case
 			TRACE("http.c: unable to fill a complete page - skipping page write");
 			TRACE("http.c: %d bytes saved", saved_bytes);
+			
+			total_handled_bytes += handled_bytes;
 			return 1;
 		}
 		else
@@ -1728,7 +1732,10 @@ static uint8_t upload_handler(char *payload, int len)
 	
 		TRACE("http.c: handled_bytes: %04d, data_len: %04d", handled_bytes, data_len);
 	}	
-			
+	
+	total_handled_bytes += handled_bytes;
+	TRACE("http.c: total_handled_bytes: %d", total_handled_bytes);
+	
 	if(final)
 	{		
 		return 2;
