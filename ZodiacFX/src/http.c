@@ -81,6 +81,7 @@ static int boundary_start = 1;		// Check for start of data
 static uint8_t flowBase = 0;		// Current set of flows to display
 static uint8_t meterBase = 0;		// Current set of meters to display
 static struct tcp_pcb * upload_pcb;	// Firmware upload connection check (pcb pointer)
+static int upload_port = 0;
 static int upload_timer = 0;		// Timer for firmware upload timeout
 
 // Flag variables
@@ -209,53 +210,15 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		http_payload = (char*)p->payload;
 		len = p->tot_len;
 		
-		TRACE("http.c: -- HTTP recv received %d payload bytes", len);
+		TRACE("http.c: -- HTTP recv received %d/%d payload bytes in this pbuf", p->len, p->tot_len);
 		TRACE("http.c: -> pcb @ addr: 0x%08x, remote port %d", pcb, pcb->remote_port);
 		
 		if(file_upload == true)
-		{
-			// Check HTTP method
-			i = 0;
-			while(i < 63 && (http_payload[i] != ' '))
-			{
-				http_msg[i] = http_payload[i];
-				i++;
-			}
-			
-			if(upload_pcb != pcb)
-			{
-				TRACE("http.c: incoming connection ignored - upload currently in progress");
-				
-				/* Header request check */
-				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
-				
-				// Specified resource directly follows GET
-				i = 0;
-				while(i < 63 && (http_payload[i+5] != ' '))
-				{
-					http_msg[i] = http_payload[i+5];	// Offset http_payload to isolate resource
-					i++;
-				}
-				
-				// The "upload in progress" message does not need to show up in the header
-				if(strcmp(http_msg,"header.htm") != 0)
-				{
-					if(interfaceCreate_Upload_Status(4))
-					{
-						http_send(&shared_buffer, pcb, 1);
-						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
-					}
-					else
-					{
-						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
-					}
-				}
-				
-				return ERR_OK;
-			}
+		{			
+			TRACE("http.c: %d ms since last firmware packet received", (sys_get_ms() - upload_timer));
 			
 			// Check upload timeout
-			if(sys_get_ms() - upload_timer > UPLOAD_TIMEOUT)
+			if(upload_timer != 0 && sys_get_ms() - upload_timer > UPLOAD_TIMEOUT)
 			{
 				TRACE("http.c: firmware upload has timed out");
 				
@@ -287,9 +250,39 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				}
 			}
 			
-			TRACE("http.c: %d ms since last firmware packet received", (sys_get_ms() - upload_timer));
+			if(upload_pcb != pcb && upload_port != pcb->remote_port)
+			{
+				TRACE("http.c: incoming connection ignored - upload currently in progress");
+				
+				/* Header request check */
+				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
+				
+				// Specified resource directly follows GET
+				i = 0;
+				while(i < 63 && (http_payload[i+5] != ' '))
+				{
+					http_msg[i] = http_payload[i+5];	// Offset http_payload to isolate resource
+					i++;
+				}
+				
+				// The "upload in progress" message does not need to show up in the header
+				if(strcmp(http_msg,"header.htm") != 0)
+				{
+					if(interfaceCreate_Upload_Status(4))
+					{
+						http_send(&shared_buffer, pcb, 1);
+						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				}
+				
+				return ERR_OK;
+			}
 			
-			// Update timer value
+			// Update timer value (new firmware packet received)
 			upload_timer = sys_get_ms();
 			
 			int ret = 0;
@@ -589,6 +582,8 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					file_upload = true;
 					// Store pcb pointer value for this connection
 					upload_pcb = pcb;
+					// Store remote port
+					upload_port = pcb->remote_port;
 					// Initialise timeout value
 					upload_timer = sys_get_ms();
 					
@@ -1342,6 +1337,7 @@ static uint8_t upload_handler(char *payload, int len)
 	static char page[IFLASH_PAGE_SIZE] = {0};			// Storage for each page of data
 	static uint16_t saved_bytes = 0;					// Persistent counter of unwritten data
 	uint16_t handled_bytes = 0;							// Counter of handled data
+	static uint32_t total_handled_bytes = 0;			// Counter of total handled data
 	static char boundary_ID[BOUNDARY_MAX_LEN] = {0};	// Storage for boundary ID
 
 	if(payload == NULL || len == 0)
@@ -1354,6 +1350,7 @@ static uint8_t upload_handler(char *payload, int len)
 		boundary_start = 1;								// Set starting boundary required flag
 		upload_pcb = NULL;								// Clear pcb connection pointer
 		upload_timer = 0;								// Clear upload timeout
+		total_handled_bytes = 0;
 		return 1;
 	}
 	
@@ -1599,6 +1596,8 @@ static uint8_t upload_handler(char *payload, int len)
 			// Handle edge-case
 			TRACE("http.c: unable to fill a complete page - skipping page write");
 			TRACE("http.c: %d bytes saved", saved_bytes);
+			
+			total_handled_bytes += handled_bytes;
 			return 1;
 		}
 		else
@@ -1733,7 +1732,10 @@ static uint8_t upload_handler(char *payload, int len)
 	
 		TRACE("http.c: handled_bytes: %04d, data_len: %04d", handled_bytes, data_len);
 	}	
-			
+	
+	total_handled_bytes += handled_bytes;
+	TRACE("http.c: total_handled_bytes: %d", total_handled_bytes);
+	
 	if(final)
 	{		
 		return 2;
