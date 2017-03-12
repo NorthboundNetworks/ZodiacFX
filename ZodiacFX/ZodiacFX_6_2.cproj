@@ -2,7 +2,7 @@
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectVersion>7.0</ProjectVersion>
+    <ProjectVersion>6.2</ProjectVersion>
     <ToolchainName>com.Atmel.ARMGCC.C</ToolchainName>
     <ProjectGuid>{d48aa523-b6fa-4608-b329-ef580ba58eba}</ProjectGuid>
     <avrdevice>ATSAM4E8C</avrdevice>
@@ -35,7 +35,6 @@
           <option id="common.services.basic.spi_master" value="Add" config="usart_spi" content-id="Atmel.ASF" />
           <option id="common.services.basic.twi" value="Add" config="" content-id="Atmel.ASF" />
           <option id="common.services.usb.class.device" value="Add" config="cdc_stdio" content-id="Atmel.ASF" />
-          <option id="common.utils.membag" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.afec" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.gmac" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.pmc" value="Add" config="" content-id="Atmel.ASF" />
@@ -43,7 +42,7 @@
           <option id="sam.drivers.rtc" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.spi" value="Add" config="" content-id="Atmel.ASF" />
           <option id="sam.drivers.tc.appnote" value="Add" config="" content-id="Atmel.ASF" />
-          <option id="sam.services.flash" value="Add" config="" content-id="Atmel.ASF" />
+          <option id="common.utils.membag" value="Add" config="" content-id="Atmel.ASF" />
         </options>
         <configurations>
           <configuration key="config.compiler.armgcc.fpu_used" value="yes" default="yes" content-id="Atmel.ASF" />
@@ -250,15 +249,11 @@
           <file path="src/ASF/common/utils/membag/membag.c" framework="" version="3.27.0" source="common\utils\membag\membag.c" changed="False" content-id="Atmel.ASF" />
           <file path="src/ASF/common/utils/membag/membag.h" framework="" version="3.27.0" source="common\utils\membag\membag.h" changed="False" content-id="Atmel.ASF" />
           <file path="src/Config/conf_membag.h" framework="" version="3.27.0" source="common\utils\membag\module_config\conf_membag.h" changed="False" content-id="Atmel.ASF" />
-          <file path="src/ASF/sam/drivers/efc/efc.c" framework="" version="3.28.1" source="sam\drivers\efc\efc.c" changed="False" content-id="Atmel.ASF" />
-          <file path="src/ASF/sam/drivers/efc/efc.h" framework="" version="3.28.1" source="sam\drivers\efc\efc.h" changed="False" content-id="Atmel.ASF" />
-          <file path="src/ASF/sam/services/flash_efc/flash_efc.c" framework="" version="3.28.1" source="sam\services\flash_efc\flash_efc.c" changed="False" content-id="Atmel.ASF" />
-          <file path="src/ASF/sam/services/flash_efc/flash_efc.h" framework="" version="3.28.1" source="sam\services\flash_efc\flash_efc.h" changed="False" content-id="Atmel.ASF" />
         </files>
         <documentation help="http://asf.atmel.com/docs/3.27.0/common.applications.user_application.user_board.sam4e8c/html/index.html" />
         <offline-documentation help="" />
         <dependencies>
-          <content-extension eid="atmel.asf" uuidref="Atmel.ASF" version="3.28.1" />
+          <content-extension eid="atmel.asf" uuidref="Atmel.ASF" version="3.27.0" />
         </dependencies>
         <project id="common.applications.user_application.user_board.sam4e8c" value="Add" config="" content-id="Atmel.ASF" />
         <board id="board.user_board.sam4e" value="Add" config="" content-id="Atmel.ASF" />
@@ -268,19 +263,14 @@
     <com_atmel_avrdbg_tool_atmelice>
       <ToolOptions>
         <InterfaceProperties>
-          <JtagDbgClock>7500000</JtagDbgClock>
-          <SwdClock>2000000</SwdClock>
         </InterfaceProperties>
         <InterfaceName>JTAG</InterfaceName>
       </ToolOptions>
       <ToolType>com.atmel.avrdbg.tool.atmelice</ToolType>
-      <ToolNumber>J41800058832</ToolNumber>
+      <ToolNumber>J41800009874</ToolNumber>
       <ToolName>Atmel-ICE</ToolName>
     </com_atmel_avrdbg_tool_atmelice>
     <avrtoolinterface>JTAG</avrtoolinterface>
-    <avrtoolserialnumber>J41800058832</avrtoolserialnumber>
-    <avrdeviceexpectedsignature>0xA3CC0CE0</avrdeviceexpectedsignature>
-    <avrtoolinterfaceclock>7500000</avrtoolinterfaceclock>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <ToolchainSettings>
@@ -345,8 +335,6 @@
       <Value>../src/lwip/include/ipv4</Value>
       <Value>../src/ASF/sam/drivers/afec</Value>
       <Value>../src/ASF/common/utils/membag</Value>
-      <Value>../src/ASF/sam/drivers/efc</Value>
-      <Value>../src/ASF/sam/services/flash_efc</Value>
     </ListValues>
   </armgcc.compiler.directories.IncludePaths>
   <armgcc.compiler.optimization.level>Optimize (-O1)</armgcc.compiler.optimization.level>
@@ -368,13 +356,7 @@
   </armgcc.linker.libraries.LibrarySearchPaths>
   <armgcc.linker.optimization.GarbageCollectUnusedSections>True</armgcc.linker.optimization.GarbageCollectUnusedSections>
   <armgcc.linker.memorysettings.ExternalRAM />
-  <armgcc.linker.miscellaneous.LinkerFlags>-Wl,--defsym,__stack_size__=0x1400 -Wl,--entry=Reset_Handler -Wl,-section-start=.text=0x00420000 -Wl,--cref -mthumb -T../src/ASF/sam/utils/linker_scripts/sam4e/sam4e8/gcc/flash.ld</armgcc.linker.miscellaneous.LinkerFlags>
-  <armgcc.assembler.general.IncludePaths>
-    <ListValues>
-      <Value>../src/ASF/sam/drivers/efc</Value>
-      <Value>../src/ASF/sam/services/flash_efc</Value>
-    </ListValues>
-  </armgcc.assembler.general.IncludePaths>
+  <armgcc.linker.miscellaneous.LinkerFlags>-Wl,--entry=Reset_Handler -Wl,--cref -mthumb -T../src/ASF/sam/utils/linker_scripts/sam4e/sam4e8/gcc/flash.ld</armgcc.linker.miscellaneous.LinkerFlags>
   <armgcc.preprocessingassembler.general.AssemblerFlags>-DARM_MATH_CM4=true -DBOARD=USER_BOARD -Dprintf=iprintf -Dscanf=iscanf -DUDD_ENABLE</armgcc.preprocessingassembler.general.AssemblerFlags>
   <armgcc.preprocessingassembler.general.DefaultIncludePath>False</armgcc.preprocessingassembler.general.DefaultIncludePath>
   <armgcc.preprocessingassembler.general.IncludePaths>
@@ -418,8 +400,6 @@
       <Value>../src/ASF/sam/drivers/rstc</Value>
       <Value>../src/ASF/sam/drivers/afec</Value>
       <Value>../src/ASF/common/utils/membag</Value>
-      <Value>../src/ASF/sam/drivers/efc</Value>
-      <Value>../src/ASF/sam/services/flash_efc</Value>
     </ListValues>
   </armgcc.preprocessingassembler.general.IncludePaths>
 </ArmGcc>
@@ -488,8 +468,6 @@
       <Value>../src/ASF/sam/drivers/rstc</Value>
       <Value>../src/ASF/sam/drivers/afec</Value>
       <Value>../src/ASF/common/utils/membag</Value>
-      <Value>../src/ASF/sam/drivers/efc</Value>
-      <Value>../src/ASF/sam/services/flash_efc</Value>
     </ListValues>
   </armgcc.compiler.directories.IncludePaths>
   <armgcc.compiler.optimization.OtherFlags>-fdata-sections</armgcc.compiler.optimization.OtherFlags>
@@ -497,7 +475,6 @@
   <armgcc.compiler.optimization.DebugLevel>Maximum (-g3)</armgcc.compiler.optimization.DebugLevel>
   <armgcc.compiler.warnings.AllWarnings>True</armgcc.compiler.warnings.AllWarnings>
   <armgcc.compiler.miscellaneous.OtherFlags>-pipe -fno-strict-aliasing -Wall -Wstrict-prototypes -Wmissing-prototypes -Werror-implicit-function-declaration -Wpointer-arith -std=gnu99 -ffunction-sections -fdata-sections -Wchar-subscripts -Wcomment -Wformat=2 -Wimplicit-int -Wmain -Wparentheses -Wsequence-point -Wreturn-type -Wswitch -Wtrigraphs -Wunused -Wuninitialized -Wunknown-pragmas -Wfloat-equal -Wundef -Wshadow -Wbad-function-cast -Wwrite-strings -Wsign-compare -Waggregate-return -Wmissing-declarations -Wformat -Wmissing-format-attribute -Wno-deprecated-declarations -Wpacked -Wredundant-decls -Wnested-externs -Wlong-long -Wunreachable-code -Wcast-align --param max-inline-insns-single=500 -mfloat-abi=softfp -mfpu=fpv4-sp-d16</armgcc.compiler.miscellaneous.OtherFlags>
-  <armgcc.compiler.miscellaneous.Verbose>True</armgcc.compiler.miscellaneous.Verbose>
   <armgcc.linker.libraries.Libraries>
     <ListValues>
       <Value>libarm_cortexM4lf_math_softfp</Value>
@@ -512,13 +489,7 @@
   </armgcc.linker.libraries.LibrarySearchPaths>
   <armgcc.linker.optimization.GarbageCollectUnusedSections>True</armgcc.linker.optimization.GarbageCollectUnusedSections>
   <armgcc.linker.memorysettings.ExternalRAM />
-  <armgcc.linker.miscellaneous.LinkerFlags>-Wl,--defsym,__stack_size__=0x1400 -Wl,--entry=Reset_Handler -Wl,--cref -mthumb -T../src/ASF/sam/utils/linker_scripts/sam4e/sam4e8/gcc/flash.ld</armgcc.linker.miscellaneous.LinkerFlags>
-  <armgcc.assembler.general.IncludePaths>
-    <ListValues>
-      <Value>../src/ASF/sam/drivers/efc</Value>
-      <Value>../src/ASF/sam/services/flash_efc</Value>
-    </ListValues>
-  </armgcc.assembler.general.IncludePaths>
+  <armgcc.linker.miscellaneous.LinkerFlags>-Wl,--entry=Reset_Handler -Wl,--cref -mthumb -T../src/ASF/sam/utils/linker_scripts/sam4e/sam4e8/gcc/flash.ld</armgcc.linker.miscellaneous.LinkerFlags>
   <armgcc.assembler.debugging.DebugLevel>Default (-g)</armgcc.assembler.debugging.DebugLevel>
   <armgcc.preprocessingassembler.general.AssemblerFlags>-DARM_MATH_CM4=true -DBOARD=USER_BOARD -Dprintf=iprintf -Dscanf=iscanf -DUDD_ENABLE</armgcc.preprocessingassembler.general.AssemblerFlags>
   <armgcc.preprocessingassembler.general.DefaultIncludePath>False</armgcc.preprocessingassembler.general.DefaultIncludePath>
@@ -563,14 +534,11 @@
       <Value>../src/ASF/sam/drivers/rstc</Value>
       <Value>../src/ASF/sam/drivers/afec</Value>
       <Value>../src/ASF/common/utils/membag</Value>
-      <Value>../src/ASF/sam/drivers/efc</Value>
-      <Value>../src/ASF/sam/services/flash_efc</Value>
     </ListValues>
   </armgcc.preprocessingassembler.general.IncludePaths>
   <armgcc.preprocessingassembler.debugging.DebugLevel>Default (-Wa,-g)</armgcc.preprocessingassembler.debugging.DebugLevel>
 </ArmGcc>
     </ToolchainSettings>
-    <PostBuildEvent>"$(ToolchainDir)\arm-none-eabi-size.exe" $(OutputFileName)$(OutputFileExtension)</PostBuildEvent>
   </PropertyGroup>
   <ItemGroup>
     <Folder Include="src\" />
@@ -602,7 +570,6 @@
     <Folder Include="src\ASF\sam\" />
     <Folder Include="src\ASF\sam\drivers\" />
     <Folder Include="src\ASF\sam\drivers\afec\" />
-    <Folder Include="src\ASF\sam\drivers\efc\" />
     <Folder Include="src\ASF\sam\drivers\gmac\" />
     <Folder Include="src\ASF\sam\drivers\matrix\" />
     <Folder Include="src\ASF\sam\drivers\pio\" />
@@ -616,8 +583,6 @@
     <Folder Include="src\ASF\sam\drivers\twi\" />
     <Folder Include="src\ASF\sam\drivers\udp\" />
     <Folder Include="src\ASF\sam\drivers\usart\" />
-    <Folder Include="src\ASF\sam\services\" />
-    <Folder Include="src\ASF\sam\services\flash_efc\" />
     <Folder Include="src\ASF\sam\utils\" />
     <Folder Include="src\ASF\sam\utils\cmsis\" />
     <Folder Include="src\ASF\sam\utils\cmsis\sam4e\" />
@@ -676,30 +641,6 @@
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\ASF\common\utils\membag\membag.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\ASF\sam\drivers\efc\efc.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <None Include="src\ASF\sam\drivers\efc\efc.h">
-      <SubType>compile</SubType>
-    </None>
-    <Compile Include="src\ASF\sam\services\flash_efc\flash_efc.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <None Include="src\ASF\sam\services\flash_efc\flash_efc.h">
-      <SubType>compile</SubType>
-    </None>
-    <Compile Include="src\flash.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\flash.h">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\http.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\http.h">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\openflow\of_helper.c">
