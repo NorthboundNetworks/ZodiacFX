@@ -76,6 +76,7 @@ extern int flash_write_page(uint8_t *flash_page);
 // Local Variables
 struct tcp_pcb *http_pcb;
 static char http_msg[64];			// Buffer for HTTP message filtering
+static char post_msg[64];			// Buffer for HTTP message filtering
 static int page_ctr = 1;
 static int boundary_start = 1;		// Check for start of data
 static uint8_t flowBase = 0;		// Current set of flows to display
@@ -87,11 +88,15 @@ static int upload_timer = 0;		// Timer for firmware upload timeout
 // Flag variables
 static bool restart_required = false;		// Track if any configuration changes are pending a restart
 static bool file_upload = false;	// Multi-part firmware file upload flag
+static int http_waiting_ack = 0;
+static struct tcp_pcb *close_ready = NULL;
+static bool post_pending = false;
 
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
 void http_send(char *buffer, struct tcp_pcb *pcb, bool out);
 static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len);
+void http_close(struct tcp_pcb *pcb);
 
 static uint8_t upload_handler(char *payload, int len);
 
@@ -179,6 +184,8 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 {
 	TRACE("http.c: [http_sent] %d bytes sent", len);
+	http_waiting_ack -= len;
+	if (http_waiting_ack == 0 && close_ready != NULL) http_close(close_ready);
 	if(restart_required == true)
 	{
 		TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
@@ -551,7 +558,8 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					TRACE("http.c: resource doesn't exist:\"%s\"", http_msg);
 				}
 			}
-			else if(strcmp(http_msg,"POST") == 0)
+			
+			else if(strcmp(http_msg,"POST") == 0 && post_pending == false)
 			{
 				TRACE("http.c: POST method received");
 				memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
@@ -563,12 +571,24 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					http_msg[i] = http_payload[i+6];	// Offset http_payload to isolate resource
 					i++;
 				}
+				memcpy(post_msg, http_msg, 64);
+				TRACE("http.c: request for %s", post_msg);
+				post_pending = true;
+				pbuf_free(p);
+				return ERR_OK;
+			}
+			else
+			{
+				TRACE("http.c: unknown HTTP method received");
+			}
 
-				TRACE("http.c: request for %s", http_msg);
-
-				if(strcmp(http_msg,"upload") == 0)
+					
+			if(post_pending == true)
+			{
+				post_pending = false;
+				if(strcmp(post_msg,"upload") == 0)
 				{
-					// Initialise flash programming
+					// Initialize flash programming
 					if(firmware_update_init())
 					{
 						TRACE("http.c: firmware update initialisation successful");
@@ -584,14 +604,14 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					upload_pcb = pcb;
 					// Store remote port
 					upload_port = pcb->remote_port;
-					// Initialise timeout value
+					// Initialize timeout value
 					upload_timer = sys_get_ms();
 					
 					upload_handler(http_payload, len);
 				}
-				else if(strcmp(http_msg,"save_config") == 0)
+				else if(strcmp(post_msg,"save_config") == 0)
 				{
-					if(Config_Network(&http_payload, len) == SUCCESS)
+					if(Config_Network(http_payload, len) == SUCCESS)
 					{
 						TRACE("http.c: network configuration successful");
 							
@@ -613,7 +633,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						TRACE("http.c: ERROR: network configuration failed");
 					}
 				}
-				else if(strcmp(http_msg,"btn_restart") == 0)
+				else if(strcmp(post_msg,"btn_restart") == 0)
 				{
 					if(interfaceCreate_Restart())
 					{
@@ -626,7 +646,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					}
 					restart_required = true;
 				}
-				else if(strcmp(http_msg,"btn_default") == 0)
+				else if(strcmp(post_msg,"btn_default") == 0)
 				{
 					TRACE("http.c: restoring factory settings");
 				
@@ -683,7 +703,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					rstc_start_software_reset(RSTC);	// Software reset
 					while (1);
 				}
-				else if(strcmp(http_msg,"save_ports") == 0)
+				else if(strcmp(post_msg,"save_ports") == 0)
 				{
 					// Save VLAN port associations
 				
@@ -793,7 +813,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
-				else if(strcmp(http_msg,"btn_ofPage") == 0)
+				else if(strcmp(post_msg,"btn_ofPage") == 0)
 				{
 					// Display: Flows, Previous and Next flow page buttons
 					
@@ -843,7 +863,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
-				else if(strcmp(http_msg,"btn_ofClear") == 0)
+				else if(strcmp(post_msg,"btn_ofClear") == 0)
 				{
 					// Display: Flows
 					// Clear the flow table
@@ -861,7 +881,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
-				else if(strcmp(http_msg,"btn_meterPage") == 0)
+				else if(strcmp(post_msg,"btn_meterPage") == 0)
 				{
 					// Display: Meters, Previous and Next meter page buttons
 					
@@ -911,7 +931,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
-				else if(strcmp(http_msg,"save_vlan") == 0)
+				else if(strcmp(post_msg,"save_vlan") == 0)
 				{
 					// Config: VLANs, Add and Delete buttons
 					
@@ -1092,7 +1112,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
 					}
 				}
-				else if(strcmp(http_msg,"save_of") == 0)
+				else if(strcmp(post_msg,"save_of") == 0)
 				{
 					// Config: OpenFlow, Save OpenFlow configuration
 					
@@ -1264,10 +1284,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					TRACE("http.c: unknown request: \"%s\"", http_msg);
 				}
 			}
-			else
-			{
-				TRACE("http.c: unknown HTTP method received");
-			}
+
 		}
 	}
 	else
@@ -1285,7 +1302,6 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 		TRACE("http.c: Closing TCP connection.");
 		tcp_close(pcb);
 	}
-
 	return ERR_OK;
 }
 
@@ -1310,18 +1326,31 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 		err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
 		TRACE("http.c: tcp buffer %d/%d", len, buf_size);
 
-		// Check if more data needs to be written
-		if(out == true)
+		// Set to be closed after all the data has been sent
+		if(out == true) 
 		{
-			if (err == ERR_OK) tcp_output(pcb);
-			TRACE("http.c: calling tcp_output & closing connection");
-			tcp_close(pcb);
+			http_waiting_ack = len;
+			close_ready = pcb;
 		}
 	}
 	
 	return;
 }
 
+/*
+*	HTTP Close function
+*
+*	Parameters:
+*		pcb - pcb of the connection to close
+*/
+void http_close(struct tcp_pcb *pcb)
+{
+	tcp_output(pcb);
+	TRACE("http.c: calling tcp_output & closing connection");
+	tcp_close(pcb);
+	close_ready = NULL;
+	return;
+}
 /*
 *	Upload handler function
 *
@@ -1750,6 +1779,7 @@ static uint8_t Config_Network(char *payload, int len)
 {
 	int i = 0;
 	char *pdat;
+	payload[len] = '&';
 	
 	memset(&http_msg, 0, sizeof(http_msg));	// Clear HTTP message array
 	
