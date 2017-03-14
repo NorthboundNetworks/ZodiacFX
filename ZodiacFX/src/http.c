@@ -84,12 +84,11 @@ static uint8_t meterBase = 0;		// Current set of meters to display
 static struct tcp_pcb * upload_pcb;	// Firmware upload connection check (pcb pointer)
 static int upload_port = 0;
 static int upload_timer = 0;		// Timer for firmware upload timeout
+static struct http_conns http_conn[MAX_CONN];	// http connection status
 
 // Flag variables
 static bool restart_required = false;		// Track if any configuration changes are pending a restart
 static bool file_upload = false;	// Multi-part firmware file upload flag
-static int http_waiting_ack = 0;
-static struct tcp_pcb *close_ready = NULL;
 static bool post_pending = false;
 
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
@@ -184,8 +183,16 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 {
 	TRACE("http.c: [http_sent] %d bytes sent", len);
-	http_waiting_ack -= len;
-	if (http_waiting_ack == 0 && close_ready != NULL) http_close(close_ready);
+	for(int i=0; i<MAX_CONN; i++)
+	{
+		if(http_conn[i].attached_pcb == tpcb)
+		{
+			TRACE("http.c: pcb 0x%08x waiting on (%d down to %d) bytes", http_conn[i].attached_pcb, http_conn[i].bytes_waiting, http_conn[i].bytes_waiting - len);
+			http_conn[i].bytes_waiting -= len;
+			if (http_conn[i].bytes_waiting == 0 && http_conn[i].attached_pcb != NULL) http_close(http_conn[i].attached_pcb);
+			break;
+		}
+	}
 	if(restart_required == true)
 	{
 		TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
@@ -1329,8 +1336,17 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 		// Set to be closed after all the data has been sent
 		if(out == true) 
 		{
-			http_waiting_ack = len;
-			close_ready = pcb;
+			// Find the next free http conn struct
+			for(int i=0; i<MAX_CONN; i++)
+			{
+				if(http_conn[i].attached_pcb == NULL)
+				{
+					http_conn[i].bytes_waiting = len;
+					http_conn[i].attached_pcb = pcb;
+					TRACE("http.c: %d bytes attached to pcb @ addr: 0x%08x", len, pcb);
+					break;
+				}
+			}
 		}
 	}
 	
@@ -1346,9 +1362,18 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 void http_close(struct tcp_pcb *pcb)
 {
 	tcp_output(pcb);
-	TRACE("http.c: calling tcp_output & closing connection");
+	TRACE("http.c: calling tcp_output & closing connection (pcb @ addr: 0x%08x)", pcb);
 	tcp_close(pcb);
-	close_ready = NULL;
+	// Clear http_conn entry
+	for(int i=0; i<MAX_CONN; i++)
+	{
+		if(http_conn[i].attached_pcb == pcb)
+		{
+			TRACE("http.c: clearing http_conn for pcb @ addr: 0x%08x", pcb)
+			http_conn[i].attached_pcb = NULL;
+			http_conn[i].bytes_waiting = 0;
+		}
+	}
 	return;
 }
 /*
