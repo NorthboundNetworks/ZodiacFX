@@ -87,6 +87,7 @@ static int upload_timer = 0;		// Timer for firmware upload timeout
 static struct http_conns http_conn[MAX_CONN];	// http connection status
 
 // Flag variables
+bool restart_required_outer = false;
 static bool restart_required = false;		// Track if any configuration changes are pending a restart
 static bool file_upload = false;	// Multi-part firmware file upload flag
 static bool post_pending = false;
@@ -200,11 +201,12 @@ static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 	}
 	if(restart_required == true)
 	{
-		TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
-		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-		udc_detach();	// Detach the USB device before restart
-		rstc_start_software_reset(RSTC);	// Software reset
-		while (1);
+		restart_required_outer = true;
+		//TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
+		//for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+		//udc_detach();	// Detach the USB device before restart
+		//rstc_start_software_reset(RSTC);	// Software reset
+		//while (1);
 	}
 	
 	return ERR_OK;
