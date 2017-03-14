@@ -195,8 +195,18 @@ static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 				TRACE("http.c: ERROR - illegal bytes_waiting value. Connection will be closed.");
 				http_close(http_conn[i].attached_pcb);
 			}
+			http_conn[i].timeout = sys_get_ms();	// Update timeout timer
 			if (http_conn[i].bytes_waiting == 0 && http_conn[i].attached_pcb != NULL) http_close(http_conn[i].attached_pcb);
 			break;
+		}
+		
+		if(http_conn[i].attached_pcb != NULL)
+		{
+			if(sys_get_ms() - http_conn[i].timeout > 3000)	// 3s connection timeout
+			{
+				TRACE("http.c: pcb 0x%08x has timed out. Connection will be closed.", http_conn[i].attached_pcb);
+				http_close(http_conn[i].attached_pcb);
+			}	
 		}
 	}
 	if(restart_required == true)

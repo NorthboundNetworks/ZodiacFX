@@ -41,6 +41,7 @@ struct http_conns
 {
 	int bytes_waiting;
 	struct tcp_pcb *attached_pcb;
+	uint32_t timeout;
 };
 
 void http_init(void);
