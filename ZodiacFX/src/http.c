@@ -189,6 +189,11 @@ static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 		{
 			TRACE("http.c: pcb 0x%08x waiting on (%d down to %d) bytes", http_conn[i].attached_pcb, http_conn[i].bytes_waiting, http_conn[i].bytes_waiting - len);
 			http_conn[i].bytes_waiting -= len;
+			if(http_conn[i].bytes_waiting < 0)
+			{
+				TRACE("http.c: ERROR - illegal bytes_waiting value. Connection will be closed.");
+				http_close(http_conn[i].attached_pcb);
+			}
 			if (http_conn[i].bytes_waiting == 0 && http_conn[i].attached_pcb != NULL) http_close(http_conn[i].attached_pcb);
 			break;
 		}
@@ -1333,19 +1338,26 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 		err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
 		TRACE("http.c: tcp buffer %d/%d", len, buf_size);
 
-		// Set to be closed after all the data has been sent
-		if(out == true) 
+		// Check if data is a part of a larger write
+		for(int i=0; i<MAX_CONN; i++)
 		{
-			// Find the next free http conn struct
-			for(int i=0; i<MAX_CONN; i++)
+			if(http_conn[i].attached_pcb == pcb)
 			{
-				if(http_conn[i].attached_pcb == NULL)
-				{
-					http_conn[i].bytes_waiting = len;
-					http_conn[i].attached_pcb = pcb;
-					TRACE("http.c: %d bytes attached to pcb @ addr: 0x%08x", len, pcb);
-					break;
-				}
+				http_conn[i].bytes_waiting += len;
+				TRACE("http.c: %d bytes appended to byte counter for pcb @ addr: 0x%08x", len, pcb);
+				return;
+			}
+		}
+		
+		// If not, attach to a new connection
+		for(int i=0; i<MAX_CONN; i++)
+		{
+			if(http_conn[i].attached_pcb == NULL)
+			{
+				http_conn[i].attached_pcb = pcb;
+				http_conn[i].bytes_waiting += len;
+				TRACE("http.c: %d bytes attached to pcb @ addr: 0x%08x", len, pcb);
+				return;
 			}
 		}
 	}
