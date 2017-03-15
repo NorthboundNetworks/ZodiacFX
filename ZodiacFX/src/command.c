@@ -74,6 +74,7 @@ extern int totaltime;
 extern int32_t ul_temp;
 extern int OF_Version;
 extern uint32_t uid_buf[4];
+extern bool restart_required_outer;
 
 // Local Variables
 bool showintro = true;
@@ -137,6 +138,15 @@ void task_command(char *str, char *str_last)
 	char *param2;
 	char *param3;
 	char *pch;
+
+	if(restart_required_outer == true)
+	{
+		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
+		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+		udc_detach();	// Detach the USB device before restart
+		rstc_start_software_reset(RSTC);	// Software reset
+		while (1);		
+	}
 
 	while(udi_cdc_is_rx_ready()){
 		ch = udi_cdc_getc();

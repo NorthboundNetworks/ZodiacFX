@@ -84,12 +84,12 @@ static uint8_t meterBase = 0;		// Current set of meters to display
 static struct tcp_pcb * upload_pcb;	// Firmware upload connection check (pcb pointer)
 static int upload_port = 0;
 static int upload_timer = 0;		// Timer for firmware upload timeout
+static struct http_conns http_conn[MAX_CONN];	// http connection status
 
 // Flag variables
+bool restart_required_outer = false;
 static bool restart_required = false;		// Track if any configuration changes are pending a restart
 static bool file_upload = false;	// Multi-part firmware file upload flag
-static int http_waiting_ack = 0;
-static struct tcp_pcb *close_ready = NULL;
 static bool post_pending = false;
 
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
@@ -184,15 +184,39 @@ static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 {
 	TRACE("http.c: [http_sent] %d bytes sent", len);
-	http_waiting_ack -= len;
-	if (http_waiting_ack == 0 && close_ready != NULL) http_close(close_ready);
+	for(int i=0; i<MAX_CONN; i++)
+	{
+		if(http_conn[i].attached_pcb == tpcb)
+		{
+			TRACE("http.c: pcb 0x%08x waiting on (%d down to %d) bytes", http_conn[i].attached_pcb, http_conn[i].bytes_waiting, http_conn[i].bytes_waiting - len);
+			http_conn[i].bytes_waiting -= len;
+			if(http_conn[i].bytes_waiting < 0)
+			{
+				TRACE("http.c: ERROR - illegal bytes_waiting value. Connection will be closed.");
+				http_close(http_conn[i].attached_pcb);
+			}
+			http_conn[i].timeout = sys_get_ms();	// Update timeout timer
+			if (http_conn[i].bytes_waiting == 0 && http_conn[i].attached_pcb != NULL) http_close(http_conn[i].attached_pcb);
+			break;
+		}
+		
+		if(http_conn[i].attached_pcb != NULL)
+		{
+			if(sys_get_ms() - http_conn[i].timeout > 3000)	// 3s connection timeout
+			{
+				TRACE("http.c: pcb 0x%08x has timed out. Connection will be closed.", http_conn[i].attached_pcb);
+				http_close(http_conn[i].attached_pcb);
+			}	
+		}
+	}
 	if(restart_required == true)
 	{
-		TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
-		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-		udc_detach();	// Detach the USB device before restart
-		rstc_start_software_reset(RSTC);	// Software reset
-		while (1);
+		restart_required_outer = true;
+		//TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
+		//for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+		//udc_detach();	// Detach the USB device before restart
+		//rstc_start_software_reset(RSTC);	// Software reset
+		//while (1);
 	}
 	
 	return ERR_OK;
@@ -1326,11 +1350,27 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 		err = tcp_write(pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
 		TRACE("http.c: tcp buffer %d/%d", len, buf_size);
 
-		// Set to be closed after all the data has been sent
-		if(out == true) 
+		// Check if data is a part of a larger write
+		for(int i=0; i<MAX_CONN; i++)
 		{
-			http_waiting_ack = len;
-			close_ready = pcb;
+			if(http_conn[i].attached_pcb == pcb)
+			{
+				http_conn[i].bytes_waiting += len;
+				TRACE("http.c: %d bytes appended to byte counter for pcb @ addr: 0x%08x", len, pcb);
+				return;
+			}
+		}
+		
+		// If not, attach to a new connection
+		for(int i=0; i<MAX_CONN; i++)
+		{
+			if(http_conn[i].attached_pcb == NULL)
+			{
+				http_conn[i].attached_pcb = pcb;
+				http_conn[i].bytes_waiting += len;
+				TRACE("http.c: %d bytes attached to pcb @ addr: 0x%08x", len, pcb);
+				return;
+			}
 		}
 	}
 	
@@ -1346,9 +1386,18 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out)
 void http_close(struct tcp_pcb *pcb)
 {
 	tcp_output(pcb);
-	TRACE("http.c: calling tcp_output & closing connection");
+	TRACE("http.c: calling tcp_output & closing connection (pcb @ addr: 0x%08x)", pcb);
 	tcp_close(pcb);
-	close_ready = NULL;
+	// Clear http_conn entry
+	for(int i=0; i<MAX_CONN; i++)
+	{
+		if(http_conn[i].attached_pcb == pcb)
+		{
+			TRACE("http.c: clearing http_conn for pcb @ addr: 0x%08x", pcb)
+			http_conn[i].attached_pcb = NULL;
+			http_conn[i].bytes_waiting = 0;
+		}
+	}
 	return;
 }
 /*
