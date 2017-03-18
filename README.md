@@ -1,14 +1,14 @@
-# Zodiac FX
+# Zodiac FX Firmware
 
-Firmware for the [Northbound Networks](https://northboundnetworks.com/) Zodiac FX OpenFlow Switch
+This is the firmware for the [Northbound Networks](https://northboundnetworks.com/) Zodiac FX OpenFlow Switch.
 
 ## Background
 
 The Zodiac FX began as a [Kickstarter campaign](https://www.kickstarter.com/projects/northboundnetworks/zodiac-fx-the-worlds-smallest-openflow-sdn-switch) in 2015, with the goal of providing an affordable Software Defined Networking (SDN) platform for developers, researchers, and networking hobbyists. To learn more about SDN, visit the [Northbound Networks Blog](https://northboundnetworks.com/blogs/sdn).
 
-The Zodiac FX is an SDN switch that supports the [OpenFlow protocol](https://www.opennetworking.org/sdn-resources/openflow), an open standard for communication in an SDN architecture. OpenFlow allows communication between the SDN controller (where applications can be run) and OpenFlow switches in the network. These switches use application-generated "Flows" to determine how network data is processed.
+The Zodiac FX SDN switch uses the [OpenFlow protocol](https://www.opennetworking.org/sdn-resources/openflow), an open standard for communication in an SDN architecture. OpenFlow allows communication between the SDN controller (where applications can be run) and OpenFlow switches in the network. These switches use application-generated "Flows" to determine how network data is processed.
 
-This repository contains the open-source firmware for the Zodiac FX. The firmware is constantly being updated to add support for the features of the OpenFlow specification, and to improve support for the various SDN controllers. OpenFlow version 1.0 and version 1.3 are currently supported.
+This repository contains the entire open-source firmware for the Zodiac FX including OpenFlow libraries. The firmware is constantly being updated with support for features of the OpenFlow specification, and to improve compatability with the various SDN controllers. OpenFlow version 1.0 and version 1.3 are currently supported.
 
 ## Flashing/Updating the Firmware
 
@@ -105,9 +105,9 @@ Issues can also be [raised](https://github.com/NorthboundNetworks/ZodiacFX/issue
 
 ## Authors
 
-* **Paul Zanna** - creator
-* **Kristopher Chen** - firmware developer
+* **Paul Zanna** - Creator
+* **Kristopher Chen** - Firmware Developer
 
 ## License
 
-GPL 3.0
+[GPL 3.0](LICENSE)
