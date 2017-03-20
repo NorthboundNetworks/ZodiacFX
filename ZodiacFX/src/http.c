@@ -3404,7 +3404,7 @@ if (iLastFlow > 0)
 				if(insts[OFPIT13_GOTO_TABLE] != NULL)
 				{
 					struct ofp13_instruction_goto_table *inst_goto_ptr;
-					inst_goto_ptr = (struct ofp13_instruction_goto_table *) insts[OFPIT13_METER];
+					inst_goto_ptr = (struct ofp13_instruction_goto_table *) insts[OFPIT13_GOTO_TABLE];
 					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Goto Table: %d\r\n", inst_goto_ptr->table_id);
 				}
 				} else {

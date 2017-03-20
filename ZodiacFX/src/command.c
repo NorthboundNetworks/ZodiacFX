@@ -1345,7 +1345,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						if(insts[OFPIT13_GOTO_TABLE] != NULL)
 						{
 							struct ofp13_instruction_goto_table *inst_goto_ptr;
-							inst_goto_ptr = (struct ofp13_instruction_goto_table *) insts[OFPIT13_METER];
+							inst_goto_ptr = (struct ofp13_instruction_goto_table *) insts[OFPIT13_GOTO_TABLE];
 							printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
 						}
 					} else {
