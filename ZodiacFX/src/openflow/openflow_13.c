@@ -158,7 +158,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			bool recalculate_ip_checksum = false;
 			struct ofp13_instruction_actions *inst_actions = insts[OFPIT13_APPLY_ACTIONS];
 			int act_size = 0;
-			while (act_size < (inst_size - sizeof(struct ofp13_instruction_actions)))
+			while (act_size < (ntohs(inst_actions->len) - sizeof(struct ofp13_instruction_actions)))
 			{
 				struct ofp13_action_header *act_hdr = (struct ofp13_action_header*)((uintptr_t)inst_actions->actions + act_size);
 				switch (htons(act_hdr->type))
