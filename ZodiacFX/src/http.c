@@ -3226,29 +3226,38 @@ if (iLastFlow > 0)
 			int min = t/60;
 			int sec = t%60;
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Last Match: %02d:%02d:%02d\r\n", hr, min, sec);
+						
 			// Print instruction list
 			if (ofp13_oxm_inst[i] != NULL)
 			{
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r Instructions:\r\n");
-				inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
-				inst_size = ntohs(inst_ptr->len);
-				
-				// Check for optional metering instruction
-				if(ntohs(inst_ptr->type) == OFPIT13_METER)
-				{
-					struct ofp13_instruction_meter *inst_meter = inst_ptr;
-					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), "  Meter: %d\r\n", ntohl(inst_meter->meter_id));
+				// Get a list of all instructions for this flow
+				void *insts[8] = {0};
+				inst_size = 0;
+				while(inst_size < ofp13_oxm_inst_size[i]){
+					struct ofp13_instruction *inst_ptr = (struct ofp13_instruction *)(ofp13_oxm_inst[i] + inst_size);
+					insts[ntohs(inst_ptr->type)] = inst_ptr;
+					inst_size += ntohs(inst_ptr->len);
 				}
-				
-				if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
+						
+				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\r Instructions:\r\n");
+						
+				// Check for optional metering instruction
+				if(insts[OFPIT13_METER] != NULL)						
+				{
+					struct ofp13_instruction_meter *inst_meter = insts[OFPIT13_METER];
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Meter: %d\r\n", ntohl(inst_meter->meter_id));
+				}
+						
+				if(insts[OFPIT13_APPLY_ACTIONS] != NULL)
 				{
 					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Apply Actions:\r\n");
 					struct ofp13_action_header *act_hdr;
 					act_size = 0;
-					if (inst_size == sizeof(struct ofp13_instruction_actions)) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   DROP \r\n");	// No actions
-					while (act_size < (inst_size - sizeof(struct ofp13_instruction_actions)))
+					inst_actions = insts[OFPIT13_APPLY_ACTIONS];
+					if (ntohs(inst_actions->len) == sizeof(struct ofp13_instruction_actions)) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   DROP \r\n");	// No actions
+					while (act_size < (ntohs(inst_actions->len) - sizeof(struct ofp13_instruction_actions)))
 					{
-						inst_actions  = ofp13_oxm_inst[i] + act_size;
+						inst_actions  = insts[OFPIT13_APPLY_ACTIONS] + act_size;
 						act_hdr = &inst_actions->actions;
 						if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 						{
@@ -3392,26 +3401,11 @@ if (iLastFlow > 0)
 					}
 				}
 				// Print goto table instruction
-				if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
+				if(insts[OFPIT13_GOTO_TABLE] != NULL)
 				{
 					struct ofp13_instruction_goto_table *inst_goto_ptr;
-					inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
+					inst_goto_ptr = (struct ofp13_instruction_goto_table *) insts[OFPIT13_METER];
 					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Goto Table: %d\r\n", inst_goto_ptr->table_id);
-					continue;
-				}
-				// Is there more then one instruction?
-				if (ofp13_oxm_inst_size[i] > inst_size)
-				{
-					uint8_t *nxt_inst;
-					nxt_inst = ofp13_oxm_inst[i] + inst_size;
-					inst_ptr = (struct ofp13_instruction *) nxt_inst;
-					inst_size = ntohs(inst_ptr->len);
-					if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
-					{
-						struct ofp13_instruction_goto_table *inst_goto_ptr;
-						inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
-						snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  Goto Table: %d\r\n", inst_goto_ptr->table_id);
-					}
 				}
 				} else {
 				// No instructions
