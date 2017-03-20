@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Zodiac FX
 
 Firmware for the Northbound Networks Zodiac FX OpenFlow Switch
@@ -22,7 +21,6 @@ The Zodiac FX began as a [Kickstarter campaign](https://www.kickstarter.com/proj
 The Zodiac FX SDN switch uses the [OpenFlow protocol](https://www.opennetworking.org/sdn-resources/openflow), an open standard for communication in an SDN architecture. OpenFlow allows communication between the SDN controller (where applications can be run) and OpenFlow switches in the network. These switches use application-generated "Flows" to determine how network data is processed.
 
 This repository contains the entire open-source firmware for the Zodiac FX including OpenFlow libraries. The firmware is constantly being updated with support for features of the OpenFlow specification, and to improve compatability with the various SDN controllers. OpenFlow version 1.0 and version 1.3 are currently supported.
->>>>>>> refs/remotes/pzanna/Dev_80
 
 ## Flashing/Updating the Firmware
 
@@ -119,7 +117,6 @@ Issues can also be [raised](https://github.com/NorthboundNetworks/ZodiacFX/issue
 
 ## Authors
 
-<<<<<<< HEAD
 * **Paul Zanna** - creator
 * **Kristopher Chen** - firmware developer
 
@@ -133,4 +130,3 @@ GPL 3.0
 ## License
 
 [GPL 3.0](LICENSE)
->>>>>>> refs/remotes/pzanna/Dev_80
