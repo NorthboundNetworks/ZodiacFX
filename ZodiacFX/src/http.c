@@ -3257,8 +3257,7 @@ if (iLastFlow > 0)
 					if (ntohs(inst_actions->len) == sizeof(struct ofp13_instruction_actions)) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   DROP \r\n");	// No actions
 					while (act_size < (ntohs(inst_actions->len) - sizeof(struct ofp13_instruction_actions)))
 					{
-						inst_actions  = insts[OFPIT13_APPLY_ACTIONS] + act_size;
-						act_hdr = &inst_actions->actions;
+						act_hdr = (struct ofp13_action_header*)((uintptr_t)inst_actions->actions + act_size);
 						if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 						{
 							struct ofp13_action_output *act_output = act_hdr;
