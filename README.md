@@ -20,15 +20,15 @@ Starting from version 0.80, Zodiac FX supports firmware updates via the CLI and 
 
 To update to version 0.80 or later, a **full upgrade firmware** needs to be flashed.
 
-Download the latest **full upgrade firmware** from the [Northbound Networks Forums](http://forums.northboundnetworks.com/index.php?topic=52.0) - 'Full Upgrade Firmware (v0.xx) - ZodiacFX_vxx_full_install.bin'
+Download the latest **full upgrade firmware** from the [Northbound Networks Forums](http://forums.northboundnetworks.com/index.php?topic=52.0) - 'Full Upgrade Firmware (v0.XX) - ZodiacFX_vXX_full_install.bin'
 
-Follow the firmware update process detailed in **Section 2. Updating Firmware** in the [Zodiac FX User Guide](http://forums.northboundnetworks.com/downloads/zodiac_fx/guides/ZodiacFX_UserGuide_0216.pdf).
+Follow the firmware update process detailed in **Section 2. Updating Firmware** in the [Zodiac FX User Guide](http://forums.northboundnetworks.com/downloads/zodiac_fx/guides/ZodiacFX_UserGuide_0317.pdf).
 
 #### For firmware versions AFTER version 0.80
 
 The update process has been simplified for the newer releases.
 
-Download the latest **update firmware** from the [Northbound Networks Forums](http://forums.northboundnetworks.com/index.php?topic=52.0) - 'Update Firmware (v0.xx) - ZodiacFX_vxx_update.bin'
+Download the latest **update firmware** from the [Northbound Networks Forums](http://forums.northboundnetworks.com/index.php?topic=52.0) - 'Update Firmware (v0.XX) - ZodiacFX_vXX_update.bin'
 
 * **To update via the CLI**:
 	* In the root context, type the 'update' command
@@ -45,8 +45,8 @@ Download the latest **update firmware** from the [Northbound Networks Forums](ht
 	* Click 'Restart' in the web interface header to complete the update
 
 * **[Advanced] To update via cURL**:
-	* Run ['Zodiac_FX_update.sh ZodiacFX_vxx_update.bin'](http://forums.northboundnetworks.com/index.php?topic=52.0)
-	* If the firmware upload fails, you may need to run ['Zodiac_FX_update_compatibility.sh ZodiacFX_vxx_update.bin'](http://forums.northboundnetworks.com/index.php?topic=52.0) instead
+	* Run the following command: #curl --verbose -0 --form "file=@ZodiacFX_vXX_update.bin"
+	* If the firmware upload fails, you may need to use the multipart/related content type like so: #curl -H "Content-Type: multipart/related" --verbose -0 --form "file=@ZodiacFX_vXX_update.bin"
 		* Note: on some platforms, a manual restart may be required after uploading the firmware
 
 ## Building the Project
