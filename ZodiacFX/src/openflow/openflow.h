@@ -33,6 +33,7 @@
 #include "openflow_spec/openflow_spec10.h"
 #include "openflow_spec/openflow_spec13.h"
 #include "of_helper.h"
+#include "config_zodiac.h"
 #include <lwip/err.h>
 
 struct flows_counter
@@ -66,12 +67,46 @@ struct oxm_header13
 	uint8_t oxm_len;
 };
 
+/*
+*	OpenFlow meter entry structure
+*		Meter table is populated with these entries.
+*		The structure contains:
+*			- meter ID
+*			- counters
+*			- meter bands
+*/
+struct meter_entry13
+{
+	uint32_t	meter_id;
+	uint32_t	flow_count;			// Number of flows bound to meter
+	uint64_t	packet_in_count;	// Packets processed by meter
+	uint64_t	byte_in_count;		// Bytes processed by meter
+	uint32_t	time_added;			// Time meter was added in ms (time alive calculated when required)
+	uint16_t	flags;				// Meter configuration flags
+	uint16_t	band_count;			// Number of bands in this meter
+	uint64_t	last_packet_in;		// Time when meter last processed a packet (milliseconds)
+	struct ofp13_meter_band_drop bands[0];	// Meter bands
+};
+
+/*
+*	Meter band counters
+*		Each instance of meter_band_stats_array contains
+*		statistics for the maximum number of supported
+*		bands.
+*
+*/
+struct meter_band_stats_array
+{
+	struct ofp13_meter_band_stats band_stats[MAX_METER_BANDS_13];
+};
+
 void task_openflow(void);
 void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
 void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
 void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
 void of10_message(struct ofp_header *ofph, int size, int len);
 void of13_message(struct ofp_header *ofph, int size, int len);
+void multi_flow_more_reply13(void);
 void barrier10_reply(uint32_t xid);
 void barrier13_reply(uint32_t xid);
 void sendtcp(const void *buffer, u16_t len);
@@ -89,5 +124,10 @@ void port_status_message13(uint8_t port);
 #define NTOHL(x) HTONL(x)
 
 #define SHARED_BUFFER_LEN 2048
+
+#define	METER_PARTIAL	8		// Meter structure length, excluding header and bands
+
+#define SUCCESS		0
+#define FAILURE		1
 
 #endif /* OPENFLOW_H_ */

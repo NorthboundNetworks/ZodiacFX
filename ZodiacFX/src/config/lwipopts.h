@@ -101,7 +101,7 @@
  * MEM_SIZE: the size of the heap memory. If the application will send
  * a lot of data that needs to be copied, this should be set high.
  */
-#define MEM_SIZE                		4 * 1024
+#define MEM_SIZE                		6 * 1024
 
 /**
  * MEMP_NUM_UDP_PCB: the number of UDP protocol control blocks. One
@@ -126,7 +126,7 @@
  * MEMP_NUM_TCP_SEG: the number of simultaneously queued TCP segments.
  * (requires the LWIP_TCP option)
  */
-#define MEMP_NUM_TCP_SEG                16
+#define MEMP_NUM_TCP_SEG                25
 
 /**
  * MEMP_NUM_REASSDATA: the number of IP packets simultaneously queued for
@@ -223,7 +223,7 @@
  * when opening a connection. For the transmit size, this MSS sets
  * an upper limit on the MSS advertised by the remote host.
  */
-#define TCP_MSS                 1460
+#define TCP_MSS                 536
 
 /**
  * TCP_WND: The size of a TCP window.  This must be at least
@@ -235,7 +235,7 @@
  * TCP_SND_BUF: TCP sender buffer space (bytes).
  * To achieve good performance, this should be at least 2 * TCP_MSS.
  */
-#define TCP_SND_BUF             (2 * TCP_MSS)
+#define TCP_SND_BUF             (6 * TCP_MSS)
 
 /**
  * TCP_SND_QUEUELEN: TCP sender buffer space (pbufs). This must be at least

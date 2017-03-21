@@ -40,6 +40,14 @@ __no_inline RAMFUNC void firmware_update(void);
 int xmodem_xfer(void);
 void xmodem_clear_padding(uint8_t *buff);
 
+int verification_check(void);
+
+struct verification_data
+{
+	uint32_t calculated;	// Last 4 bytes from summed data
+	uint32_t found;			// 4 bytes at the end of uploaded firmware
+};
+
 #define X_EOT 0x04
 #define X_ACK 0x06
 #define X_NAK 0x15
@@ -48,5 +56,9 @@ void xmodem_clear_padding(uint8_t *buff);
 #define NEW_FW_BASE			(IFLASH_ADDR + (5*IFLASH_NB_OF_PAGES/8)*IFLASH_PAGE_SIZE)
 #define NEW_FW_MAX_SIZE		196608
 
+#define FLASH_BUFFER 0x450000
+#define FLASH_BUFFER_END 0x480000
+
+#define NN_VERIFICATION_LEN	8
 
 #endif /* FLASH_H_ */

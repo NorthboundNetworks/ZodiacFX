@@ -274,11 +274,11 @@
         <InterfaceName>JTAG</InterfaceName>
       </ToolOptions>
       <ToolType>com.atmel.avrdbg.tool.atmelice</ToolType>
-      <ToolNumber>J41800009874</ToolNumber>
+      <ToolNumber>J41800058832</ToolNumber>
       <ToolName>Atmel-ICE</ToolName>
     </com_atmel_avrdbg_tool_atmelice>
     <avrtoolinterface>JTAG</avrtoolinterface>
-    <avrtoolserialnumber>J41800009874</avrtoolserialnumber>
+    <avrtoolserialnumber>J41800058832</avrtoolserialnumber>
     <avrdeviceexpectedsignature>0xA3CC0CE0</avrdeviceexpectedsignature>
     <avrtoolinterfaceclock>7500000</avrtoolinterfaceclock>
   </PropertyGroup>
@@ -368,7 +368,7 @@
   </armgcc.linker.libraries.LibrarySearchPaths>
   <armgcc.linker.optimization.GarbageCollectUnusedSections>True</armgcc.linker.optimization.GarbageCollectUnusedSections>
   <armgcc.linker.memorysettings.ExternalRAM />
-  <armgcc.linker.miscellaneous.LinkerFlags>-Wl,--defsym,__stack_size__=0x1400 -Wl,--entry=Reset_Handler -Wl,--cref -mthumb -T../src/ASF/sam/utils/linker_scripts/sam4e/sam4e8/gcc/flash.ld</armgcc.linker.miscellaneous.LinkerFlags>
+  <armgcc.linker.miscellaneous.LinkerFlags>-Wl,--defsym,__stack_size__=0x1400 -Wl,--entry=Reset_Handler -Wl,-section-start=.text=0x00420000 -Wl,--cref -mthumb -T../src/ASF/sam/utils/linker_scripts/sam4e/sam4e8/gcc/flash.ld</armgcc.linker.miscellaneous.LinkerFlags>
   <armgcc.assembler.general.IncludePaths>
     <ListValues>
       <Value>../src/ASF/sam/drivers/efc</Value>
