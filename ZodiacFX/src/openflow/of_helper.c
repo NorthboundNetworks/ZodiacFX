@@ -42,18 +42,22 @@
 #include "lwip/tcp_impl.h"
 #include "lwip/udp.h"
 #include "switch.h"
+#include "timers.h"
 
 #define ALIGN8(x) (x+7)/8*8
 
 // Global variables
 extern struct zodiac_config Zodiac_Config;
 extern int iLastFlow;
+extern int iLastMeter;
 extern int OF_Version;
 extern int totaltime;
 extern uint8_t last_port_status[4];
 extern uint8_t port_status[4];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct table_counter table_counters[MAX_TABLES];
+extern struct meter_entry13 *meter_entry[MAX_METER_13];
+extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
@@ -1094,6 +1098,7 @@ void flow_timeouts()
 void clear_flows(void)
 {
 	iLastFlow = 0;
+	iLastMeter = 0;
 	membag_init();
 
 	/*	Clear OpenFlow 1.0 flow table	*/
@@ -1125,6 +1130,15 @@ void clear_flows(void)
 	{
 		table_counters[x].lookup_count = 0;
 		table_counters[x].matched_count = 0;
+	}
+	
+	/* Clear Meter Table Pointers*/
+	for(int x=0; x<MAX_METER_13;x++)
+	{
+		if(meter_entry[x] != NULL)
+		{
+			meter_entry[x] = NULL;
+		}
 	}
 }
 
@@ -1251,4 +1265,163 @@ int flow_stats_msg13(char *buffer, int first, int last)
 	}
 	return (buffer_ptr - buffer);
 
+}
+
+/*
+*	Meter processing for OF 1.3
+*
+*	@param	id		- meter ID to process
+*	@param	bytes	- packet size (for throughput calculations)
+*
+*	@ret	SUCCESS	- packet does not need to be dropped
+*	@ret	FAILURE	- packet needs to be dropped
+*
+*/
+int	meter_handler(uint32_t id, uint16_t bytes)
+{		
+	TRACE("of_helper.c: meter id %d needs processing", id);
+	
+	// Get associated meter entry
+	int meter_index = 0;
+	while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13)
+	{
+		if(meter_entry[meter_index]->meter_id == id)
+		{
+			TRACE("of_helper.c: meter entry found - continuing");
+			break;
+		}
+			
+		meter_index++;
+	}
+	if(meter_entry[meter_index] == NULL || meter_index == MAX_METER_13)
+	{
+		TRACE("of_helper.c: meter entry not found - packet not dropped");
+		return SUCCESS;
+	}
+	// meter_index now holds the meter bound to the current flow
+	
+	// Update meter counters
+	meter_entry[meter_index]->byte_in_count += bytes;
+	(meter_entry[meter_index]->packet_in_count)++;
+	
+	// Check if meter has been used before
+	if(meter_entry[meter_index]->last_packet_in == 0)
+	{
+		// Update timer
+		meter_entry[meter_index]->last_packet_in = sys_get_ms();
+		
+		TRACE("of_helper.c: first hit of meter - packet not dropped");
+		return SUCCESS;
+	}
+	
+	// Find time delta
+	uint64_t time_delta = sys_get_ms() - meter_entry[meter_index]->last_packet_in;
+	
+	// Update timer
+	meter_entry[meter_index]->last_packet_in = sys_get_ms();
+	
+	// Check configuration flags
+	uint32_t calculated_rate = 0;
+	if(((meter_entry[meter_index]->flags) & OFPMF13_KBPS) == OFPMF13_KBPS)
+	{
+		calculated_rate = ((bytes*8)/time_delta);	// bit/ms == kbit/s
+		TRACE("of_helper.c: calculated rate - %d kbps", calculated_rate);
+	}
+	else if(((meter_entry[meter_index]->flags) & OFPMF13_PKTPS) == OFPMF13_PKTPS)
+	{
+		calculated_rate = 1000/time_delta;
+		TRACE("of_helper.c: calculated rate - %d pktps", calculated_rate);
+	}
+	else
+	{
+		TRACE("of_helper.c: unsupported meter configuration - packet not dropped");
+		return SUCCESS;
+	}
+	
+	// Check each band
+	int			bands_processed = 0;
+	uint32_t	highest_rate = 0;			// Highest triggered band rate
+	struct ofp13_meter_band_drop * ptr_highest_band = NULL;	// Store pointer to highest triggered band
+	struct ofp13_meter_band_drop * ptr_band;
+	ptr_band = &(meter_entry[meter_index]->bands);
+	while(bands_processed < meter_entry[meter_index]->band_count)
+	{
+		if(calculated_rate >= ptr_band->rate)
+		{
+			if(ptr_band->rate > highest_rate)
+			{
+				highest_rate = ptr_band->rate;	// Update highest triggered band rate
+				ptr_highest_band = ptr_band;	// Update highest triggered band
+			}			
+		}
+		
+		ptr_band++;	// Move to next band
+		bands_processed++;
+	}
+	
+	// Check if any bands triggered
+	if(highest_rate == 0 || ptr_highest_band == NULL)
+	{
+		TRACE("of_helper.c: no bands triggered - packet not dropped");
+		return SUCCESS;
+	}
+	
+	// Check band type
+	if(ptr_highest_band->type != OFPMBT13_DROP)
+	{
+		TRACE("of_helper.c: unsupported band type - not dropping packet");
+		return SUCCESS;
+	}
+	
+	TRACE("of_helper.c: highest triggered band rate:%d", highest_rate);
+	
+	/* Update band counters */
+	// Find band index
+	int band_index = ((uint8_t*)ptr_highest_band - (uint8_t*)&(meter_entry[meter_index]->bands)) / sizeof(struct ofp13_meter_band_drop);
+	
+	// Update counters
+	band_stats_array[meter_index].band_stats[band_index].byte_band_count += bytes;
+	band_stats_array[meter_index].band_stats[band_index].packet_band_count++;
+
+	TRACE("of_helper.c: packet needs to be dropped");	
+	return FAILURE;
+}
+
+/*
+*	Retrieve number of flows bound to the specified meter
+*
+*	@param	id		- meter ID to check
+*
+*	@ret	count	- number of associated flows
+*
+*/
+uint32_t get_bound_flows(uint32_t id)
+{
+	uint32_t count = 0;
+	
+	// Loop through flows
+	for (int i=0;i<iLastFlow;i++)
+	{
+		void *insts[8] = {0};
+		int inst_size = 0;
+		while(inst_size < ofp13_oxm_inst_size[i]){
+			struct ofp13_instruction *inst_ptr = (struct ofp13_instruction *)(ofp13_oxm_inst[i] + inst_size);
+			insts[ntohs(inst_ptr->type)] = inst_ptr;
+			inst_size += ntohs(inst_ptr->len);
+		}
+		
+		// Check if metering instruction is present
+		if(insts[OFPIT13_METER] != NULL)
+		{
+			struct ofp13_instruction_meter *inst_meter = insts[OFPIT13_METER];
+			// Check the found meter id
+			if(ntohl(inst_meter->meter_id) == id)
+			{
+				// The flow's instruction matches the specified meter id
+				count++;	// increment the counter
+			}
+		}
+	}
+	
+	return count;
 }

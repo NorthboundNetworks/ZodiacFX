@@ -48,6 +48,7 @@
 
 // Global variables
 extern struct zodiac_config Zodiac_Config;
+extern struct verification_data verify;
 extern bool debug_output;
 
 extern int charcount, charcount_last;
@@ -62,6 +63,8 @@ extern int iLastFlow;
 extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
+extern struct meter_entry13 *meter_entry[MAX_METER_13];
+extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
 extern bool masterselect;
 extern bool stackenabled = false;
 extern bool trace = false;
@@ -71,6 +74,7 @@ extern int totaltime;
 extern int32_t ul_temp;
 extern int OF_Version;
 extern uint32_t uid_buf[4];
+extern bool restart_required_outer;
 
 // Local Variables
 bool showintro = true;
@@ -134,6 +138,15 @@ void task_command(char *str, char *str_last)
 	char *param2;
 	char *param3;
 	char *pch;
+
+	if(restart_required_outer == true)
+	{
+		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
+		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+		udc_detach();	// Detach the USB device before restart
+		rstc_start_software_reset(RSTC);	// Software reset
+		while (1);		
+	}
 
 	while(udi_cdc_is_rx_ready()){
 		ch = udi_cdc_getc();
@@ -438,6 +451,15 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		udc_detach();	// Detach the USB device before restart
 		rstc_start_software_reset(RSTC);	// Software reset
 		while (1);
+	}
+
+	// Get CRC
+	if (strcmp(command, "get")==0 && strcmp(param1, "crc")==0)
+	{
+		verification_check();
+		printf("Calculated verification: %08x\r\n", verify.calculated);
+		printf("Append [%08x 00000000] to the binary\r\n", ntohl(verify.calculated));
+		return;
 	}
 
 	// Unknown Command
@@ -1021,7 +1043,6 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 				int match_size;
 				int inst_size;
 				int act_size;
-				struct ofp13_instruction *inst_ptr;
 				struct ofp13_instruction_actions *inst_actions;
 				struct oxm_header13 oxm_header;
 				uint8_t oxm_value8;
@@ -1146,22 +1167,38 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 					int min = t/60;
 					int sec = t%60;
 					printf("  Last Match: %02d:%02d:%02d\r\n", hr, min, sec);
+					
 					// Print instruction list
 					if (ofp13_oxm_inst[i] != NULL)
 					{
+						// Get a list of all instructions for this flow
+						void *insts[8] = {0};
+						inst_size = 0;
+						while(inst_size < ofp13_oxm_inst_size[i]){
+							struct ofp13_instruction *inst_ptr = (struct ofp13_instruction *)(ofp13_oxm_inst[i] + inst_size);
+							insts[ntohs(inst_ptr->type)] = inst_ptr;
+							inst_size += ntohs(inst_ptr->len);
+						}
+						
 						printf("\r Instructions:\r\n");
-						inst_ptr = (struct ofp13_instruction *) ofp13_oxm_inst[i];
-						inst_size = ntohs(inst_ptr->len);
-						if(ntohs(inst_ptr->type) == OFPIT13_APPLY_ACTIONS)
+						
+						// Check for optional metering instruction
+						if(insts[OFPIT13_METER] != NULL)						
+						{
+							struct ofp13_instruction_meter *inst_meter = insts[OFPIT13_METER];
+							printf("  Meter: %d\r\n", ntohl(inst_meter->meter_id));
+						}
+						
+						if(insts[OFPIT13_APPLY_ACTIONS] != NULL)
 						{
 							printf("  Apply Actions:\r\n");
 							struct ofp13_action_header *act_hdr;
 							act_size = 0;
-							if (inst_size == sizeof(struct ofp13_instruction_actions)) printf("   DROP \r\n");	// No actions
-							while (act_size < (inst_size - sizeof(struct ofp13_instruction_actions)))
+							inst_actions = insts[OFPIT13_APPLY_ACTIONS];
+							if (ntohs(inst_actions->len) == sizeof(struct ofp13_instruction_actions)) printf("   DROP \r\n");	// No actions
+							while (act_size < (ntohs(inst_actions->len) - sizeof(struct ofp13_instruction_actions)))
 							{
-								inst_actions  = ofp13_oxm_inst[i] + act_size;
-								act_hdr = &inst_actions->actions;
+								act_hdr = (struct ofp13_action_header*)((uintptr_t)inst_actions->actions + act_size);
 								if (htons(act_hdr->type) == OFPAT13_OUTPUT)
 								{
 									struct ofp13_action_output *act_output = act_hdr;
@@ -1304,26 +1341,11 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							}
 						}
 						// Print goto table instruction
-						if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
+						if(insts[OFPIT13_GOTO_TABLE] != NULL)
 						{
 							struct ofp13_instruction_goto_table *inst_goto_ptr;
-							inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
+							inst_goto_ptr = (struct ofp13_instruction_goto_table *) insts[OFPIT13_GOTO_TABLE];
 							printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
-							continue;
-						}
-						// Is there more then one instruction?
-						if (ofp13_oxm_inst_size[i] > inst_size)
-						{
-							uint8_t *nxt_inst;
-							nxt_inst = ofp13_oxm_inst[i] + inst_size;
-							inst_ptr = (struct ofp13_instruction *) nxt_inst;
-							inst_size = ntohs(inst_ptr->len);
-							if(ntohs(inst_ptr->type) == OFPIT13_GOTO_TABLE)
-							{
-								struct ofp13_instruction_goto_table *inst_goto_ptr;
-								inst_goto_ptr = (struct ofp13_instruction_goto_table *) inst_ptr;
-								printf("  Goto Table: %d\r\n", inst_goto_ptr->table_id);
-							}
 						}
 					} else {
 						// No instructions
@@ -1463,6 +1485,90 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 	
+	// Show meter table entries
+	if (strcmp(command, "show") == 0 && strcmp(param1, "meters") == 0)
+	{
+		int meter_out_counter = 1;
+		
+		// Check that table is populated
+		if(meter_entry[0] != NULL)
+		{
+			int meter_index = 0;
+			while(meter_entry[meter_index] != NULL && meter_index < MAX_METER_13)
+			{
+					printf("\r\n-------------------------------------------------------------------------\r\n");
+					printf("\r\nMeter %d\r\n", meter_out_counter);
+					meter_out_counter++;
+					printf("  Meter ID: %d\r\n", meter_entry[meter_index]->meter_id);
+					printf("  Counters:\r\n");
+					meter_entry[meter_index]->flow_count = get_bound_flows(meter_entry[meter_index]->meter_id);
+					printf("\tBound Flows:\t%d\tDuration:\t%d sec\r\n", meter_entry[meter_index]->flow_count, (sys_get_ms()-meter_entry[meter_index]->time_added)/1000);
+					printf("\tByte Count:\t%"PRIu64"\tPacket Count:\t%"PRIu64"\r\n", meter_entry[meter_index]->byte_in_count, meter_entry[meter_index]->packet_in_count);
+					printf("\tConfiguration:\t");
+					if(((meter_entry[meter_index]->flags) & OFPMF13_KBPS) == OFPMF13_KBPS)
+					{
+						printf("KBPS; ");
+					}
+					if(((meter_entry[meter_index]->flags) & OFPMF13_PKTPS) == OFPMF13_PKTPS)
+					{
+						printf("PKTPS; ");
+					}
+					if(((meter_entry[meter_index]->flags) & OFPMF13_BURST) == OFPMF13_BURST)
+					{
+						printf("BURST; ");
+					}
+					if(((meter_entry[meter_index]->flags) & OFPMF13_STATS) == OFPMF13_STATS)
+					{
+						printf("STATS; ");
+					}
+					if(meter_entry[meter_index]->flags == 0)
+					{
+						printf(" NONE;");
+					}
+					
+					printf("\r\n\tNumber of bands:\t%d\r\n", meter_entry[meter_index]->band_count);
+					int bands_processed = 0;
+					struct ofp13_meter_band_drop * ptr_band;
+					ptr_band = &(meter_entry[meter_index]->bands);
+					while(bands_processed < meter_entry[meter_index]->band_count)
+					{
+						printf("\t\tBand %d:\r\n", bands_processed+1);
+						printf("\t\t  Type:\t\t");
+						if(ptr_band->type == OFPMBT13_DROP)
+						{
+							printf("DROP\r\n");
+						}
+						else if(ptr_band->type == OFPMBT13_DSCP_REMARK)
+						{
+							printf("DSCP REMARK (unsupported)\r\n");
+						}
+						else
+						{
+							printf("unsupported type\r\n");
+						}
+						printf("\t\t  Rate:\t\t%d\t\r\n", ptr_band->rate);
+						printf("\t\t  Burst Size:\t%d\t\r\n", ptr_band->burst_size);
+						
+						// Find band index
+						int band_index = ((uint8_t*)ptr_band - (uint8_t*)&(meter_entry[meter_index]->bands)) / sizeof(struct ofp13_meter_band_drop);
+						
+						// Display counters
+						printf("\t\t  Byte count:\t%"PRIu64"\t\r\n", band_stats_array[meter_index].band_stats[band_index].byte_band_count);
+						printf("\t\t  Packet count:\t%"PRIu64"\t\r\n", band_stats_array[meter_index].band_stats[band_index].packet_band_count);
+						
+						ptr_band++;	// Move to next band
+						bands_processed++;
+					}
+				meter_index++;
+			}
+			printf("\r\n-------------------------------------------------------------------------\r\n\r\n");
+		}
+		else
+		{
+			printf("No meters configured.\r\n");
+		}
+		return;
+	}
 	// Unknown Command
 	printf("Unknown command\r\n");
 	return;
@@ -1525,36 +1631,7 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		trace = true;
 		printf("Starting trace...\r\n");
 		return;
-	}
-	
-	if (strcmp(command, "check_flash")==0)
-	{
-		// Display contents of firmware update region (ending @ first 0xFFFFFFFF)
-		unsigned long* pmem = (unsigned long*)0x00450000;
-		while(pmem <= 0x00480000)
-		{
-			if(*pmem == 0xFFFFFFFF)
-			{
-				return;
-			}
-			printf("Addr: %p  Val: 0x%l08x\n\r", (void *)pmem, *pmem);
-			pmem++;			
-		}
-		return;
-	}
-	
-	if (strcmp(command, "check_flash_all")==0)
-	{
-		// Display contents of firmware update region
-		unsigned long* pmem = (unsigned long*)0x00450000;
-		while(pmem <= 0x00480000)
-		{
-			printf("Addr: %p  Val: 0x%l08x\n\r", (void *)pmem, *pmem);
-			pmem++;
-		}
-		return;
-	}
-	
+	}	
 	
 	// Unknown Command response
 	printf("Unknown command\r\n");
@@ -1624,6 +1701,7 @@ void printhelp(void)
 	printf("OpenFlow:\r\n");
 	printf(" show status\r\n");
 	printf(" show flows\r\n");
+	printf(" show meters\r\n");
 	printf(" enable\r\n");
 	printf(" disable\r\n");
 	printf(" clear flows\r\n");
