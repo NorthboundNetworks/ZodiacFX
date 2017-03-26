@@ -24,6 +24,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: Paul Zanna <paul@northboundnetworks.com>
+ *		 & Kristopher Chen <Kristopher@northboundnetworks.com>
  *
  */
 
@@ -1670,10 +1671,12 @@ void printhelp(void)
 	printf(" config\r\n");
 	printf(" openflow\r\n");
 	printf(" debug\r\n");
-	printf(" show ports\r\n");
+	printf(" update\r\n");
 	printf(" show status\r\n");
 	printf(" show version\r\n");
+	printf(" show ports\r\n");
 	printf(" restart\r\n");
+	printf(" help\r\n");
 	printf("\r\n");
 	printf("Config:\r\n");
 	printf(" save\r\n");
@@ -1693,13 +1696,14 @@ void printhelp(void)
 	printf(" set vlan-type <vlan id> <openflow|native>\r\n");
 	printf(" add vlan-port <vlan id> <port>\r\n");
 	printf(" delete vlan-port <port>\r\n");
-	printf(" factory reset\r\n");
 	printf(" set of-version <version(0|1|4)>\r\n");
 	printf(" set ethertype-filter <enable|disable>\r\n");
+	printf(" factory reset\r\n");
 	printf(" exit\r\n");
 	printf("\r\n");
 	printf("OpenFlow:\r\n");
 	printf(" show status\r\n");
+	printf(" show tables\r\n");
 	printf(" show flows\r\n");
 	printf(" show meters\r\n");
 	printf(" enable\r\n");
