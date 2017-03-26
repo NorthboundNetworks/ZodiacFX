@@ -126,6 +126,18 @@ void saveConfig(void)
 }
 
 /*
+*	Restart Zodiac FX
+*
+*/
+void software_reset(void)
+{
+	for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+	udc_detach();	// Detach the USB device before restart
+	rstc_start_software_reset(RSTC);	// Software reset
+	while (1);
+}
+
+/*
 *	Main command line loop
 *
 *	@param str - pointer to the current command string
@@ -143,10 +155,7 @@ void task_command(char *str, char *str_last)
 	if(restart_required_outer == true)
 	{
 		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
-		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-		udc_detach();	// Detach the USB device before restart
-		rstc_start_software_reset(RSTC);	// Software reset
-		while (1);		
+		software_reset();
 	}
 
 	while(udi_cdc_is_rx_ready()){
@@ -448,10 +457,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 	if (strcmp(command, "restart")==0)
 	{
 		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
-		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-		udc_detach();	// Detach the USB device before restart
-		rstc_start_software_reset(RSTC);	// Software reset
-		while (1);
+		software_reset();
 	}
 
 	// Get CRC
@@ -507,10 +513,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	if (strcmp(command, "restart")==0)
 	{
 		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
-		for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
-		udc_detach();	// Detach the USB device before restart
-		rstc_start_software_reset(RSTC);	// Software reset
-		while (1);
+		software_reset();
 	}
 	
 	// Display Config

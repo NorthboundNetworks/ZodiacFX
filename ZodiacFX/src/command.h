@@ -93,5 +93,6 @@ typedef struct arp_header {
 
 void task_command(char *str, char * str_last);
 void loadConfig(void);
+void software_reset(void);
 
 #endif /* COMMANDS_H_ */

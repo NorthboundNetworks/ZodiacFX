@@ -212,11 +212,6 @@ static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 	if(restart_required == true)
 	{
 		restart_required_outer = true;
-		//TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
-		//for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-		//udc_detach();	// Detach the USB device before restart
-		//rstc_start_software_reset(RSTC);	// Software reset
-		//while (1);
 	}
 	
 	return ERR_OK;
@@ -722,10 +717,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					eeprom_write();
 				
 					TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
-					for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-					udc_detach();	// Detach the USB device before restart
-					rstc_start_software_reset(RSTC);	// Software reset
-					while (1);
+					software_reset();
 				}
 				else if(strcmp(post_msg,"save_ports") == 0)
 				{
