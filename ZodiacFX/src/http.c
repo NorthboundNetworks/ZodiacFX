@@ -2980,6 +2980,16 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 */
 static uint8_t interfaceCreate_Display_Flows(void)
 {
+	int i;
+	uint8_t flowEnd = flowBase + FLOW_DISPLAY_LIMIT;
+	struct ofp_action_header * act_hdr;
+
+	// Ensure page correctly displays end of flows
+	if(iLastFlow < flowEnd)
+	{
+		flowEnd = iLastFlow;
+	}
+	
 	sprintf(shared_buffer, http_header);
 
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
@@ -2996,22 +3006,22 @@ static uint8_t interfaceCreate_Display_Flows(void)
 			"<body>"\
 				"<p>"\
 					"<h2>Flows</h2>"\
+					"%d flows installed<br>"\
+			, iLastFlow);
+			
+	if(iLastFlow != 0)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+		"Showing flows %d - %d<br>"\
+		, flowBase+1, flowEnd);
+	}
+	
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</p>"\
 				"<pre><span style=\"font-size: 12px; line-height: 1\">"\
 			);
 
 // Begin Flow formatting
-
-int i;
-uint8_t flowEnd = flowBase + FLOW_DISPLAY_LIMIT;
-struct ofp_action_header * act_hdr;
-
-// Ensure page correctly displays end of flows
-if(iLastFlow < flowEnd)
-{
-	flowEnd = iLastFlow;
-}
-
 if (iLastFlow > 0)
 {
 	// OpenFlow v1.0 (0x01) Flow Table
@@ -3414,8 +3424,6 @@ if (iLastFlow > 0)
 		}
 		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"_______\r\n\n");
 	}
-	} else {
-	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"No Flows installed\r\n");
 	}
 	
 // End Flow formatting
