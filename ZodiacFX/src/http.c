@@ -1876,7 +1876,7 @@ static uint8_t Config_Network(char *payload, int len)
 			if (strlen(http_msg) != 27 )	// Accounting for ":" as "%3A"
 			{
 				TRACE("http.c: incorrect MAC address format");
-				return;
+				return FAILURE;
 			}
 			
 			// Decode http string
@@ -1934,7 +1934,7 @@ static uint8_t Config_Network(char *payload, int len)
 			if (strlen(http_msg) > 15 )
 			{
 				TRACE("http.c: incorrect IP format");
-				return;
+				return FAILURE;
 			}
 			sscanf(http_msg, "%d.%d.%d.%d", &ip1, &ip2,&ip3,&ip4);
 			Zodiac_Config.IP_address[0] = ip1;
@@ -1973,7 +1973,7 @@ static uint8_t Config_Network(char *payload, int len)
 			if (strlen(http_msg) > 15 )
 			{
 				TRACE("http.c: incorrect netmask format");
-				return;
+				return FAILURE;
 			}
 			sscanf(http_msg, "%d.%d.%d.%d", &nm1, &nm2,&nm3,&nm4);
 			Zodiac_Config.netmask[0] = nm1;
@@ -2013,7 +2013,7 @@ static uint8_t Config_Network(char *payload, int len)
 		if (strlen(http_msg) > 15 )
 		{
 			TRACE("http.c: incorrect gateway format");
-			return;
+			return FAILURE;
 		}
 		sscanf(http_msg, "%d.%d.%d.%d", &gw1, &gw2,&gw3,&gw4);
 		Zodiac_Config.gateway_address[0] = gw1;
@@ -2669,7 +2669,7 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 		}
 				
 		if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-					"</tr>"\		
+					"</tr>"\
 				) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html (1/2) written to buffer");
@@ -2845,6 +2845,7 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 	else
 	{
 		TRACE:("http.c: Display: Ports step error");
+		return 0;
 	}
 }
 
