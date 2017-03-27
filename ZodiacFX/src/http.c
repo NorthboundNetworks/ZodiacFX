@@ -2332,18 +2332,14 @@ static uint8_t interfaceCreate_Upload_Status(uint8_t sel)
 {
 	if(sel == 1)
 	{	
-		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 			"<!DOCTYPE html>"\
 				"<html>"\
 					"<head>"\
 						"<style>"\
-						"body {"\
-							"overflow: auto;"\
-							"font-family:Sans-serif;"\
-							"line-height: 1.2em;"\
-							"font-size: 17px;"\
-							"margin-left: 20px;"\
-						"}"\
+					);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 						"</style>"\
 					"</head>"\
 					"<body>"\
