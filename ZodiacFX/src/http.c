@@ -208,6 +208,8 @@ static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 	}
 	if(restart_required == true)
 	{
+		// Indicates to task_command() that a restart is required on the next loop
+		// This allows the 'Restarting...' page to display before the restart occurs
 		restart_required_outer = true;
 	}
 	
