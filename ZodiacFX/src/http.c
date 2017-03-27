@@ -1147,20 +1147,22 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						if(pdat[i+1] == 'w')
 						{
 							int oc1,oc2,oc3,oc4;
-							if (strlen(http_msg) > 15 )
+							if (strlen(http_msg) <= 15 )
 							{
-								TRACE("http.c: incorrect IP format");
-								return;
-							}
-							sscanf(http_msg, "%d.%d.%d.%d", &oc1,&oc2,&oc3,&oc4);
-							Zodiac_Config.OFIP_address[0] = oc1;
-							Zodiac_Config.OFIP_address[1] = oc2;
-							Zodiac_Config.OFIP_address[2] = oc3;
-							Zodiac_Config.OFIP_address[3] = oc4;
-							TRACE("http.c: openflow server address set to %d.%d.%d.%d" ,\
+								sscanf(http_msg, "%d.%d.%d.%d", &oc1,&oc2,&oc3,&oc4);
+								Zodiac_Config.OFIP_address[0] = oc1;
+								Zodiac_Config.OFIP_address[1] = oc2;
+								Zodiac_Config.OFIP_address[2] = oc3;
+								Zodiac_Config.OFIP_address[3] = oc4;
+								TRACE("http.c: openflow server address set to %d.%d.%d.%d" ,\
 								Zodiac_Config.OFIP_address[0], Zodiac_Config.OFIP_address[1],\
 								Zodiac_Config.OFIP_address[2], Zodiac_Config.OFIP_address[3]\
-									);
+								);
+							}
+							else
+							{
+								TRACE("http.c: incorrect IP format");
+							}
 						}
 						else
 						{
@@ -2843,7 +2845,7 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 	}
 	else
 	{
-		TRACE:("http.c: Display: Ports step error");
+		TRACE("http.c: Display: Ports step error");
 		return 0;
 	}
 }
