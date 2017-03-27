@@ -70,9 +70,6 @@ extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
 
-extern int firmware_update_init(void);
-extern int flash_write_page(uint8_t *flash_page);
-
 // Local Variables
 struct tcp_pcb *http_pcb;
 static char http_msg[64];			// Buffer for HTTP message filtering
