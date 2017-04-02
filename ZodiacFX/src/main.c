@@ -42,6 +42,7 @@
 #include "command.h"
 #include "eeprom.h"
 #include "switch.h"
+#include "stacking.h"
 #include "http.h"
 #include "flash.h"
 #include "openflow/openflow.h"
@@ -136,13 +137,6 @@ int main (void)
 
 	masterselect = ioport_get_pin_level(MASTER_SEL);	// true = slave
 	stacking_init(masterselect);	// Initialise the stacking connector as either master or slave
-
-	// Set the IRQ line as either master or slave
-	if(masterselect) {
-		ioport_set_pin_dir(SPI_IRQ1, IOPORT_DIR_OUTPUT);
-	} else {
-		ioport_set_pin_dir(SPI_IRQ1, IOPORT_DIR_INPUT);
-	}
 
 	irq_initialize_vectors(); // Initialize interrupt vector table support.
 
