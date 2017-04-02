@@ -162,7 +162,6 @@ void disableOF(void)
 	switch_write(53,0);
 	switch_write(69,0);
 	clear_flows();
-
 }
 
 /*
@@ -191,7 +190,7 @@ void update_port_stats(void)
 		phys10_port_stats[stats_rr].rx_bytes += readrxbytes(stats_rr+1);
 		phys10_port_stats[stats_rr].tx_dropped += readtxdrop(stats_rr+1);
 		phys10_port_stats[stats_rr].rx_dropped += readrxdrop(stats_rr+1);
-		phys10_port_stats[stats_rr].rx_crc_err += readrxdrop(stats_rr+1);
+		phys10_port_stats[stats_rr].rx_crc_err += readrxcrcerr(stats_rr+1);
 	}
 
 	if (OF_Version == 4)
@@ -200,7 +199,7 @@ void update_port_stats(void)
 		phys13_port_stats[stats_rr].rx_bytes += readrxbytes(stats_rr+1);
 		phys13_port_stats[stats_rr].tx_dropped += readtxdrop(stats_rr+1);
 		phys13_port_stats[stats_rr].rx_dropped += readrxdrop(stats_rr+1);
-		phys13_port_stats[stats_rr].rx_crc_err += readrxdrop(stats_rr+1);
+		phys13_port_stats[stats_rr].rx_crc_err += readrxcrcerr(stats_rr+1);
 	}
 	stats_rr++;
 	if (stats_rr == 4) stats_rr = 0;
@@ -301,7 +300,7 @@ void update_port_status(void)
 	last_port_status[0] = port_status[0];
 	last_port_status[1] = port_status[1];
 	last_port_status[2] = port_status[2];
-	last_port_status[3] = port_status[2];
+	last_port_status[3] = port_status[3];
 	// Update port status
 	port_status[0] = (switch_read(30) & 32) >> 5;
 	port_status[1] = (switch_read(46) & 32) >> 5;
@@ -381,12 +380,7 @@ void switch_init(void)
 		/* Fill in GMAC options */
 		gmac_option.uc_copy_all_frame = 1;
 		gmac_option.uc_no_boardcast = 0;
-		gmac_option.uc_mac_addr[0] = Zodiac_Config.MAC_address[0];
-		gmac_option.uc_mac_addr[1] = Zodiac_Config.MAC_address[1];
-		gmac_option.uc_mac_addr[2] = Zodiac_Config.MAC_address[2];
-		gmac_option.uc_mac_addr[3] = Zodiac_Config.MAC_address[3];
-		gmac_option.uc_mac_addr[4] = Zodiac_Config.MAC_address[4];
-		gmac_option.uc_mac_addr[5] = Zodiac_Config.MAC_address[5];
+		memcpy(gmac_option.uc_mac_addr, Zodiac_Config.MAC_address, 6);
 		gs_gmac_dev.p_hw = GMAC;
 
 		/* Init KSZ8795 registers */
