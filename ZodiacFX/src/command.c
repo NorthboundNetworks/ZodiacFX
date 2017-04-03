@@ -24,6 +24,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: Paul Zanna <paul@northboundnetworks.com>
+ *		 & Kristopher Chen <Kristopher@northboundnetworks.com>
  *
  */
 
@@ -125,6 +126,18 @@ void saveConfig(void)
 }
 
 /*
+*	Restart Zodiac FX
+*
+*/
+void software_reset(void)
+{
+	for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+	udc_detach();	// Detach the USB device before restart
+	rstc_start_software_reset(RSTC);	// Software reset
+	while (1);
+}
+
+/*
 *	Main command line loop
 *
 *	@param str - pointer to the current command string
@@ -142,10 +155,7 @@ void task_command(char *str, char *str_last)
 	if(restart_required_outer == true)
 	{
 		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
-		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-		udc_detach();	// Detach the USB device before restart
-		rstc_start_software_reset(RSTC);	// Software reset
-		while (1);		
+		software_reset();
 	}
 
 	while(udi_cdc_is_rx_ready()){
@@ -447,10 +457,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 	if (strcmp(command, "restart")==0)
 	{
 		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
-		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-		udc_detach();	// Detach the USB device before restart
-		rstc_start_software_reset(RSTC);	// Software reset
-		while (1);
+		software_reset();
 	}
 
 	// Get CRC
@@ -506,10 +513,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	if (strcmp(command, "restart")==0)
 	{
 		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
-		for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
-		udc_detach();	// Detach the USB device before restart
-		rstc_start_software_reset(RSTC);	// Software reset
-		while (1);
+		software_reset();
 	}
 	
 	// Display Config
@@ -1670,10 +1674,12 @@ void printhelp(void)
 	printf(" config\r\n");
 	printf(" openflow\r\n");
 	printf(" debug\r\n");
-	printf(" show ports\r\n");
+	printf(" update\r\n");
 	printf(" show status\r\n");
 	printf(" show version\r\n");
+	printf(" show ports\r\n");
 	printf(" restart\r\n");
+	printf(" help\r\n");
 	printf("\r\n");
 	printf("Config:\r\n");
 	printf(" save\r\n");
@@ -1693,13 +1699,14 @@ void printhelp(void)
 	printf(" set vlan-type <vlan id> <openflow|native>\r\n");
 	printf(" add vlan-port <vlan id> <port>\r\n");
 	printf(" delete vlan-port <port>\r\n");
-	printf(" factory reset\r\n");
 	printf(" set of-version <version(0|1|4)>\r\n");
 	printf(" set ethertype-filter <enable|disable>\r\n");
+	printf(" factory reset\r\n");
 	printf(" exit\r\n");
 	printf("\r\n");
 	printf("OpenFlow:\r\n");
 	printf(" show status\r\n");
+	printf(" show tables\r\n");
 	printf(" show flows\r\n");
 	printf(" show meters\r\n");
 	printf(" enable\r\n");

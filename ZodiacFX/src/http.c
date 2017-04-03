@@ -70,9 +70,6 @@ extern struct ofp10_port_stats phys10_port_stats[4];
 extern struct ofp13_port_stats phys13_port_stats[4];
 extern struct table_counter table_counters[MAX_TABLES];
 
-extern int firmware_update_init(void);
-extern int flash_write_page(uint8_t *flash_page);
-
 // Local Variables
 struct tcp_pcb *http_pcb;
 static char http_msg[64];			// Buffer for HTTP message filtering
@@ -211,12 +208,9 @@ static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 	}
 	if(restart_required == true)
 	{
+		// Indicates to task_command() that a restart is required on the next loop
+		// This allows the 'Restarting...' page to display before the restart occurs
 		restart_required_outer = true;
-		//TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
-		//for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-		//udc_detach();	// Detach the USB device before restart
-		//rstc_start_software_reset(RSTC);	// Software reset
-		//while (1);
 	}
 	
 	return ERR_OK;
@@ -722,10 +716,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					eeprom_write();
 				
 					TRACE("http.c: restarting the Zodiac FX. Please reconnect.");
-					for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-					udc_detach();	// Detach the USB device before restart
-					rstc_start_software_reset(RSTC);	// Software reset
-					while (1);
+					software_reset();
 				}
 				else if(strcmp(post_msg,"save_ports") == 0)
 				{
@@ -1156,20 +1147,22 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 						if(pdat[i+1] == 'w')
 						{
 							int oc1,oc2,oc3,oc4;
-							if (strlen(http_msg) > 15 )
+							if (strlen(http_msg) <= 15 )
 							{
-								TRACE("http.c: incorrect IP format");
-								return;
-							}
-							sscanf(http_msg, "%d.%d.%d.%d", &oc1,&oc2,&oc3,&oc4);
-							Zodiac_Config.OFIP_address[0] = oc1;
-							Zodiac_Config.OFIP_address[1] = oc2;
-							Zodiac_Config.OFIP_address[2] = oc3;
-							Zodiac_Config.OFIP_address[3] = oc4;
-							TRACE("http.c: openflow server address set to %d.%d.%d.%d" ,\
+								sscanf(http_msg, "%d.%d.%d.%d", &oc1,&oc2,&oc3,&oc4);
+								Zodiac_Config.OFIP_address[0] = oc1;
+								Zodiac_Config.OFIP_address[1] = oc2;
+								Zodiac_Config.OFIP_address[2] = oc3;
+								Zodiac_Config.OFIP_address[3] = oc4;
+								TRACE("http.c: openflow server address set to %d.%d.%d.%d" ,\
 								Zodiac_Config.OFIP_address[0], Zodiac_Config.OFIP_address[1],\
 								Zodiac_Config.OFIP_address[2], Zodiac_Config.OFIP_address[3]\
-									);
+								);
+							}
+							else
+							{
+								TRACE("http.c: incorrect IP format");
+							}
 						}
 						else
 						{
@@ -1884,7 +1877,7 @@ static uint8_t Config_Network(char *payload, int len)
 			if (strlen(http_msg) != 27 )	// Accounting for ":" as "%3A"
 			{
 				TRACE("http.c: incorrect MAC address format");
-				return;
+				return FAILURE;
 			}
 			
 			// Decode http string
@@ -1942,7 +1935,7 @@ static uint8_t Config_Network(char *payload, int len)
 			if (strlen(http_msg) > 15 )
 			{
 				TRACE("http.c: incorrect IP format");
-				return;
+				return FAILURE;
 			}
 			sscanf(http_msg, "%d.%d.%d.%d", &ip1, &ip2,&ip3,&ip4);
 			Zodiac_Config.IP_address[0] = ip1;
@@ -1981,7 +1974,7 @@ static uint8_t Config_Network(char *payload, int len)
 			if (strlen(http_msg) > 15 )
 			{
 				TRACE("http.c: incorrect netmask format");
-				return;
+				return FAILURE;
 			}
 			sscanf(http_msg, "%d.%d.%d.%d", &nm1, &nm2,&nm3,&nm4);
 			Zodiac_Config.netmask[0] = nm1;
@@ -2021,7 +2014,7 @@ static uint8_t Config_Network(char *payload, int len)
 		if (strlen(http_msg) > 15 )
 		{
 			TRACE("http.c: incorrect gateway format");
-			return;
+			return FAILURE;
 		}
 		sscanf(http_msg, "%d.%d.%d.%d", &gw1, &gw2,&gw3,&gw4);
 		Zodiac_Config.gateway_address[0] = gw1;
@@ -2339,18 +2332,14 @@ static uint8_t interfaceCreate_Upload_Status(uint8_t sel)
 {
 	if(sel == 1)
 	{	
-		if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 			"<!DOCTYPE html>"\
 				"<html>"\
 					"<head>"\
 						"<style>"\
-						"body {"\
-							"overflow: auto;"\
-							"font-family:Sans-serif;"\
-							"line-height: 1.2em;"\
-							"font-size: 17px;"\
-							"margin-left: 20px;"\
-						"}"\
+					);
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 						"</style>"\
 					"</head>"\
 					"<body>"\
@@ -2677,7 +2666,7 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 		}
 				
 		if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-					"</tr>"\		
+					"</tr>"\
 				) < SHARED_BUFFER_LEN)
 		{
 			TRACE("http.c: html (1/2) written to buffer");
@@ -2852,7 +2841,8 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 	}
 	else
 	{
-		TRACE:("http.c: Display: Ports step error");
+		TRACE("http.c: Display: Ports step error");
+		return 0;
 	}
 }
 
@@ -2980,6 +2970,16 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 */
 static uint8_t interfaceCreate_Display_Flows(void)
 {
+	int i;
+	uint8_t flowEnd = flowBase + FLOW_DISPLAY_LIMIT;
+	struct ofp_action_header * act_hdr;
+
+	// Ensure page correctly displays end of flows
+	if(iLastFlow < flowEnd)
+	{
+		flowEnd = iLastFlow;
+	}
+	
 	sprintf(shared_buffer, http_header);
 
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
@@ -2996,22 +2996,22 @@ static uint8_t interfaceCreate_Display_Flows(void)
 			"<body>"\
 				"<p>"\
 					"<h2>Flows</h2>"\
+					"%d flows installed<br>"\
+			, iLastFlow);
+			
+	if(iLastFlow != 0)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+		"Showing flows %d - %d<br>"\
+		, flowBase+1, flowEnd);
+	}
+	
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 				"</p>"\
 				"<pre><span style=\"font-size: 12px; line-height: 1\">"\
 			);
 
 // Begin Flow formatting
-
-int i;
-uint8_t flowEnd = flowBase + FLOW_DISPLAY_LIMIT;
-struct ofp_action_header * act_hdr;
-
-// Ensure page correctly displays end of flows
-if(iLastFlow < flowEnd)
-{
-	flowEnd = iLastFlow;
-}
-
 if (iLastFlow > 0)
 {
 	// OpenFlow v1.0 (0x01) Flow Table
@@ -3414,8 +3414,6 @@ if (iLastFlow > 0)
 		}
 		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"_______\r\n\n");
 	}
-	} else {
-	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"No Flows installed\r\n");
 	}
 	
 // End Flow formatting

@@ -152,9 +152,7 @@ void cli_update(void)
 	if(verification_check() == SUCCESS)
 	{
 		printf("Firmware upload complete - Restarting the Zodiac FX.\r\n");
-		for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
-		udc_detach();	// Detach the USB device before restart
-		rstc_start_software_reset(RSTC);	// Software reset
+		software_reset();
 	}
 	else
 	{
