@@ -67,7 +67,7 @@ void get_serial(uint32_t *uid_buf)
 */
 int firmware_update_init(void)
 {	
-	flash_page_addr = NEW_FW_BASE;
+	flash_page_addr = FLASH_BUFFER;
 	
 	/* Initialize flash: 6 wait states for flash writing. */
 	ul_rc = flash_init(FLASH_ACCESS_MODE_128, 6);
