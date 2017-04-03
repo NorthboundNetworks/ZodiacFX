@@ -52,8 +52,6 @@ struct verification_data
 #define X_ACK 0x06
 #define X_NAK 0x15
 
-#define ERASE_SECTOR_SIZE	8192
-
 #define FLASH_BUFFER 0x448000
 #define FLASH_BUFFER_END 0x480000
 

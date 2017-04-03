@@ -92,19 +92,18 @@ int firmware_update_init(void)
 		unlock_address += IFLASH_LOCK_REGION_SIZE;
 	}
 
-	// Erase 192k
+	// Erase 32 pages at a time
 	uint32_t erase_address = flash_page_addr;
-	while(erase_address < IFLASH_ADDR + IFLASH_SIZE - (ERASE_SECTOR_SIZE - 1))
+	while(erase_address < FLASH_BUFFER_END)
 	{
-		//printf("-I- Erasing sector with address: 0x%08x\r\n", erase_address);
-		ul_rc = flash_erase_sector(erase_address);
+		ul_rc = flash_erase_page(erase_address, IFLASH_ERASE_PAGES_32);
 		if (ul_rc != FLASH_RC_OK)
 		{
 			//printf("-F- Flash programming error %lu\n\r", (unsigned long)ul_rc);
 			return 0;
 		}
 		
-		erase_address += ERASE_SECTOR_SIZE;
+		erase_address += ((uint8_t)32*IFLASH_PAGE_SIZE);
 	}
 	
 	return 1;
