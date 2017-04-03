@@ -1557,7 +1557,7 @@ static uint8_t upload_handler(char *payload, int len)
 			// Store the discovered boundary
 			char tmpID[BOUNDARY_MAX_LEN] = {0};
 			int z = 0;
-			while(z < BOUNDARY_MAX_LEN && *(py+z) != '\x2d' && *(py+z) != '\x0d' && *(py+z) != '\x0a')
+			while(z < BOUNDARY_MAX_LEN && *(py+z) != '\x2d' && *(py+z) != '\x0d' && *(py+z) != '\x0a' && (py+z) < payload+len)
 			{
 				tmpID[z] = *(py+z);
 				z++;
