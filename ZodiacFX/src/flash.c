@@ -47,8 +47,6 @@ static uint32_t page_addr;
 
 static	uint32_t flash_page_addr;
 static	uint32_t ul_rc;
-static	uint32_t ul_idx;
-static	uint32_t ul_page_buffer[IFLASH_PAGE_SIZE / sizeof(uint32_t)];
 
 
 /*
@@ -340,7 +338,7 @@ int xmodem_xfer(void)
 *	Remove XMODEM 0x1A padding at end of data
 *
 */
-xmodem_clear_padding(uint8_t *buff)
+void xmodem_clear_padding(uint8_t *buff)
 {
 	int len = IFLASH_PAGE_SIZE;
 	
