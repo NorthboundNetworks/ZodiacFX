@@ -47,8 +47,6 @@ static uint32_t page_addr;
 
 static	uint32_t flash_page_addr;
 static	uint32_t ul_rc;
-static	uint32_t ul_idx;
-static	uint32_t ul_page_buffer[IFLASH_PAGE_SIZE / sizeof(uint32_t)];
 
 
 /*
@@ -67,7 +65,7 @@ void get_serial(uint32_t *uid_buf)
 */
 int firmware_update_init(void)
 {	
-	flash_page_addr = NEW_FW_BASE;
+	flash_page_addr = FLASH_BUFFER;
 	
 	/* Initialize flash: 6 wait states for flash writing. */
 	ul_rc = flash_init(FLASH_ACCESS_MODE_128, 6);
@@ -92,19 +90,18 @@ int firmware_update_init(void)
 		unlock_address += IFLASH_LOCK_REGION_SIZE;
 	}
 
-	// Erase 192k
+	// Erase 32 pages at a time
 	uint32_t erase_address = flash_page_addr;
-	while(erase_address < IFLASH_ADDR + IFLASH_SIZE - (ERASE_SECTOR_SIZE - 1))
+	while(erase_address < FLASH_BUFFER_END)
 	{
-		//printf("-I- Erasing sector with address: 0x%08x\r\n", erase_address);
-		ul_rc = flash_erase_sector(erase_address);
+		ul_rc = flash_erase_page(erase_address, IFLASH_ERASE_PAGES_32);
 		if (ul_rc != FLASH_RC_OK)
 		{
 			//printf("-F- Flash programming error %lu\n\r", (unsigned long)ul_rc);
 			return 0;
 		}
 		
-		erase_address += ERASE_SECTOR_SIZE;
+		erase_address += ((uint8_t)32*IFLASH_PAGE_SIZE);
 	}
 	
 	return 1;
@@ -341,7 +338,7 @@ int xmodem_xfer(void)
 *	Remove XMODEM 0x1A padding at end of data
 *
 */
-xmodem_clear_padding(uint8_t *buff)
+void xmodem_clear_padding(uint8_t *buff)
 {
 	int len = IFLASH_PAGE_SIZE;
 	
