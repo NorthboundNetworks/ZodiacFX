@@ -2093,6 +2093,12 @@ void meter_add13(struct ofp_header *msg)
 			ptr_band->rate			= ntohl(ptr_rxband->rate);
 			ptr_band->burst_size	= ntohl(ptr_rxband->burst_size);
 			
+			// Copy DSCP precedence level
+			if(ptr_band->type == OFPMBT13_DSCP_REMARK)
+			{
+				((struct ofp13_meter_band_dscp_remark*)ptr_band)->prec_level = ((struct ofp13_meter_band_dscp_remark*)ptr_rxband)->prec_level;
+			}
+			
 			ptr_band++;		// Move to next band storage location
 			ptr_rxband++;	// Move to next received band
 			bands_processed++;
@@ -2209,6 +2215,12 @@ void meter_modify13(struct ofp_header *msg)
 			ptr_band->len			= ntohs(ptr_rxband->len);
 			ptr_band->rate			= ntohl(ptr_rxband->rate);
 			ptr_band->burst_size	= ntohl(ptr_rxband->burst_size);
+			
+			// Copy DSCP precedence level
+			if(ptr_band->type == OFPMBT13_DSCP_REMARK)
+			{
+				((struct ofp13_meter_band_dscp_remark*)ptr_band)->prec_level = ((struct ofp13_meter_band_dscp_remark*)ptr_rxband)->prec_level;
+			}
 			
 			// ***** TODO : add error checking for band processing
 			TRACE("openflow_13.c: %d of %d bands processed", bands_processed, bands_received);
