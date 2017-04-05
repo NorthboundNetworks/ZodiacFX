@@ -1539,7 +1539,7 @@ int multi_meter_features_reply13(uint8_t *buffer, struct ofp13_multipart_request
 	
 	// Format reply with meter features
 	meter_features.max_meter	= htonl(MAX_METER_13);
-	meter_features.band_types	= htonl(2);		// Only OFPMBT_DROP supported
+	meter_features.band_types	= htonl(OFPMBT13_DSCP_REMARK | OFPMBT13_DROP);		// Only OFPMBT_DROP supported
 	meter_features.capabilities	= htonl(OFPMF13_KBPS | OFPMF13_PKTPS);
 	meter_features.max_bands	= MAX_METER_BANDS_13;
 	meter_features.max_color	= 0;
