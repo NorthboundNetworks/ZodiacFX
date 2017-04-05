@@ -471,7 +471,11 @@ void task_switch(struct netif *netif)
 	int8_t in_port = 0;
 					
 	// Check if the slave device is connected and enable stacking
-	if(masterselect == false && !ioport_get_pin_level(SPI_IRQ1) && stackenabled == false) stackenabled = true;
+	if(masterselect == false && !ioport_get_pin_level(SPI_IRQ1) && stackenabled == false) 
+	{
+		MasterReady();
+		stackenabled = true;
+	}
 
 	// Check if the slave device has a packet to send us
 	if(masterselect == false && ioport_get_pin_level(SPI_IRQ1) && stackenabled == true) MasterStackRcv();
@@ -484,6 +488,7 @@ void task_switch(struct netif *netif)
 			slave_timer = sys_get_ms();	
 			Slave_timer(); // Slave timer
 		}
+		
 	}
 
 	
