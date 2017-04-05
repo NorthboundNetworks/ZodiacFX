@@ -130,4 +130,8 @@ void port_status_message13(uint8_t port);
 #define SUCCESS		0
 #define FAILURE		1
 
+// Meter processing defines
+#define METER_DROP	-1	// drop packet
+#define METER_NOACT	0	// no action
+
 #endif /* OPENFLOW_H_ */

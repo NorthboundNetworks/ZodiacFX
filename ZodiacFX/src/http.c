@@ -3625,7 +3625,7 @@ static uint8_t interfaceCreate_Display_Meters(void)
 				}
 				else if(ptr_band->type == OFPMBT13_DSCP_REMARK)
 				{
-					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"DSCP REMARK (unsupported)\r\n");
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"DSCP REMARK\r\n");
 				}
 				else
 				{
@@ -3633,7 +3633,12 @@ static uint8_t interfaceCreate_Display_Meters(void)
 				}
 				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Rate:\t\t%d\t\r\n", ptr_band->rate);
 				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Burst Size:\t%d\t\r\n", ptr_band->burst_size);
-					
+				
+				if(ptr_band->type == OFPMBT13_DSCP_REMARK)
+				{
+					snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"\t\t  Precedence:\t+%d\t\r\n", ((struct ofp13_meter_band_dscp_remark*)ptr_band)->prec_level);
+				}
+				
 				// Find band index
 				int band_index = ((uint8_t*)ptr_band - (uint8_t*)&(meter_entry[meter_index]->bands)) / sizeof(struct ofp13_meter_band_drop);
 					

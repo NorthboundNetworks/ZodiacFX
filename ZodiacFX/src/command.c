@@ -1544,7 +1544,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						}
 						else if(ptr_band->type == OFPMBT13_DSCP_REMARK)
 						{
-							printf("DSCP REMARK (unsupported)\r\n");
+							printf("DSCP REMARK\r\n");
 						}
 						else
 						{
@@ -1552,6 +1552,11 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						}
 						printf("\t\t  Rate:\t\t%d\t\r\n", ptr_band->rate);
 						printf("\t\t  Burst Size:\t%d\t\r\n", ptr_band->burst_size);
+						
+						if(ptr_band->type == OFPMBT13_DSCP_REMARK)
+						{
+							printf("\t\t  Precedence:\t+%d\t\r\n", ((struct ofp13_meter_band_dscp_remark*)ptr_band)->prec_level);
+						}
 						
 						// Find band index
 						int band_index = ((uint8_t*)ptr_band - (uint8_t*)&(meter_entry[meter_index]->bands)) / sizeof(struct ofp13_meter_band_drop);

@@ -1273,8 +1273,9 @@ int flow_stats_msg13(char *buffer, int first, int last)
 *	@param	id		- meter ID to process
 *	@param	bytes	- packet size (for throughput calculations)
 *
-*	@ret	SUCCESS	- packet does not need to be dropped
-*	@ret	FAILURE	- packet needs to be dropped
+*	@ret	METER_NOACT	- no action needs to be taken
+*	@ret	METER_DROP	- packet needs to be dropped
+*	@ret	val			- increase encoded drop precedence by val (DSCP remark)
 *
 */
 int	meter_handler(uint32_t id, uint16_t bytes)
@@ -1296,7 +1297,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	if(meter_entry[meter_index] == NULL || meter_index == MAX_METER_13)
 	{
 		TRACE("of_helper.c: meter entry not found - packet not dropped");
-		return SUCCESS;
+		return METER_NOACT;
 	}
 	// meter_index now holds the meter bound to the current flow
 	
@@ -1311,7 +1312,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 		meter_entry[meter_index]->last_packet_in = sys_get_ms();
 		
 		TRACE("of_helper.c: first hit of meter - packet not dropped");
-		return SUCCESS;
+		return METER_NOACT;
 	}
 	
 	// Find time delta
@@ -1335,7 +1336,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	else
 	{
 		TRACE("of_helper.c: unsupported meter configuration - packet not dropped");
-		return SUCCESS;
+		return METER_NOACT;
 	}
 	
 	// Check each band
@@ -1363,14 +1364,14 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	if(highest_rate == 0 || ptr_highest_band == NULL)
 	{
 		TRACE("of_helper.c: no bands triggered - packet not dropped");
-		return SUCCESS;
+		return METER_NOACT;
 	}
 	
 	// Check band type
-	if(ptr_highest_band->type != OFPMBT13_DROP)
+	if(ptr_highest_band->type != OFPMBT13_DROP && ptr_highest_band->type != OFPMBT13_DSCP_REMARK)
 	{
 		TRACE("of_helper.c: unsupported band type - not dropping packet");
-		return SUCCESS;
+		return METER_NOACT;
 	}
 	
 	TRACE("of_helper.c: highest triggered band rate:%d", highest_rate);
@@ -1383,8 +1384,22 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	band_stats_array[meter_index].band_stats[band_index].byte_band_count += bytes;
 	band_stats_array[meter_index].band_stats[band_index].packet_band_count++;
 
-	TRACE("of_helper.c: packet needs to be dropped");	
-	return FAILURE;
+	if(ptr_highest_band->type == OFPMBT13_DROP)
+	{
+		TRACE("of_helper.c: packet dropped");
+		return METER_DROP;
+	}
+	else if(ptr_highest_band->type == OFPMBT13_DSCP_REMARK)
+	{
+		struct ofp13_meter_band_dscp_remark * ptr_dscp_band = ptr_highest_band;
+		int prec_increase = (int)(ptr_dscp_band->prec_level);
+		
+		TRACE("of_helper.c: DSCP drop precedence needs to be increased by %d", prec_increase);
+		return prec_increase;
+	}
+	
+	TRACE("of_helper.c: ERROR - unknown band type");
+	return METER_NOACT;
 }
 
 /*

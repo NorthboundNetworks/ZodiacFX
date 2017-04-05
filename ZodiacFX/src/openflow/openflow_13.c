@@ -146,10 +146,40 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 		if(insts[OFPIT13_METER] != NULL)
 		{
 			struct ofp13_instruction_meter *inst_meter = insts[OFPIT13_METER];
-			if(meter_handler(ntohl(inst_meter->meter_id), packet_size) == FAILURE)	// Process meter id (provide byte count for counters)
+			int meter_ret = meter_handler(ntohl(inst_meter->meter_id), packet_size);
+			if(meter_ret == METER_DROP)	// Process meter id (provide byte count for counters)
 			{
 				// Packet must be dropped
+				TRACE("openflow_13.c: dropping packet");
 				return;
+			}
+			else if(meter_ret == METER_NOACT)
+			{
+				TRACE("openflow_13.c: no action taken");
+			}
+			else
+			{
+				if(meter_ret > 0)
+				{
+					int prec_increase = meter_ret;
+					
+					if (fields.eth_prot == htons(0x0800))
+					{
+						TRACE("openflow_13.c: increasing encoded drop precedence by %d", prec_increase);
+
+						// Copy set field value to oxm
+						struct ip_hdr *hdr = fields.payload;
+						uint8_t prec_level = IPH_TOS(hdr);
+						TRACE("openflow_13.c: header current TOS field - %d", (int)prec_level);
+						//IPH_TOS_SET(hdr, (oxm_value[0]<<2)|(IPH_TOS(hdr)&0x3));
+						// Recalculate IP checksum
+						//set_ip_checksum(p_uc_data, packet_size, fields.payload + 14);
+					}
+				}
+				else
+				{
+					TRACE("openflow_13.c: ERROR - unhandled meter_handler return value");
+				}
 			}
 		}
 			
@@ -2093,6 +2123,12 @@ void meter_add13(struct ofp_header *msg)
 			ptr_band->rate			= ntohl(ptr_rxband->rate);
 			ptr_band->burst_size	= ntohl(ptr_rxband->burst_size);
 			
+			// Copy DSCP precedence level
+			if(ptr_band->type == OFPMBT13_DSCP_REMARK)
+			{
+				((struct ofp13_meter_band_dscp_remark*)ptr_band)->prec_level = ((struct ofp13_meter_band_dscp_remark*)ptr_rxband)->prec_level;
+			}
+			
 			ptr_band++;		// Move to next band storage location
 			ptr_rxband++;	// Move to next received band
 			bands_processed++;
@@ -2209,6 +2245,12 @@ void meter_modify13(struct ofp_header *msg)
 			ptr_band->len			= ntohs(ptr_rxband->len);
 			ptr_band->rate			= ntohl(ptr_rxband->rate);
 			ptr_band->burst_size	= ntohl(ptr_rxband->burst_size);
+			
+			// Copy DSCP precedence level
+			if(ptr_band->type == OFPMBT13_DSCP_REMARK)
+			{
+				((struct ofp13_meter_band_dscp_remark*)ptr_band)->prec_level = ((struct ofp13_meter_band_dscp_remark*)ptr_rxband)->prec_level;
+			}
 			
 			// ***** TODO : add error checking for band processing
 			TRACE("openflow_13.c: %d of %d bands processed", bands_processed, bands_received);
