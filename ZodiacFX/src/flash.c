@@ -40,12 +40,12 @@
 // Global variables
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 struct verification_data verify;
+uint32_t flash_page_addr;
 
 // Static variables
 static uint32_t page_addr;
 //static uint32_t ul_rc;
 
-static	uint32_t flash_page_addr;
 static	uint32_t ul_rc;
 
 
@@ -367,4 +367,3 @@ void xmodem_clear_padding(uint8_t *buff)
 	
 	return;	// Padding characters removed
 }
-
