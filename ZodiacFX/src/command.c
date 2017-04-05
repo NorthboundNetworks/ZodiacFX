@@ -541,7 +541,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		if (masterselect == true) printf(" Stacking Select: SLAVE\r\n");
 		if (masterselect == false) printf(" Stacking Select: MASTER\r\n");
 		if (stackenabled == true) printf(" Stacking Status: Enabled\r\n");
-		if (stackenabled == false) printf(" Stacking Select: Disabled\r\n");
+		if (stackenabled == false) printf(" Stacking Status: Disabled\r\n");
 		if (Zodiac_Config.ethtype_filter == 1) printf(" EtherType Filtering: Enabled\r\n");
 		if (Zodiac_Config.ethtype_filter != 1) printf(" EtherType Filtering: Disabled\r\n");
 		printf("\r\n-------------------------------------------------------------------------\r\n\n");

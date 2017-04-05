@@ -55,6 +55,11 @@ static uint32_t gs_ul_spi_clock = 500000;
 #define SPI_STATE_COMMAND	1
 #define SPI_STATE_DATA		3
 
+// Global variables
+extern uint8_t last_port_status[4];
+extern uint8_t port_status[4];
+
+// Local variables
 uint32_t *spi_cmd_buffer;
 uint32_t spi_slv_preamble;
 uint8_t spi_state = 0;
@@ -63,6 +68,7 @@ uint16_t spi_command, spi_command_size;
 bool spi_slave_send;
 uint16_t spi_slave_send_size;
 uint8_t spibuffer[1];
+uint8_t timer_alt;
 
 void spi_master_initialize(void);
 void spi_slave_initialize(void);
@@ -138,6 +144,20 @@ void spi_master_initialize(void)
 	spi_enable(SPI_MASTER_BASE);
 }
 
+void Slave_timer(void)
+{
+	if (timer_alt == 0)
+	{
+		update_port_stats();
+		timer_alt = 1;
+		return;
+	} else if (timer_alt == 1)
+	{
+		update_port_status();
+		timer_alt = 0;
+		return;
+	}
+}
 
 void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size)
 {

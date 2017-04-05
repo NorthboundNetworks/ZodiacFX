@@ -36,6 +36,7 @@
 #include "stacking.h"
 #include "conf_eth.h"
 #include "command.h"
+#include "timers.h"
 
 #include "ksz8795clx/ethernet_phy.h"
 #include "netif/etharp.h"
@@ -53,6 +54,7 @@ uint8_t last_port_status[4];
 extern uint8_t NativePortMatrix;
 extern bool masterselect;
 extern bool stackenabled;
+int slave_timer = 0;
 /** Buffer for ethernet packets */
 static volatile uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 
@@ -467,10 +469,24 @@ void task_switch(struct netif *netif)
 	uint32_t ul_rcv_size = 0;
 	uint8_t tag = 0;
 	int8_t in_port = 0;
-			
+					
+	// Check if the slave device is connected and enable stacking
+	if(masterselect == false && !ioport_get_pin_level(SPI_IRQ1) && stackenabled == false) stackenabled = true;
+
 	// Check if the slave device has a packet to send us
 	if(masterselect == false && ioport_get_pin_level(SPI_IRQ1) && stackenabled == true) MasterStackRcv();
+	
+	// Slave house keeping
+	if(masterselect == true) 
+	{
+		if((sys_get_ms() - slave_timer) > 500)	// every 500 ms (0.5 secs)
+		{
+			slave_timer = sys_get_ms();	
+			Slave_timer(); // Slave timer
+		}
+	}
 
+	
 	/* Main packet processing loop */
 	uint32_t dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_rcv_size);
 	if (dev_read == GMAC_OK)
@@ -496,7 +512,6 @@ void task_switch(struct netif *netif)
 				uint8_t tag = *tail_tag + 1;
 				if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[tag-1] == 1)
 				{
-					//MasterStackSend((uint8_t *) gs_uc_eth_buffer, ul_rcv_size);
 					phys10_port_stats[tag-1].rx_packets++;
 					phys13_port_stats[tag-1].rx_packets++;
 					ul_rcv_size--; // remove the tail first
@@ -516,8 +531,7 @@ void task_switch(struct netif *netif)
 			}
 		} else
 		{
-			TRACE("switch.c: Set Slave to true!");
-
+			// TODO: Send packet to master
 			return;
 		}
 	}

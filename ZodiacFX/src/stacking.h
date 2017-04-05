@@ -15,6 +15,6 @@
 void stacking_init(bool master);
 void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size);
 void MasterStackRcv(void);
-
+void Slave_timer(void);
 
 #endif /* STACKING_H_ */
