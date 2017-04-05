@@ -81,7 +81,6 @@ static uint8_t meterBase = 0;		// Current set of meters to display
 static struct tcp_pcb * upload_pcb;	// Firmware upload connection check (pcb pointer)
 static int upload_port = 0;
 static int upload_timer = 0;		// Timer for firmware upload timeout
-static uint32_t bin_content_length = 0;				// HTTP Content-Length of upload binary
 static struct http_conns http_conn[MAX_CONN];	// http connection status
 
 // Flag variables
@@ -625,28 +624,6 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					upload_port = pcb->remote_port;
 					// Initialize timeout value
 					upload_timer = sys_get_ms();
-					
-					// Get content-length
-					if(strstr(http_payload, "Content-Length: ") != NULL)
-					{
-						char *ptmp = NULL;
-						ptmp = strstr(http_payload, "Content-Length: ");
-						ptmp += (strlen("Content-Length: "));
-				
-						char tmpbuff[8] = {'\0'};
-						i = 0;
-						while(i < 7 && *ptmp != '\x2d' && *ptmp != '\x0d' && *ptmp != '\x0a')
-						{
-							tmpbuff[i] = *ptmp;
-					
-							ptmp++;
-							i++;
-						}
-				
-						bin_content_length = atoi(tmpbuff);
-				
-						TRACE("http.c: Content-Length: %d", bin_content_length);
-					}
 					
 					upload_handler(http_payload, len);
 				}
@@ -1445,7 +1422,6 @@ static uint8_t upload_handler(char *payload, int len)
 		upload_pcb = NULL;								// Clear pcb connection pointer
 		upload_timer = 0;								// Clear upload timeout
 		total_handled_bytes = 0;
-		bin_content_length = 0;
 		return 1;
 	}
 	
@@ -1605,25 +1581,9 @@ static uint8_t upload_handler(char *payload, int len)
 			}
 			else
 			{
-				// Check if we've handled near the specified bytes
-				if(bin_content_length && total_handled_bytes + len + saved_bytes >= bin_content_length)
-				{
-					// Move end pointer back before the boundary (valid data)
-					while(*(py-1) == '\x0d' || *(py-1) == '\x0a' || *(py-1) == '\x2d')
-					{
-						py--;
-					}
-				
-					TRACE("http.c: Content-Length match");
-						
-					i = 0;	// Signal completion
-				}
-				else
-				{
-					TRACE("http.c: boundary IDs do not match");
-					i = 1;
-					// 'i' will be decremented to 0 if this line is run
-				}
+				TRACE("http.c: boundary IDs do not match");
+				i = 1;
+				// 'i' will be decremented to 0 if this line is run
 			}
 		}
 		i--;
