@@ -338,14 +338,30 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				else
 				{
 					upload_handler(NULL, 0);	// Clean up upload operation
-					if(interfaceCreate_Upload_Status(3))
+
+					if(flash_page_addr >= FLASH_BUFFER_END-IFLASH_PAGE_SIZE)
 					{
-						http_send(&shared_buffer, pcb, 1);
-						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+						if(interfaceCreate_Upload_Status(5))
+						{
+							http_send(&shared_buffer, pcb, 1);
+							TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+						}
+						else
+						{
+							TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+						}
 					}
 					else
 					{
-						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+						if(interfaceCreate_Upload_Status(3))
+						{
+							http_send(&shared_buffer, pcb, 1);
+							TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
+						}
+						else
+						{
+							TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+						}
 					}
 				}
 			}
@@ -2113,98 +2129,77 @@ static uint8_t interfaceCreate_Upload(void)
 */
 static uint8_t interfaceCreate_Upload_Status(uint8_t sel)
 {
-	if(sel == 1)
-	{	
-		snprintf(shared_buffer, SHARED_BUFFER_LEN,\
-			"<!DOCTYPE html>"\
-				"<html>"\
-					"<head>"\
-						"<style>"\
-					);
+	
+	snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+		"<!DOCTYPE html>"\
+			"<html>"\
+				"<head>"\
+					"<style>"\
+			);
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
-	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-						"</style>"\
-					"</head>"\
-					"<body>"\
-						"<p>"\
-							"<h2>Firmware Update</h2>"\
-						"</p>"\
-					"<body>"\
-						"<p>Firmware upload successful.<br><br>"\
-						"Zodiac FX will be updated on the next restart.</p>"\
-						"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart.');\" target=_top>"\
-							"<button name=\"btn\" value=\"btn_restart\">Restart</button>"\
-						"</form>"\
-					"</body>"\
-				"</html>"\
-			) < SHARED_BUFFER_LEN)
-		{
-			TRACE("http.c: html written to buffer");
-			return 1;
-		}
-		else
-		{
-			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
-			return 0;
-		}
+	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+					"</style>"\
+				"</head>"\
+				"<body>"\
+					"<p>"\
+						"<h2>Firmware Update</h2>"\
+					"</p>"\
+				"<body>"\
+			);
+	if(sel == 1)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+				"<p>Firmware upload successful.<br><br>"\
+				"Zodiac FX will be updated on the next restart.</p>"\
+				"<form action=\"btn_restart\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will now restart.');\" target=_top>"\
+				"<button name=\"btn\" value=\"btn_restart\">Restart</button>"\
+				"</form>"\
+			);
+	}
+	else if(sel == 2)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+					"<p>Firmware upload interrupted. Please try again.<br><br>"\
+			);
+	}
+	else if(sel == 3)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+					"<p>Firmware upload failed. Unable to verify firmware. Please try again, or check the integrity of the firmware.<br><br>"\
+			);
+	}
+	else if(sel == 4)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+		"<p>Firmware upload in progress. Please try again in 30 seconds.<br><br>"\
+		);
+	}
+	else if(sel == 5)
+	{
+		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+		"<p>Firmware upload failed. Zodiac FX supports binaries of up to 228k in size.<br><br>"\
+		);
 	}
 	else
 	{
-		snprintf(shared_buffer, SHARED_BUFFER_LEN,\
-			"<!DOCTYPE html>"\
-				"<html>"\
-					"<head>"\
-						"<style>"\
-				);
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer), html_style_body);
 		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-						"</style>"\
-					"</head>"\
-					"<body>"\
-						"<p>"\
-							"<h2>Firmware Update</h2>"\
-						"</p>"\
-					"<body>"\
-				);
-		if(sel == 2)
-		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-						"<p>Firmware upload interrupted. Please try again.<br><br>"\
-				);
-		}
-		else if(sel == 3)
-		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-						"<p>Firmware upload failed. Unable to verify firmware. Please try again, or check the integrity of the firmware.<br><br>"\
-				);
-		}
-		else if(sel == 4)
-		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-			"<p>Firmware upload in progress. Please try again in 30 seconds.<br><br>"\
-			);
-		}
-		else
-		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-			"<p>Firmware upload failed. Please try again.<br><br>"\
-			);
-		}
-				
-		if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-					"</body>"\
-				"</html>"\
-				) < SHARED_BUFFER_LEN)
-		{
-			TRACE("http.c: html written to buffer");
-			return 1;
-		}
-		else
-		{
-			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
-			return 0;
-		}
+		"<p>Firmware upload failed. Please try again.<br><br>"\
+		);
 	}
+				
+	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
+				"</body>"\
+			"</html>"\
+			) < SHARED_BUFFER_LEN)
+	{
+		return 1;
+	}
+	else
+	{
+		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}
+
 }
 
 /*
@@ -3814,7 +3809,6 @@ static uint8_t interfaceCreate_About(void)
 		"</html>"\
 				) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: html written to buffer");
 		return 1;
 	}
 	else
