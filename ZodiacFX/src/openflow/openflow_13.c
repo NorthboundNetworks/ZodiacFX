@@ -167,13 +167,35 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					{
 						TRACE("openflow_13.c: increasing encoded drop precedence by %d", prec_increase);
 
-						// Copy set field value to oxm
+						// Retrieve TOS field
 						struct ip_hdr *hdr = fields.payload;
 						uint8_t prec_level = IPH_TOS(hdr);
 						TRACE("openflow_13.c: header current TOS field - %d", (int)prec_level);
-						//IPH_TOS_SET(hdr, (oxm_value[0]<<2)|(IPH_TOS(hdr)&0x3));
-						// Recalculate IP checksum
-						//set_ip_checksum(p_uc_data, packet_size, fields.payload + 14);
+						// Isolate the drop precedence value (3 bits)
+						prec_level = (prec_level & 0x1C) >> 2;
+						// Check that value is valid ( 2 || 4 || 6 )
+						if( prec_level == 2 || prec_level == 4 || prec_level == 6)
+						{
+							// Increase drop precedence level by specified value
+							TRACE("openflow_13.c: increasing drop precedence level by %d", prec_increase);
+							prec_level = 2*(prec_level/2 + prec_increase);
+							// Ensure drop precedence value is valid
+							if(prec_level > 6)
+							{
+								prec_level = 6;
+							}
+							// Write new precedence to TOS field
+							TRACE("openflow_13.c: header new TOS field - %d", (prec_level<<2)|(IPH_TOS(hdr)&0xE3))
+							IPH_TOS_SET(hdr, (prec_level<<2)|(IPH_TOS(hdr)&0xE3));
+													
+							// Recalculate IP checksum
+							set_ip_checksum(p_uc_data, packet_size, fields.payload + 14);
+						}
+						else
+						{
+							TRACE("openflow_13.c: invalid drop precedence value - no adjustments made");
+						}
+
 					}
 				}
 				else
@@ -1517,7 +1539,7 @@ int multi_meter_features_reply13(uint8_t *buffer, struct ofp13_multipart_request
 	
 	// Format reply with meter features
 	meter_features.max_meter	= htonl(MAX_METER_13);
-	meter_features.band_types	= htonl(2);		// Only OFPMBT_DROP supported
+	meter_features.band_types	= htonl(1<<OFPMBT13_DSCP_REMARK | 1<<OFPMBT13_DROP);		// Only OFPMBT_DROP supported
 	meter_features.capabilities	= htonl(OFPMF13_KBPS | OFPMF13_PKTPS);
 	meter_features.max_bands	= MAX_METER_BANDS_13;
 	meter_features.max_color	= 0;
