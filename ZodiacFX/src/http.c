@@ -96,7 +96,9 @@ void http_send(char *buffer, struct tcp_pcb *pcb, bool out);
 static err_t http_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len);
 void http_close(struct tcp_pcb *pcb);
 
-static uint8_t upload_handler(char *payload, int len);
+static uint8_t	upload_handler(char *payload, int len);
+static uint8_t	process_pagebuff(uint8_t * buff_addr, uint16_t buff_index, uint8_t * match_addr);
+static uint16_t	send_pagebuff(uint8_t * buff_addr, uint16_t buff_index);
 
 // HTML resources
 static uint8_t interfaceCreate_Frames(void);
@@ -1406,23 +1408,24 @@ void http_close(struct tcp_pcb *pcb)
 */
 static uint8_t upload_handler(char *payload, int len)
 {
-	static char page[IFLASH_PAGE_SIZE] = {0};			// Storage for each page of data
-	static uint16_t saved_bytes = 0;					// Persistent counter of unwritten data
-	uint16_t handled_bytes = 0;							// Counter of handled data
-	static uint32_t total_handled_bytes = 0;			// Counter of total handled data
-	static char boundary_ID[BOUNDARY_MAX_LEN] = {0};	// Storage for boundary ID
+	// Persistent local variables
+	static uint8_t pagebuff[PAGEBUFF_SIZE] = {0};			// Storage for each page of data
+	static uint8_t boundary_ID[BOUNDARY_MAX_LEN] = {0};	// Storage for boundary ID
+	static uint16_t pagebuff_index = 0;
+	
+	// Local variables
+	uint16_t	payload_index = 0;
+	uint8_t		boundary_ret = 0;
 
 	if(payload == NULL || len == 0)
 	{
 		// Clean up upload handler (on interrupted/failed upload)
-		memset(&page, 0, IFLASH_PAGE_SIZE);				// Clear page storage
+		memset(&pagebuff, 0, PAGEBUFF_SIZE);				// Clear page storage
 		memset(&boundary_ID, 0, BOUNDARY_MAX_LEN);		// Clear boundary storage
-		saved_bytes = 0;								// Clear saved byte counter
 		file_upload = false;							// Clear file upload flag
 		boundary_start = 1;								// Set starting boundary required flag
 		upload_pcb = NULL;								// Clear pcb connection pointer
 		upload_timer = 0;								// Clear upload timeout
-		total_handled_bytes = 0;
 		return 1;
 	}
 	
@@ -1536,7 +1539,7 @@ static uint8_t upload_handler(char *payload, int len)
 			boundary_start = 0;
 			
 			// Clear page array before use
-			memset(&page, 0, IFLASH_PAGE_SIZE);	// Clear shared_buffer
+			memset(&pagebuff, 0, PAGEBUFF_SIZE);	// Clear shared_buffer
 		}
 	}
 	else
@@ -1545,554 +1548,62 @@ static uint8_t upload_handler(char *payload, int len)
 		px = payload;
 	}
 	
-	// Search for ending boundary
-	py = payload + len;
-	
-	i = 128;
-	while(i>0)
+	// Fix alignment after boundary detection
+	if(px > payload)
 	{
-		py--;
-		// Latch onto '----' ("----[boundary ID]")
-		if((*(py-1)) == '\x2d' && (*(py-2)) == '\x2d' && (*(py-3)) == '\x2d' && (*(py-4)) == '\x2d')
+		len = len - (px - payload);
+		payload = px;
+	}
+
+	while(payload_index < len)
+	{
+		if(pagebuff_index < PAGEBUFF_SIZE)
 		{
-			// Store the discovered boundary
-			char tmpID[BOUNDARY_MAX_LEN] = {0};
-			int z = 0;
-			while(z < BOUNDARY_MAX_LEN && *(py+z) != '\x2d' && *(py+z) != '\x0d' && *(py+z) != '\x0a' && (py+z) < payload+len)
-			{
-				tmpID[z] = *(py+z);
-				z++;
-			}
-			
-			TRACE("http.c: discovered boundary ID : %s", tmpID);
-			
-			// Match the boundary ID with stored ID
-			if(strcmp(tmpID, boundary_ID) == 0)
-			{
-				TRACE("http.c: boundary IDs match");
-				TRACE("http.c: moving data end pointer");
-				// Traverse through the preceding newline characters
-				while(*(py-1) == '\x0d' || *(py-1) == '\x0a' || *(py-1) == '\x2d')
-				{
-					py--;
-				}
-				
-				i = 0;
-				// 'i' will be decremented to -1 if this line is run
-			}
-			else
-			{
-				TRACE("http.c: boundary IDs do not match");
-				i = 1;
-				// 'i' will be decremented to 0 if this line is run
-			}
+			pagebuff[pagebuff_index] = payload[payload_index];
+			pagebuff_index++;
 		}
-		i--;
-	}
-
-	
-	if(i == 0)
-	{
-		TRACE("http.c: ending boundary not found - ending data is valid");
 		
-		// Return ending pointer to the end
-		py = payload + len;
-	}
-	else
-	{
-		TRACE("http.c: ending boundary found");
-		final = 1;
-	}
-	
-	// Get length of uploaded part
-	data_len = py - px;
-	
-	// Check if any existing data needs to be handled
-	if(saved_bytes)
-	{
-		TRACE("http.c: %d saved bytes need to be cleared", saved_bytes);
-		
-		if(final)
+		if(pagebuff_index >= PAGEBUFF_SIZE)
 		{
-			/* Final page needs to be written */
+			boundary_ret = process_pagebuff(pagebuff, pagebuff_index, boundary_ID);
+			if(boundary_ret == 1)	break;
 			
-			// Fill 512-byte array
-			while(saved_bytes < IFLASH_PAGE_SIZE)
-			{
-				if(px < py)
-				{
-					// Write data
-					page[saved_bytes] = *px;
-					px++;
-					handled_bytes++;
-				}
-				else
-				{
-					// Append 0xFF
-					page[saved_bytes] = 0xFF;
-				}
-
-				saved_bytes++;
-			}
-			
-			// Write data to page
-			if(flash_write_page(&page))
-			{
-				TRACE("http.c: final firmware page written successfully");
-				page_ctr++;
-			}
-			else
-			{
-				TRACE("http.c: final firmware page write FAILED");
-			}
+			pagebuff_index = send_pagebuff(pagebuff, pagebuff_index);
 		}
-		else if(saved_bytes + len < IFLASH_PAGE_SIZE)
+		
+		payload_index++;
+	}
+	
+	if(boundary_ret == 0)
+	{
+		boundary_ret = process_pagebuff(pagebuff, pagebuff_index, boundary_ID);
+	}
+	
+	if(boundary_ret == 1)
+	{
+		if(pagebuff_index >= 512)
 		{
-			int max_len = saved_bytes + len;
-			// Fill existing partially-complete page with new data
-			while(saved_bytes < max_len && handled_bytes < len)
+			pagebuff_index = send_pagebuff(pagebuff, pagebuff_index);
+			for(pagebuff_index; pagebuff_index < IFLASH_PAGE_SIZE; pagebuff_index++)
 			{
-				page[saved_bytes] = *px;
-				if(px < py)
-				{
-					px++;
-				}
-				else
-				{
-					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
-				}
-				saved_bytes++;
-				handled_bytes++;
+				pagebuff[pagebuff_index] = 0xFF;
 			}
-			
-			// Handle edge-case
-			TRACE("http.c: unable to fill a complete page - skipping page write");
-			TRACE("http.c: %d bytes saved", saved_bytes);
-			
-			total_handled_bytes += handled_bytes;
-			
-			/* Handle partial boundary scenarios */
-			uint32_t curr_addr = flash_page_addr - IFLASH_PAGE_SIZE;	// Get start address of previously-written page
-			if(curr_addr > FLASH_BUFFER && curr_addr < FLASH_BUFFER_END)
-			{
-				memset(&shared_buffer, 0, SHARED_BUFFER_LEN);	// Clear shared_buffer
-				uint8_t * p_addr = curr_addr;					// Create a working pointer at flash page start
-				uint16_t ct = 0;								// shared buffer index
-				// Copy page into shared buffer
-				for(ct;ct<512;ct++)
-				{
-					shared_buffer[ct] = *p_addr;
-					p_addr++;
-				}
-				// Copy any saved bytes into the shared buffer
-				if(saved_bytes)
-				{
-					// Current page needs to be appended to the previously-written page
-					uint16_t ind = 0;
-					for(ind;ind<saved_bytes;ind++)
-					{
-						shared_buffer[ct+ind] = page[ind];
-					}
-					TRACE("http.c: saved bytes appended for boundary check");
-					ct += ind;
-				}
-				// Check boundary within shared buffer
-				uint16_t wind = ct;	// working index
-				i = 128;
-				while(i>0)
-				{
-					wind--;
-					// Latch onto '----' ("----[boundary ID]")
-					if(shared_buffer[wind-1] == '\x2d' && shared_buffer[wind-2] == '\x2d' && shared_buffer[wind-3] == '\x2d' && shared_buffer[wind-4] == '\x2d')
-					{
-						// Store the discovered boundary
-						char tmpID[BOUNDARY_MAX_LEN] = {0};
-						int z = 0;
-						while(z < BOUNDARY_MAX_LEN && shared_buffer[wind+z] != '\x2d' && shared_buffer[wind+z] != '\x0d' && shared_buffer[wind+z] != '\x0a' && (wind+z) < ct)
-						{
-							tmpID[z] = shared_buffer[wind+z];
-							z++;
-						}
-			
-						TRACE("http.c: discovered boundary ID : %s (shared buffer check)", tmpID);
-			
-						// Match the boundary ID with stored ID
-						if(strcmp(tmpID, boundary_ID) == 0)
-						{
-							TRACE("http.c: boundary IDs match");
-							TRACE("http.c: moving data end pointer");
-							// Traverse through the preceding newline characters
-							while(shared_buffer[wind-1] == '\x0d' || shared_buffer[wind-1] == '\x0a' || shared_buffer[wind-1] == '\x2d')
-							{
-								wind--;
-							}
-					
-							// Overwrite previous page
-							flash_page_addr = curr_addr;	// Move page write address to overwrite previous page
-							// Fill 512-byte array
-							int j = 0;
-							while(j < IFLASH_PAGE_SIZE)
-							{
-								if(j < wind)
-								{
-									// Write data
-									page[j] = shared_buffer[j];
-									//handled_bytes++;
-								}
-								else
-								{
-									// Append 0xFF
-									page[j] = 0xFF;
-								}
-
-								j++;
-							}
-								
-							// Write to page
-							if(flash_write_page(&page))
-							{
-								TRACE("http.c: page written successfully");
-								page_ctr++;
-							}
-							else
-							{
-								TRACE("http.c: page write FAILED");
-							}
-							
-							if(j<wind)
-							{
-								uint16_t k = 0;
-								while(k < IFLASH_PAGE_SIZE)
-								{
-									if(j+k < wind)
-									{
-										// Write data
-										page[k] = shared_buffer[j+k];
-										//handled_bytes++;
-									}
-									else
-									{
-										// Append 0xFF
-										page[k] = 0xFF;
-									}
-
-									k++;
-								}
-							}
-							
-							// Write to page
-							if(flash_write_page(&page))
-							{
-								TRACE("http.c: page written successfully");
-								page_ctr++;
-							}
-							else
-							{
-								TRACE("http.c: page write FAILED");
-							}
-							
-							return 2; // done
-							// 'i' will be decremented to -1 if this line is run
-						}
-						else
-						{
-							TRACE("http.c: boundary IDs do not match");
-							i = 1;
-							// 'i' will be decremented to 0 if this line is run
-						}
-					}
-					i--;
-				}
-			}
-			else if(curr_addr >= FLASH_BUFFER_END)
-			{
-				TRACE("http.c: ERROR - flash upper limit reached");
-			}
-			
-			return 1;
+			pagebuff_index = send_pagebuff(pagebuff, pagebuff_index);
 		}
 		else
 		{
-			// Fill existing partially-complete page with new data
-			while(saved_bytes < IFLASH_PAGE_SIZE && handled_bytes < len)
-			{
-				page[saved_bytes] = *px;
-				if(px < py)
-				{
-					px++;
-				}
-				else
-				{
-					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
-				}
-				saved_bytes++;
-				handled_bytes++;
-			}
-			
-			// Write data to page
-			if(flash_write_page(&page))
-			{
-				TRACE("http.c: firmware page written successfully");
-				page_ctr++;
-			}
-			else
-			{
-				TRACE("http.c: firmware page write FAILED");
-			}
+			pagebuff_index = send_pagebuff(pagebuff, pagebuff_index);
 		}
-				
-		// Saved bytes have been handled - clear the counter
-		saved_bytes = 0;
 		
-		TRACE("http.c: saved bytes have been cleared");		
-		TRACE("http.c: handled_bytes: %04d, data_len: %04d", handled_bytes, data_len);
-	}
-
-	while(handled_bytes < data_len)
-	{
-		if(data_len - handled_bytes >= IFLASH_PAGE_SIZE)
-		{
-			// Fill 512-byte array
-			int j = 0;
-			while(j < IFLASH_PAGE_SIZE)
-			{
-				page[j] = *px;
-				if(px < py)
-				{
-					px++;	
-				}
-				else
-				{
-					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
-				}
-				j++;
-				handled_bytes++;
-			}
-			
-			// Write to page
-			if(flash_write_page(&page))
-			{
-				TRACE("http.c: firmware page written successfully");
-				page_ctr++;
-			}
-			else
-			{
-				TRACE("http.c: firmware page write FAILED");
-			}
-		}
-		else if(!final)
-		{
-			/* Data needs to be saved */
-			TRACE("http.c: data needs to be saved");
-			
-			// Save leftover into page array for next run-through
-			int j = 0;
-			while(handled_bytes < data_len)
-			{
-				page[j] = *px;
-				if(px < py)
-				{
-					px++;
-				}
-				else
-				{
-					TRACE("http.c: ERROR - multi-part start pointer has passed the end pointer");
-				}
-				j++;
-				handled_bytes++;
-				saved_bytes++;
-			}
-			
-			TRACE("http.c: %d bytes saved", saved_bytes);
-		}
-		else
-		{
-			/* Final page needs to be written */
-			
-			// Fill 512-byte array
-			int j = 0;
-			while(j < IFLASH_PAGE_SIZE)
-			{
-				if(px < py)
-				{
-					// Write data
-					page[j] = *px;
-					px++;
-					handled_bytes++;
-				}
-				else
-				{
-					// Append 0xFF
-					page[j] = 0xFF;
-				}
-
-				j++;
-			}
-			
-			// Write to page
-			if(flash_write_page(&page))
-			{
-				TRACE("http.c: final page written successfully");
-				page_ctr++;
-			}
-			else
-			{
-				TRACE("http.c: final page write FAILED");
-			}
-		}
-	
-		TRACE("http.c: handled_bytes: %04d, data_len: %04d", handled_bytes, data_len);
-	}	
-	
-	total_handled_bytes += handled_bytes;
-	TRACE("http.c: total_handled_bytes: %d", total_handled_bytes);
-	
-	/* Handle partial boundary scenarios */
-	uint32_t curr_addr = flash_page_addr - IFLASH_PAGE_SIZE;	// Get start address of previously-written page
-	if(curr_addr > FLASH_BUFFER && curr_addr < FLASH_BUFFER_END)
-	{
-		memset(&shared_buffer, 0, SHARED_BUFFER_LEN);	// Clear shared_buffer
-		uint8_t * p_addr = curr_addr;					// Create a working pointer at flash page start
-		uint16_t ct = 0;								// shared buffer index
-		// Copy page into shared buffer
-		for(ct;ct<512;ct++)
-		{
-			shared_buffer[ct] = *p_addr;
-			p_addr++;
-		}
-		// Copy any saved bytes into the shared buffer
-		if(saved_bytes)
-		{
-			// Current page needs to be appended to the previously-written page
-			uint16_t ind = 0;
-			for(ind;ind<saved_bytes;ind++)
-			{
-				shared_buffer[ct+ind] = page[ind];
-			}
-			TRACE("http.c: saved bytes appended for boundary check");
-			ct += ind;
-		}
-		// Check boundary within shared buffer
-		uint16_t wind = ct;	// working index
-		i = 128;
-		while(i>0)
-		{
-			wind--;
-			// Latch onto '----' ("----[boundary ID]")
-			if(shared_buffer[wind-1] == '\x2d' && shared_buffer[wind-2] == '\x2d' && shared_buffer[wind-3] == '\x2d' && shared_buffer[wind-4] == '\x2d')
-			{
-				// Store the discovered boundary
-				char tmpID[BOUNDARY_MAX_LEN] = {0};
-				int z = 0;
-				while(z < BOUNDARY_MAX_LEN && shared_buffer[wind+z] != '\x2d' && shared_buffer[wind+z] != '\x0d' && shared_buffer[wind+z] != '\x0a' && (wind+z) < ct)
-				{
-					tmpID[z] = shared_buffer[wind+z];
-					z++;
-				}
-			
-				TRACE("http.c: discovered boundary ID : %s (shared buffer check)", tmpID);
-			
-				// Match the boundary ID with stored ID
-				if(strcmp(tmpID, boundary_ID) == 0)
-				{
-					TRACE("http.c: boundary IDs match");
-					TRACE("http.c: moving data end pointer");
-					// Traverse through the preceding newline characters
-					while(shared_buffer[wind-1] == '\x0d' || shared_buffer[wind-1] == '\x0a' || shared_buffer[wind-1] == '\x2d')
-					{
-						wind--;
-					}
-					
-					// Overwrite previous page
-					flash_page_addr = curr_addr;	// Move page write address to overwrite previous page
-					// Fill 512-byte array
-					int j = 0;
-					while(j < IFLASH_PAGE_SIZE)
-					{
-						if(j < wind)
-						{
-							// Write data
-							page[j] = shared_buffer[j];
-							//handled_bytes++;
-						}
-						else
-						{
-							// Append 0xFF
-							page[j] = 0xFF;
-						}
-
-						j++;
-					}
-								
-					// Write to page
-					if(flash_write_page(&page))
-					{
-						TRACE("http.c: page written successfully");
-						page_ctr++;
-					}
-					else
-					{
-						TRACE("http.c: page write FAILED");
-					}
-					
-					if(j<wind)
-					{
-						uint16_t k = 0;
-						while(k < IFLASH_PAGE_SIZE)
-						{
-							if(j+k < wind)
-							{
-								// Write data
-								page[k] = shared_buffer[j+k];
-								//handled_bytes++;
-							}
-							else
-							{
-								// Append 0xFF
-								page[k] = 0xFF;
-							}
-
-							k++;
-						}
-					}
-												
-					// Write to page
-					if(flash_write_page(&page))
-					{
-						TRACE("http.c: page written successfully");
-						page_ctr++;
-					}
-					else
-					{
-						TRACE("http.c: page write FAILED");
-					}
-					
-					return 2; // done
-					// 'i' will be decremented to -1 if this line is run
-				}
-				else
-				{
-					TRACE("http.c: boundary IDs do not match");
-					i = 1;
-					// 'i' will be decremented to 0 if this line is run
-				}
-			}
-			i--;
-		}
-	}
-	else if(curr_addr >= FLASH_BUFFER_END)
-	{
-		TRACE("http.c: ERROR - flash upper limit reached");
-	}
-
-	if(final)
-	{		
 		return 2;
 	}
-	else
+	
+	if(pagebuff_index >= 512)
 	{
-		return 1;
+		pagebuff_index = send_pagebuff(pagebuff, pagebuff_index);	
 	}
+
+	return 1;
 }
 
 static uint8_t Config_Network(char *payload, int len)
@@ -4360,6 +3871,93 @@ static uint8_t interfaceCreate_Restart(void)
 	else
 	{
 		TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+		return 0;
+	}
+}
+
+static uint8_t	process_pagebuff(uint8_t * buff_addr, uint16_t buff_index, uint8_t * match_addr)
+{
+	if(buff_index < BOUNDARY_MAX_LEN)
+	{
+		return 0;
+	}
+	// Search for ending boundary
+	uint16_t tmp_index = buff_index-1;
+	while(tmp_index >= 4)
+	{
+		// Latch onto '----'
+		if(buff_addr[tmp_index-1] == '\x2d' && buff_addr[tmp_index-2] == '\x2d' && buff_addr[tmp_index-3] == '\x2d' && buff_addr[tmp_index-4] == '\x2d')
+		{
+			uint8_t tmp_ID[BOUNDARY_MAX_LEN] = {0};
+			
+			uint16_t i=0;
+			while(i<BOUNDARY_MAX_LEN\
+					&& buff_addr[tmp_index+i] != '\x2d'\
+					&& buff_addr[tmp_index+i] != '\x0d'\
+					&& buff_addr[tmp_index+i] != '\x0a'\
+					&& tmp_index+i < buff_index)
+			{
+				tmp_ID[i] = buff_addr[tmp_index+i];
+				i++;
+			}
+			
+			if(strcmp(tmp_ID, match_addr) == 0)
+			{
+				TRACE("http.c: boundary IDs match");
+				
+				// Clear boundary from page buffer
+				do
+				{
+					tmp_index--;
+				}	while(tmp_index > 0 &&\
+							(buff_addr[tmp_index] == '\x0d'\
+							|| buff_addr[tmp_index] == '\x0a'\
+							|| buff_addr[tmp_index] == '\x2d'));
+				
+				tmp_index++;
+				while(tmp_index < PAGEBUFF_SIZE)
+				{
+					buff_addr[tmp_index] = 0xFF;
+					tmp_index++;
+				}
+				
+				return 1;
+			}
+			else
+			{
+				break;
+			}
+		}
+		
+		tmp_index--;
+	}
+	
+	
+	return 0;
+}
+
+static uint16_t	send_pagebuff(uint8_t * buff_addr, uint16_t buff_index)
+{
+	// Always writes 1 page
+	if(!flash_write_page(buff_addr))
+	{
+		TRACE("http.c: ERROR - page write failed");
+	}
+	
+	if(buff_index >= IFLASH_PAGE_SIZE)
+	{
+		// Copy unwritten bytes into bottom of array
+		uint16_t tmp_index = buff_index - IFLASH_PAGE_SIZE;
+		for(uint16_t i=0;i<tmp_index;i++)
+		{
+			buff_addr[i] = buff_addr[i+IFLASH_PAGE_SIZE];
+		}
+		
+		return tmp_index;
+	}
+	else
+	{
+		// Reset pagebuff_index
 		return 0;
 	}
 }

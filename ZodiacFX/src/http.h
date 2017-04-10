@@ -34,6 +34,7 @@
 #define FLOW_DISPLAY_LIMIT	4	// Displayable flows per page
 #define	METER_DISPLAY_LIMIT	3	// Displayable meters per page
 #define BOUNDARY_MAX_LEN	70
+#define PAGEBUFF_SIZE		IFLASH_PAGE_SIZE + BOUNDARY_MAX_LEN
 #define UPLOAD_TIMEOUT		25000	// (ms) timeout window between each firmware update packet
 #define MAX_CONN			4		// Maximum http connection status structs
 
