@@ -1862,11 +1862,9 @@ static uint8_t interfaceCreate_Frames(void)
 				"</frameset>"\
 			"</html>"\
 				);
-	TRACE("http.c: html written to buffer");
 
 	if(strlen(shared_buffer) < 2048)
 	{
-		TRACE("http.c: http/html written to buffer");
 		return 1;
 	}
 	else
@@ -1943,7 +1941,6 @@ static uint8_t interfaceCreate_Header(void)
 			"</html>"\
 				, hr, min) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: html written to buffer");
 		return 1;
 	}
 	else
@@ -2012,7 +2009,6 @@ static uint8_t interfaceCreate_Menu(void)
 		"</html>"\
 				) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: html written to buffer");
 		return 1;
 	}
 	else
@@ -2061,7 +2057,6 @@ static uint8_t interfaceCreate_Home(void)
 				, uid_buf[0], uid_buf[1], uid_buf[2], uid_buf[3]\
 				, VERSION, (int)ul_temp, hr, min) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: html written to buffer");
 		return 1;
 	}
 	else
@@ -2103,7 +2098,6 @@ static uint8_t interfaceCreate_Upload(void)
 		"</html>"\
 	) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: html written to buffer");
 		return 1;
 	}
 	else
@@ -2255,7 +2249,6 @@ static uint8_t interfaceCreate_Display_Home(void)
 		"</html>"\
 	) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: html written to buffer");
 		return 1;
 	}
 	else
@@ -2458,7 +2451,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 					"</tr>"\
 				) < SHARED_BUFFER_LEN)
 		{
-			TRACE("http.c: html (1/2) written to buffer");
 			return 1;
 		}
 		else
@@ -2743,7 +2735,6 @@ static uint8_t interfaceCreate_Display_OpenFlow(void)
 		, wi_ofStatus , wi_ofVersion , wi_ofTables , wi_ofFlows , wi_ofLookups , wi_ofMatches\
 	) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: html written to buffer");
 		return 1;
 	}
 	else
@@ -3246,7 +3237,6 @@ if (iLastFlow > 0)
 		"</html>"\
 	) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: html written to buffer");
 		return 1;
 	}
 	else
@@ -3429,7 +3419,6 @@ static uint8_t interfaceCreate_Display_Meters(void)
 		"</html>"\
 	) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: html written to buffer");
 		return 1;
 	}
 	else
@@ -3477,7 +3466,6 @@ static uint8_t interfaceCreate_Config_Home(void)
 		"</html>"\
 		) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: html written to buffer");
 		return 1;
 	}
 	else
@@ -3535,7 +3523,6 @@ static uint8_t interfaceCreate_Config_Network(void)
 			, Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]\
 		) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: html written to buffer");
 		return 1;
 	}
 	else
@@ -3653,7 +3640,6 @@ static uint8_t interfaceCreate_Config_VLANs(void)
 		"</html>"\
 		) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: VLAN base written to buffer");
 		return 1;
 	}
 	else
@@ -3786,7 +3772,6 @@ static uint8_t interfaceCreate_Config_OpenFlow(void)
 		"</html>"\
 		) < SHARED_BUFFER_LEN)
 		{
-			TRACE("http.c: OpenFlow Config page written to buffer");
 			return 1;
 		}
 		else
@@ -3865,7 +3850,6 @@ static uint8_t interfaceCreate_Restart(void)
 		"</html>"\
 				) < SHARED_BUFFER_LEN)
 	{
-		TRACE("http.c: html written to buffer");
 		return 1;
 	}
 	else
