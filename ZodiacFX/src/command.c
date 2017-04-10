@@ -468,6 +468,19 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		printf("Append [%08x 00000000] to the binary\r\n", ntohl(verify.calculated));
 		return;
 	}
+	
+	if (strcmp(command, "dump")==0 && strcmp(param1, "flash")==0)
+	{
+		uint8_t* buffer_pmem = FLASH_BUFFER;
+		while(buffer_pmem < FLASH_BUFFER_END)
+		{
+			printf("%02x", *buffer_pmem);
+			buffer_pmem++;
+		}
+		printf("\n");
+		
+		return;
+	}
 
 	// Unknown Command
 	printf("Unknown command\r\n");
