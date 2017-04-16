@@ -38,9 +38,21 @@
 #define SPI_SEND_CLEAR	0
 #define SPI_SEND_STATS	1
 #define SPI_SEND_PKT	2
-#define SPI_SLAVE_PREAMBLE		0xAAAAAAAB
-#define SPI_MASTER_PREAMBLE		0xBBBBBBBC
+#define SPI_STATS_PREAMBLE		0xABAB
+#define SPI_PACKET_PREAMBLE		0xBCBC
 
+struct spi_port_stats {
+	
+	uint16_t premable;
+	uint8_t port_status[4];
+	uint8_t last_port_status[4];
+	uint64_t rx_bytes[4];
+    uint64_t tx_bytes[4];
+    uint64_t rx_dropped[4];
+    uint64_t tx_dropped[4];
+};
+	
+	
 void stacking_init(bool master);
 void MasterReady(void);
 void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size);

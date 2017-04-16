@@ -47,10 +47,11 @@ extern struct tcp_conn tcp_conn;
 extern struct zodiac_config Zodiac_Config;
 extern int OF_Version;
 uint8_t gmacbuffer[GMAC_FRAME_LENTGH_MAX];
-struct ofp10_port_stats phys10_port_stats[4];
-struct ofp13_port_stats phys13_port_stats[4];
-uint8_t port_status[4];
-uint8_t last_port_status[4];
+struct ofp10_port_stats phys10_port_stats[8];
+struct ofp13_port_stats phys13_port_stats[8];
+uint8_t port_status[8];
+uint8_t last_port_status[8];
+uint8_t total_ports = 4;
 extern uint8_t NativePortMatrix;
 extern bool masterselect;
 extern bool stackenabled;
@@ -66,13 +67,6 @@ static volatile uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 #define USART_SPI_BAUDRATE          1000000
 
 uint8_t stats_rr = 0;
-
-// Internal functions
-int readtxbytes(int port);
-int readrxbytes(int port);
-int readtxdrop(int port);
-int readrxdrop(int port);
-int readrxcrcerr(int port);
 
 
 struct usart_spi_device USART_SPI_DEVICE = {
@@ -469,18 +463,22 @@ void task_switch(struct netif *netif)
 	uint32_t ul_rcv_size = 0;
 	uint8_t tag = 0;
 	int8_t in_port = 0;
-					
+
+	// Check if the slave device has a packet to send us
+	if(masterselect == false && ioport_get_pin_level(SPI_IRQ1) && stackenabled == true)
+	{
+		MasterStackRcv();
+	}
+						
 	// Check if the slave device is connected and enable stacking
 	if(masterselect == false && !ioport_get_pin_level(SPI_IRQ1) && stackenabled == false) 
 	{
-		MasterReady();
+		MasterReady();	// Let the slave know the master is ready
 		stackenabled = true;
+		total_ports = 8;
 	}
-
-	// Check if the slave device has a packet to send us
-	if(masterselect == false && ioport_get_pin_level(SPI_IRQ1) && stackenabled == true) MasterStackRcv();
 	
-	// Slave house keeping
+	// Slave house keeping timer
 	if(masterselect == true) 
 	{
 		if((sys_get_ms() - slave_timer) > 500)	// every 500 ms (0.5 secs)

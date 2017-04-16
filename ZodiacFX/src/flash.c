@@ -36,6 +36,7 @@
 #include "openflow/openflow.h"
 #include "trace.h"
 #include "command.h"
+#include "switch.h"
 
 // Global variables
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];

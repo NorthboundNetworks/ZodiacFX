@@ -123,8 +123,6 @@ void port_status_message13(uint8_t port);
 (((x) & 0xff000000UL) >> 24))
 #define NTOHL(x) HTONL(x)
 
-#define SHARED_BUFFER_LEN 2048
-
 #define	METER_PARTIAL	8		// Meter structure length, excluding header and bands
 
 #define SUCCESS		0
