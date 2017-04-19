@@ -42,8 +42,8 @@
 #define SPI_PACKET_PREAMBLE		0xBCBC
 
 struct spi_port_stats {
-	
 	uint16_t premable;
+	uint16_t spi_size;
 	uint8_t port_status[4];
 	uint8_t last_port_status[4];
 	uint64_t rx_bytes[4];
@@ -51,7 +51,14 @@ struct spi_port_stats {
     uint64_t rx_dropped[4];
     uint64_t tx_dropped[4];
 };
-	
+
+struct spi_packet {
+	uint16_t premable;
+	uint16_t spi_size;
+	uint32_t ul_rcv_size;
+	uint8_t tag;
+	uint8_t pkt_buffer[GMAC_FRAME_LENTGH_MAX];
+};	
 	
 void stacking_init(bool master);
 void MasterReady(void);

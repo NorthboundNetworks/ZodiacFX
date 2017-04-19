@@ -41,23 +41,31 @@
 #include "ksz8795clx/ethernet_phy.h"
 #include "netif/etharp.h"
 
-/** The GMAC driver instance */
-gmac_device_t gs_gmac_dev;
+// Global variables
 extern struct tcp_conn tcp_conn;
 extern struct zodiac_config Zodiac_Config;
 extern int OF_Version;
+extern uint8_t NativePortMatrix;
+extern bool masterselect;
+extern bool stackenabled;
+extern uint8_t pending_spi_command;
+extern struct spi_packet *spi_packet;
+extern bool slave_ready;
+extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
+extern uint16_t spi_slave_send_size;
+extern uint16_t spi_slave_send_count;
+
+// Local variables
+gmac_device_t gs_gmac_dev;
 uint8_t gmacbuffer[GMAC_FRAME_LENTGH_MAX];
 struct ofp10_port_stats phys10_port_stats[8];
 struct ofp13_port_stats phys13_port_stats[8];
 uint8_t port_status[8];
 uint8_t last_port_status[8];
 uint8_t total_ports = 4;
-extern uint8_t NativePortMatrix;
-extern bool masterselect;
-extern bool stackenabled;
 int slave_timer = 0;
-/** Buffer for ethernet packets */
 static volatile uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
+uint8_t stats_rr = 0;
 
 /* GMAC HW configurations */
 #define BOARD_GMAC_PHY_ADDR 0
@@ -65,9 +73,6 @@ static volatile uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 #define USART_SPI                   USART0
 #define USART_SPI_DEVICE_ID         1
 #define USART_SPI_BAUDRATE          1000000
-
-uint8_t stats_rr = 0;
-
 
 struct usart_spi_device USART_SPI_DEVICE = {
 	 /* Board specific select ID. */
@@ -358,7 +363,7 @@ void GMAC_Handler(void)
 }
 
 /*
-*	Switch initialisation function
+*	Switch initialization function
 *
 */
 void switch_init(void)
@@ -534,8 +539,26 @@ void task_switch(struct netif *netif)
 			}
 		} else
 		{
-			// TODO: Send packet to master
-			return;
+			if (slave_ready == true && pending_spi_command == SPI_SEND_CLEAR)
+			{
+				uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
+				uint8_t tag = *tail_tag + 1;
+				phys10_port_stats[tag-1].rx_packets++;
+				phys13_port_stats[tag-1].rx_packets++;
+				ul_rcv_size--; // remove the tail first
+				spi_packet = &shared_buffer;
+				spi_packet->premable = SPI_PACKET_PREAMBLE;
+				spi_packet->ul_rcv_size = ul_rcv_size;
+				spi_packet->tag = tag + 4;
+				spi_packet->spi_size = 9 + ul_rcv_size;
+				memcpy(&spi_packet->pkt_buffer, &gs_uc_eth_buffer, ul_rcv_size);
+				pending_spi_command = SPI_SEND_PKT;	// We are waiting to send port stats
+				//spi_slave_send_size = sizeof(shared_buffer);
+				spi_slave_send_size = spi_packet->spi_size;
+				spi_slave_send_count = spi_slave_send_size;
+				ioport_set_pin_level(SPI_IRQ1, true);	// Set the IRQ to signal the slave wants to send something
+				return;
+			}
 		}
 	}
 	return;
