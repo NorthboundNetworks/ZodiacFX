@@ -51,8 +51,8 @@ static uint32_t gs_ul_spi_clock = 500000;
 #define SPI_DLYBCT 0x10
 
 // Global variables
-extern uint8_t last_port_status[4];
-extern uint8_t port_status[4];
+extern uint8_t last_port_status[8];
+extern uint8_t port_status[8];
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern int OF_Version;
 extern struct ofp10_port_stats phys10_port_stats[8];

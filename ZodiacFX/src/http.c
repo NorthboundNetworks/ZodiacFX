@@ -48,7 +48,7 @@
 extern int totaltime;
 extern int32_t ul_temp;
 extern struct zodiac_config Zodiac_Config;
-extern uint8_t port_status[4];
+extern uint8_t port_status[8];
 extern uint32_t uid_buf[4];	// Unique identifier
 extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
