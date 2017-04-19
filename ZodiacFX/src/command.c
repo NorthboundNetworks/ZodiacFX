@@ -61,8 +61,8 @@ extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_13];
 extern int iLastFlow;
-extern struct ofp10_port_stats phys10_port_stats[4];
-extern struct ofp13_port_stats phys13_port_stats[4];
+extern struct ofp10_port_stats phys10_port_stats[8];
+extern struct ofp13_port_stats phys13_port_stats[8];
 extern struct table_counter table_counters[MAX_TABLES];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
@@ -70,7 +70,8 @@ extern bool masterselect;
 extern bool stackenabled = false;
 extern bool trace = false;
 extern struct tcp_pcb *tcp_pcb;
-extern uint8_t port_status[4];
+extern uint8_t port_status[8];
+extern uint8_t total_ports;
 extern int totaltime;
 extern int32_t ul_temp;
 extern int OF_Version;
@@ -328,7 +329,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 	{
 		int i;
 		printf("\r\n-------------------------------------------------------------------------\r\n");
-		for (i=0;i<4;i++)
+		for (i=0;i<total_ports;i++)
 		{
 
 			printf("\r\nPort %d\r\n",i+1);
@@ -468,6 +469,19 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		printf("Append [%08x 00000000] to the binary\r\n", ntohl(verify.calculated));
 		return;
 	}
+	
+	if (strcmp(command, "dump")==0 && strcmp(param1, "flash")==0)
+	{
+		uint8_t* buffer_pmem = FLASH_BUFFER;
+		while(buffer_pmem < FLASH_BUFFER_END)
+		{
+			printf("%02x", *buffer_pmem);
+			buffer_pmem++;
+		}
+		printf("\n");
+		
+		return;
+	}
 
 	// Unknown Command
 	printf("Unknown command\r\n");
@@ -541,7 +555,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		if (masterselect == true) printf(" Stacking Select: SLAVE\r\n");
 		if (masterselect == false) printf(" Stacking Select: MASTER\r\n");
 		if (stackenabled == true) printf(" Stacking Status: Enabled\r\n");
-		if (stackenabled == false) printf(" Stacking Select: Disabled\r\n");
+		if (stackenabled == false) printf(" Stacking Status: Disabled\r\n");
 		if (Zodiac_Config.ethtype_filter == 1) printf(" EtherType Filtering: Enabled\r\n");
 		if (Zodiac_Config.ethtype_filter != 1) printf(" EtherType Filtering: Disabled\r\n");
 		printf("\r\n-------------------------------------------------------------------------\r\n\n");
