@@ -67,6 +67,8 @@ extern int multi_pos;
 extern uint8_t NativePortMatrix;
 extern bool reply_more_flag;
 extern uint32_t reply_more_xid;
+extern uint8_t total_ports;
+
 extern int meter_handler(uint32_t id, uint16_t bytes);
 
 // Internal functions
@@ -1111,7 +1113,7 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 */
 int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
-	struct ofp13_port_stats zodiac_port_stats[3];
+	struct ofp13_port_stats zodiac_port_stats[total_ports-1];
 	struct ofp13_multipart_reply reply;
 	struct ofp13_port_stats_request *port_req = msg->body;
 	int stats_size = 0;
@@ -1120,7 +1122,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 
 	if (port == OFPP13_ANY)
 	{
-		stats_size = (sizeof(struct ofp13_port_stats) * 3);	// Assumes 3 ports
+		stats_size = (sizeof(struct ofp13_port_stats) * (total_ports-1));	// total ports, excluding controller port
 		len = sizeof(struct ofp13_multipart_reply) + stats_size;
 
 		reply.header.version = OF_Version;
@@ -1130,7 +1132,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 		reply.type = htons(OFPMP13_PORT_STATS);
 		reply.flags = 0;
 
-		for(int k=0; k<3;k++)
+		for(int k=0; k<(total_ports-1);k++)
 		{
 			zodiac_port_stats[k].port_no = htonl(k+1);
 			zodiac_port_stats[k].rx_packets = htonll(phys13_port_stats[k].rx_packets);
