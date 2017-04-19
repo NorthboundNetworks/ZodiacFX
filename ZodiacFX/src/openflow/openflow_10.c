@@ -53,7 +53,7 @@ extern int OF_Version;
 extern bool rcv_freq;
 extern uint8_t NativePortMatrix;
 extern struct ofp10_port_stats phys10_port_stats[8];
-extern uint8_t port_status[4];
+extern uint8_t port_status[8];
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern struct zodiac_config Zodiac_Config;
 extern struct ofp_switch_config Switch_config;

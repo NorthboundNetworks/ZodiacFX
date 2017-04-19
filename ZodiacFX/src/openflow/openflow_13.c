@@ -60,7 +60,7 @@ extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct ofp13_port_stats phys13_port_stats[8];
 extern struct table_counter table_counters[MAX_TABLES];
-extern uint8_t port_status[4];
+extern uint8_t port_status[8];
 extern struct ofp_switch_config Switch_config;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern int multi_pos;
