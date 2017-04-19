@@ -234,7 +234,7 @@ void MasterStackRcv(void)
 	
 	if (shared_buffer[0] != 0xAB && shared_buffer[0] != 0xBC) return;
 	spi_count = 4;
-	spi_read_size = shared_buffer[2] + (shared_buffer[3]*255);	
+	spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);	
 	while(spi_count < spi_read_size)
 	{
 		for(int x = 0;x<10000;x++);
