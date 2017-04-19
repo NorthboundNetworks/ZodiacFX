@@ -262,7 +262,7 @@ void MasterStackRcv(void)
 			phys10_port_stats[6].tx_bytes += spi_p_stats.tx_bytes[2];
 			phys10_port_stats[6].rx_bytes += spi_p_stats.rx_bytes[2];
 			phys10_port_stats[7].tx_bytes += spi_p_stats.tx_bytes[3];
-			phys10_port_stats[8].rx_bytes += spi_p_stats.rx_bytes[3];
+			phys10_port_stats[7].rx_bytes += spi_p_stats.rx_bytes[3];
 		}
 
 		if (OF_Version == 4)
@@ -274,7 +274,7 @@ void MasterStackRcv(void)
 			phys13_port_stats[6].tx_bytes += spi_p_stats.tx_bytes[2];
 			phys13_port_stats[6].rx_bytes += spi_p_stats.rx_bytes[2];
 			phys13_port_stats[7].tx_bytes += spi_p_stats.tx_bytes[3];
-			phys13_port_stats[8].rx_bytes += spi_p_stats.rx_bytes[3];
+			phys13_port_stats[7].rx_bytes += spi_p_stats.rx_bytes[3];
 		}
 	}
 	else if (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)		// Stats message
