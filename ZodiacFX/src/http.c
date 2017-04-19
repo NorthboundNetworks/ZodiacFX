@@ -48,7 +48,7 @@
 extern int totaltime;
 extern int32_t ul_temp;
 extern struct zodiac_config Zodiac_Config;
-extern uint8_t port_status[4];
+extern uint8_t port_status[8];
 extern uint32_t uid_buf[4];	// Unique identifier
 extern struct tcp_pcb *tcp_pcb;
 extern int OF_Version;
@@ -67,8 +67,8 @@ extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
 extern int iLastFlow;
 extern int iLastMeter;
-extern struct ofp10_port_stats phys10_port_stats[4];
-extern struct ofp13_port_stats phys13_port_stats[4];
+extern struct ofp10_port_stats phys10_port_stats[8];
+extern struct ofp13_port_stats phys13_port_stats[8];
 extern struct table_counter table_counters[MAX_TABLES];
 
 // Local Variables

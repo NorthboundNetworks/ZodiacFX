@@ -51,8 +51,8 @@ static uint32_t gs_ul_spi_clock = 500000;
 #define SPI_DLYBCT 0x10
 
 // Global variables
-extern uint8_t last_port_status[4];
-extern uint8_t port_status[4];
+extern uint8_t last_port_status[8];
+extern uint8_t port_status[8];
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern int OF_Version;
 extern struct ofp10_port_stats phys10_port_stats[8];
@@ -234,7 +234,7 @@ void MasterStackRcv(void)
 	
 	if (shared_buffer[0] != 0xAB && shared_buffer[0] != 0xBC) return;
 	spi_count = 4;
-	spi_read_size = shared_buffer[2] + (shared_buffer[3]*255);	
+	spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);	
 	while(spi_count < spi_read_size)
 	{
 		for(int x = 0;x<10000;x++);
@@ -262,7 +262,7 @@ void MasterStackRcv(void)
 			phys10_port_stats[6].tx_bytes += spi_p_stats.tx_bytes[2];
 			phys10_port_stats[6].rx_bytes += spi_p_stats.rx_bytes[2];
 			phys10_port_stats[7].tx_bytes += spi_p_stats.tx_bytes[3];
-			phys10_port_stats[8].rx_bytes += spi_p_stats.rx_bytes[3];
+			phys10_port_stats[7].rx_bytes += spi_p_stats.rx_bytes[3];
 		}
 
 		if (OF_Version == 4)
@@ -274,7 +274,7 @@ void MasterStackRcv(void)
 			phys13_port_stats[6].tx_bytes += spi_p_stats.tx_bytes[2];
 			phys13_port_stats[6].rx_bytes += spi_p_stats.rx_bytes[2];
 			phys13_port_stats[7].tx_bytes += spi_p_stats.tx_bytes[3];
-			phys13_port_stats[8].rx_bytes += spi_p_stats.rx_bytes[3];
+			phys13_port_stats[7].rx_bytes += spi_p_stats.rx_bytes[3];
 		}
 	}
 	else if (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)		// Stats message

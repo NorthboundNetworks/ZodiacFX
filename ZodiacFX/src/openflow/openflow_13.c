@@ -58,15 +58,17 @@ extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
-extern struct ofp13_port_stats phys13_port_stats[4];
+extern struct ofp13_port_stats phys13_port_stats[8];
 extern struct table_counter table_counters[MAX_TABLES];
-extern uint8_t port_status[4];
+extern uint8_t port_status[8];
 extern struct ofp_switch_config Switch_config;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern int multi_pos;
 extern uint8_t NativePortMatrix;
 extern bool reply_more_flag;
 extern uint32_t reply_more_xid;
+extern uint8_t total_ports;
+
 extern int meter_handler(uint32_t id, uint16_t bytes);
 
 // Internal functions
@@ -669,11 +671,6 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 void features_reply13(uint32_t xid)
 {
 	uint64_t datapathid = 0;
-	int numofports = 0;
-	for(int n=0;n<4;n++)
-	{
-		if(Zodiac_Config.of_port[n]==1)numofports++;
-	}
 	struct ofp13_switch_features features;
 	uint8_t buf[256];
 	int bufsize = sizeof(struct ofp13_switch_features);
@@ -1111,7 +1108,7 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 */
 int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
-	struct ofp13_port_stats zodiac_port_stats[3];
+	struct ofp13_port_stats zodiac_port_stats[total_ports-1];
 	struct ofp13_multipart_reply reply;
 	struct ofp13_port_stats_request *port_req = msg->body;
 	int stats_size = 0;
@@ -1120,7 +1117,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 
 	if (port == OFPP13_ANY)
 	{
-		stats_size = (sizeof(struct ofp13_port_stats) * 3);	// Assumes 3 ports
+		stats_size = (sizeof(struct ofp13_port_stats) * (total_ports-1));	// total ports, excluding controller port
 		len = sizeof(struct ofp13_multipart_reply) + stats_size;
 
 		reply.header.version = OF_Version;
@@ -1130,7 +1127,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 		reply.type = htons(OFPMP13_PORT_STATS);
 		reply.flags = 0;
 
-		for(int k=0; k<3;k++)
+		for(int k=0; k<(total_ports-1);k++)
 		{
 			zodiac_port_stats[k].port_no = htonl(k+1);
 			zodiac_port_stats[k].rx_packets = htonll(phys13_port_stats[k].rx_packets);

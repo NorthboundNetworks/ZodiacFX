@@ -52,11 +52,12 @@ extern struct table_counter table_counters[MAX_TABLES];
 extern int OF_Version;
 extern bool rcv_freq;
 extern uint8_t NativePortMatrix;
-extern struct ofp10_port_stats phys10_port_stats[4];
-extern uint8_t port_status[4];
+extern struct ofp10_port_stats phys10_port_stats[8];
+extern uint8_t port_status[8];
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern struct zodiac_config Zodiac_Config;
 extern struct ofp_switch_config Switch_config;
+extern uint8_t total_ports;
 
 //Internal Functions
 void packet_in(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason);
@@ -638,7 +639,7 @@ void stats_table_reply(struct ofp_stats_request *msg)
 */
 void stats_port_reply(struct ofp_stats_request *msg)
 {
-	struct ofp10_port_stats zodiac_port_stats[3];
+	struct ofp10_port_stats zodiac_port_stats[total_ports-1];
 	struct ofp10_stats_reply reply;
 	struct ofp10_port_stats_request *port_req = msg->body;
 	int stats_size = 0;
@@ -648,7 +649,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 
 	if (port == OFPP_NONE)
 	{
-		stats_size = (sizeof(struct ofp10_port_stats) * 3);
+		stats_size = (sizeof(struct ofp10_port_stats) * (total_ports-1));
 		len = sizeof(struct ofp10_stats_reply) + stats_size;
 
 		reply.header.version = OF_Version;
@@ -658,7 +659,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 		reply.type = htons(OFPST_PORT);
 		reply.flags = 0;
 
-		for(k=0; k<3;k++)
+		for(k=0; k<(total_ports-1);k++)
 		{
 			zodiac_port_stats[k].port_no = htons(k+1);
 			zodiac_port_stats[k].rx_packets = htonll(phys10_port_stats[k].rx_packets);
