@@ -671,11 +671,6 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 void features_reply13(uint32_t xid)
 {
 	uint64_t datapathid = 0;
-	int numofports = 0;
-	for(int n=0;n<4;n++)
-	{
-		if(Zodiac_Config.of_port[n]==1)numofports++;
-	}
 	struct ofp13_switch_features features;
 	uint8_t buf[256];
 	int bufsize = sizeof(struct ofp13_switch_features);
