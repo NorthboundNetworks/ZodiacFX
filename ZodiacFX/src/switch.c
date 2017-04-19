@@ -552,8 +552,7 @@ void task_switch(struct netif *netif)
 				spi_packet->tag = tag + 4;
 				spi_packet->spi_size = 9 + ul_rcv_size;
 				memcpy(&spi_packet->pkt_buffer, &gs_uc_eth_buffer, ul_rcv_size);
-				pending_spi_command = SPI_SEND_PKT;	// We are waiting to send port stats
-				//spi_slave_send_size = sizeof(shared_buffer);
+				pending_spi_command = SPI_SEND_PKT;	// We are waiting to forward the packet
 				spi_slave_send_size = spi_packet->spi_size;
 				spi_slave_send_count = spi_slave_send_size;
 				ioport_set_pin_level(SPI_IRQ1, true);	// Set the IRQ to signal the slave wants to send something
