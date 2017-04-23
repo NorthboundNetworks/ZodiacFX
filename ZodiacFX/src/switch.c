@@ -318,8 +318,25 @@ void update_port_status(void)
 *	@param port - the port to send the data out from.
 *
 */
-void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
+void gmac_write(uint8_t *p_buffer, uint16_t ul_size, int port, int inport)
 {
+	TRACE("switch.c: gmac_write to port 0x%X (%d bytes)", port, ul_size);
+	
+	// Convert OpenFlow port to physical port number
+	if (port == OFPP_FLOOD || port == OFPP_ALL || port == OFPP13_FLOOD || port == OFPP13_ALL)	// Send packet out all ports except the port it arrived on
+	{
+		TRACE("switch.c: Packet out FLOOD (%d bytes)", ul_size);
+		port = (15 - NativePortMatrix) - (1<<(inport-1)); 
+	} else if (port == OFPP13_IN_PORT)	// Send it back out the port it arrived on
+	{
+		port = inport;
+		TRACE("openflow_13.c: Output to in_port %d (%d bytes)", port, ul_size);
+	} else if (port < 128)	// Send it out the specified port
+	{
+		port = 1 << (port-1);
+	}
+	
+	TRACE("switch.c: Writing data to switch port %d (%d bytes)", port, ul_size);
 	if (ul_size > GMAC_FRAME_LENTGH_MAX)
 	{
 		return;

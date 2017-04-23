@@ -68,7 +68,7 @@ extern uint8_t NativePortMatrix;
 extern bool reply_more_flag;
 extern uint32_t reply_more_xid;
 extern uint8_t total_ports;
-
+extern bool stackenabled;
 extern int meter_handler(uint32_t id, uint16_t bytes);
 
 // Internal functions
@@ -224,31 +224,18 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						set_ip_checksum(p_uc_data, packet_size, fields.payload - p_uc_data);
 						recalculate_ip_checksum = false;
 					}
-
 					struct ofp13_action_output *act_output = act_hdr;
-					if (htonl(act_output->port) < OFPP13_MAX && htonl(act_output->port) != port)
-					{
-						int outport = (1<< (ntohl(act_output->port)-1));
-						TRACE("openflow_13.c: Output to port %d (%d bytes)", ntohl(act_output->port), packet_size);
-						gmac_write(p_uc_data, packet_size, outport);
-					} else if (htonl(act_output->port) == OFPP13_IN_PORT)
-					{
-						int outport = (1<< (port-1));
-						TRACE("openflow_13.c: Output to in_port %d (%d bytes)", port, packet_size);
-						gmac_write(p_uc_data, packet_size, outport);
-					} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
+					if (htonl(act_output->port) == OFPP13_CONTROLLER)
 					{
 						int pisize = ntohs(act_output->max_len);
 						if (pisize > packet_size) pisize = packet_size;
 						TRACE("openflow_13.c: Output to controller (%d bytes)", packet_size);
 						packet_in13(p_uc_data, pisize, port, OFPR_ACTION, i);
-					} else if (htonl(act_output->port) == OFPP13_FLOOD || htonl(act_output->port) == OFPP13_ALL)
-					{
-						int outport = (15 - NativePortMatrix) - (1<<(port-1));
-						if (htonl(act_output->port) == OFPP13_FLOOD) TRACE("openflow_13.c: Output to FLOOD (%d bytes)", packet_size);
-						if (htonl(act_output->port) == OFPP13_ALL) TRACE("openflow_13.c: Output to ALL (%d bytes)", packet_size);
-						gmac_write(p_uc_data, packet_size, outport);
+						break;
 					}
+					
+					gmac_write(p_uc_data, packet_size, htonl(act_output->port), port);
+					
 				}
 				break;
 
@@ -900,9 +887,13 @@ int multi_aggregate_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
 	int numofports = 0;
-	for(int n=0;n<4;n++)
+	for(int n=0;n<total_ports;n++)
 	{
 		if(Zodiac_Config.of_port[n]==1) numofports++;
+	}
+	if(stackenabled == true)
+	{
+		numofports += 4;	// Add the slave ports
 	}
 	struct ofp13_multipart_reply *reply;
 	struct ofp13_port phys_port[numofports];
@@ -920,9 +911,9 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	uint8_t mac[] = {0x00,0x00,0x00,0x00,0x00,0x00};
 	update_port_status();		//update port status
 
-	for(int l = 0; l< 4; l++)
+	for(int l = 0; l< total_ports; l++)
 	{
-		if(Zodiac_Config.of_port[l] == 1)
+		if(Zodiac_Config.of_port[l] == 1 || l > 3)	// If l > 3 then stacking is enabled so include the 4 port from the slave
 		{
 			phys_port[j].port_no = htonl(l+1);
 			for(int k = 0; k<6; k++)            // Generate random MAC address
@@ -946,7 +937,6 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 			j ++;
 		}
 	}
-
 	memcpy(reply->body, &phys_port[0],sizeof(phys_port));
 	return len;
 }
@@ -1992,16 +1982,14 @@ void packet_out13(struct ofp_header *msg)
 	struct ofp13_action_header *act_hdr = po->actions;
 	if (ntohs(act_hdr->type) != OFPAT13_OUTPUT) return;
 	struct ofp13_action_output *act_out = act_hdr;
-	uint32_t outPort = htonl(act_out->port);
-	if (outPort == OFPP13_FLOOD)
+	//uint32_t outPort = htonl(act_out->port);
+	TRACE("openflow_13.c: Packet out port 0x%X (%d bytes)", htonl(act_out->port), size);
+	if (htonl(act_out->port) == OFPP13_TABLE)
 	{
-		outPort = 7 - (1 << (inPort-1));	// Need to fix this, may also send out the Non-OpenFlow port
-		} else {
-		outPort = 1 << (outPort-1);
-		TRACE("openflow_13.c: Packet out FLOOD (%d bytes)", size);
+		nnOF_tablelookup(ptr, &size, inPort);
+		return;
 	}
-	TRACE("openflow_13.c: Packet out port %d (%d bytes)", outPort, size);
-	gmac_write(ptr, size, outPort);
+	gmac_write(ptr, size, htonl(act_out->port), inPort);
 	return;
 }
 
