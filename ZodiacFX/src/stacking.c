@@ -70,6 +70,9 @@ struct spi_port_stats spi_p_stats;
 uint8_t spi_stats_rr = 0;
 uint8_t spi_stats_buffer[sizeof(struct spi_port_stats)];
 struct spi_packet *spi_packet;
+bool end_receive;
+uint8_t spi_receive_port = 0;
+uint16_t spi_receive_count;
 
 void spi_master_initialize(void);
 void spi_slave_initialize(void);
@@ -209,8 +212,40 @@ void MasterReady(void)
 *	Master send function
 *
 */
-void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size)
+void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 {
+	uint8_t uc_pcs;
+	static uint16_t data;
+	uint8_t *p_buffer;
+	p_buffer = p_uc_data;
+	uint8_t outport;
+	
+	if (port < 255)
+	{
+		outport = port;
+	} else {
+		port = 255;
+	}
+	
+	TRACE("stacking.c: Sending packet to slave (%d bytes for port %d)", ul_size, port);
+	// Write preamble
+	spi_write(SPI_MASTER_BASE, 0xcd, 0, 0);
+	for(int x = 0;x<10000;x++);
+	spi_write(SPI_MASTER_BASE, 0xcd, 0, 0);
+	for(int x = 0;x<10000;x++);
+	spi_write(SPI_MASTER_BASE, port, 0, 0);
+	for(int x = 0;x<10000;x++);
+	
+	for (int i = 0; i < ul_size; i++) {
+		for(int x = 0;x<10000;x++);
+		spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 0);
+		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
+	}
+	// Write end bytes
+	for(int x = 0;x<10000;x++);
+	spi_write(SPI_MASTER_BASE, 0xde, 0, 0);
+	for(int x = 0;x<10000;x++);
+	spi_write(SPI_MASTER_BASE, 0xef, 0, 0);
 	return;
 }
 
@@ -353,10 +388,58 @@ void SPI_Handler(void)
 		}
 		return;
 	}
-		
+
 	if(pending_spi_command == SPI_SEND_CLEAR)
 	{
 		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
-		ioport_set_pin_level(SPI_IRQ1, false);
+		if (data == 0xcd) pending_spi_command = SPI_RCV_PREAMBLE;
+		return;
 	}
+	
+	if(pending_spi_command == SPI_RCV_PREAMBLE)
+	{
+		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
+		if (data == 0xcd) 
+		{
+			pending_spi_command = SPI_RECEIVE;
+			memset(&shared_buffer,0,sizeof(shared_buffer));
+		} else {
+			pending_spi_command = SPI_SEND_CLEAR;
+		}
+		return;
+	}
+		
+	if(pending_spi_command == SPI_RECEIVE)
+	{
+		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
+		//printf("stacking.c: SPI data received %0x\r\n", data);
+		// Check if this is an end marker
+		if (data == 0xde)
+		{
+			end_receive = true;
+		} else if (data == 0xef && end_receive == true)
+		{
+			if (spi_receive_port == 255)
+			{
+				gmac_write(&shared_buffer, spi_receive_count, OFPP13_FLOOD, 0);
+			} else{	
+				gmac_write(&shared_buffer, spi_receive_count, spi_receive_port-4, 0);
+			}
+			pending_spi_command = SPI_SEND_CLEAR;
+			spi_receive_port = 0;
+			end_receive = false;
+			spi_receive_count =0;
+			return;
+		}
+				
+		if (spi_receive_port == 0) 
+		{
+			spi_receive_port = data;
+			return;
+		}
+		
+		shared_buffer[spi_receive_count] = data;
+		spi_receive_count++;
+	}
+			
 }

@@ -45,7 +45,6 @@ void update_port_status(void);
 void disableOF(void);
 void enableOF(void);
 void stacking_init(bool master);
-void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size);
 void MasterStackRcv(void);
 
 int readtxbytes(int port);
