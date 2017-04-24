@@ -1098,7 +1098,6 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 */
 int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
-	struct ofp13_port_stats zodiac_port_stats[total_ports-1];
 	struct ofp13_multipart_reply reply;
 	struct ofp13_port_stats_request *port_req = msg->body;
 	int stats_size = 0;
@@ -1107,6 +1106,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 
 	if (port == OFPP13_ANY)
 	{
+		struct ofp13_port_stats zodiac_port_stats[total_ports-1];
 		stats_size = (sizeof(struct ofp13_port_stats) * (total_ports-1));	// total ports, excluding controller port
 		len = sizeof(struct ofp13_multipart_reply) + stats_size;
 
@@ -1136,7 +1136,10 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 		}
 		memcpy(buffer, &reply, sizeof(struct ofp13_multipart_reply));
 		memcpy(buffer+sizeof(struct ofp13_multipart_reply), &zodiac_port_stats[0], stats_size);
-	} else if (port <= OFPP13_MAX) {
+	}
+	else if (port > 0 && port <= total_ports)	// Respond to request for ports 1-4 or 1-8 (stacking)
+	{
+		struct ofp13_port_stats zodiac_port_stats;
 		stats_size = sizeof(struct ofp13_port_stats);
 		len = sizeof(struct ofp13_multipart_reply) + stats_size;
 
@@ -1147,22 +1150,26 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 		reply.type = htons(OFPMP13_PORT_STATS);
 		reply.flags = 0;
 
-		zodiac_port_stats[port].port_no = htonl(port);
-		zodiac_port_stats[port].rx_packets = htonll(phys13_port_stats[port-1].rx_packets);
-		zodiac_port_stats[port].tx_packets = htonll(phys13_port_stats[port-1].tx_packets);
-		zodiac_port_stats[port].rx_bytes = htonll(phys13_port_stats[port-1].rx_bytes);
-		zodiac_port_stats[port].tx_bytes = htonll(phys13_port_stats[port-1].tx_bytes);
-		zodiac_port_stats[port].rx_crc_err = htonll(phys13_port_stats[port-1].rx_crc_err);
-		zodiac_port_stats[port].rx_dropped = htonll(phys13_port_stats[port-1].rx_dropped);
-		zodiac_port_stats[port].tx_dropped = htonll(phys13_port_stats[port-1].tx_dropped);
-		zodiac_port_stats[port].rx_frame_err = 0;
-		zodiac_port_stats[port].rx_over_err = 0;
-		zodiac_port_stats[port].tx_errors = 0;
-		zodiac_port_stats[port].rx_errors = 0;
-		zodiac_port_stats[port].collisions = 0;
+		zodiac_port_stats.port_no = htonl(port);
+		zodiac_port_stats.rx_packets = htonll(phys13_port_stats[port-1].rx_packets);
+		zodiac_port_stats.tx_packets = htonll(phys13_port_stats[port-1].tx_packets);
+		zodiac_port_stats.rx_bytes = htonll(phys13_port_stats[port-1].rx_bytes);
+		zodiac_port_stats.tx_bytes = htonll(phys13_port_stats[port-1].tx_bytes);
+		zodiac_port_stats.rx_crc_err = htonll(phys13_port_stats[port-1].rx_crc_err);
+		zodiac_port_stats.rx_dropped = htonll(phys13_port_stats[port-1].rx_dropped);
+		zodiac_port_stats.tx_dropped = htonll(phys13_port_stats[port-1].tx_dropped);
+		zodiac_port_stats.rx_frame_err = 0;
+		zodiac_port_stats.rx_over_err = 0;
+		zodiac_port_stats.tx_errors = 0;
+		zodiac_port_stats.rx_errors = 0;
+		zodiac_port_stats.collisions = 0;
 
 		memcpy(buffer, &reply, sizeof(struct ofp13_multipart_reply));
-		memcpy(buffer+sizeof(struct ofp13_multipart_reply), &zodiac_port_stats[port], stats_size);
+		memcpy(buffer+sizeof(struct ofp13_multipart_reply), &zodiac_port_stats, stats_size);
+	}
+	else
+	{
+		TRACE("openflow_13.c: requested port is out of range");
 	}
 	return len;
 }
