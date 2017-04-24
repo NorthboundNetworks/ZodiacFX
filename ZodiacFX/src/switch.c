@@ -321,13 +321,23 @@ void update_port_status(void)
 void gmac_write(uint8_t *p_buffer, uint16_t ul_size, int port, int inport)
 {
 	TRACE("switch.c: gmac_write to port 0x%X (%d bytes)", port, ul_size);
-	
 	// Convert OpenFlow port to physical port number
 	if (port == OFPP_FLOOD || port == OFPP_ALL || port == OFPP13_FLOOD || port == OFPP13_ALL)	// Send packet out all ports except the port it arrived on
 	{
 		TRACE("switch.c: Packet out FLOOD (%d bytes)", ul_size);
-		if(masterselect == false) MasterStackSend(p_buffer, ul_size, port);
-		port = (15 - NativePortMatrix) - (1<<(inport-1)); 
+		if(masterselect == false)
+		{
+			MasterStackSend(p_buffer, ul_size, port);
+			if (inport < 5) 
+			{
+				port = (15 - NativePortMatrix) - (1<<(inport-1)); 
+			} else {
+				port = 15 - NativePortMatrix;
+			}
+		} else {
+			inport -= 4;
+			port = (15 - (1<<(inport-1)));
+		}
 	} else if (port == OFPP13_IN_PORT)	// Send it back out the port it arrived on
 	{
 		port = inport;
