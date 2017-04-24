@@ -704,22 +704,22 @@ void stats_port_reply(struct ofp_stats_request *msg)
 		reply.type = htons(OFPST_PORT);
 		reply.flags = 0;
 
-		zodiac_port_stats[port].port_no = htons(port);
-		zodiac_port_stats[port].rx_packets = htonll(phys10_port_stats[port-1].rx_packets);
-		zodiac_port_stats[port].tx_packets = htonll(phys10_port_stats[port-1].tx_packets);
-		zodiac_port_stats[port].rx_bytes = htonll(phys10_port_stats[port-1].rx_bytes);
-		zodiac_port_stats[port].tx_bytes = htonll(phys10_port_stats[port-1].tx_bytes);
-		zodiac_port_stats[port].rx_crc_err = htonll(phys10_port_stats[port-1].rx_crc_err);
-		zodiac_port_stats[port].rx_dropped = htonll(phys10_port_stats[port-1].rx_dropped);
-		zodiac_port_stats[port].tx_dropped = htonll(phys10_port_stats[port-1].tx_dropped);
-		zodiac_port_stats[port].rx_frame_err = 0;
-		zodiac_port_stats[port].rx_over_err = 0;
-		zodiac_port_stats[port].tx_errors = 0;
-		zodiac_port_stats[port].rx_errors = 0;
-		zodiac_port_stats[port].collisions = 0;
+		zodiac_port_stats.port_no = htons(port);
+		zodiac_port_stats.rx_packets = htonll(phys10_port_stats[port-1].rx_packets);
+		zodiac_port_stats.tx_packets = htonll(phys10_port_stats[port-1].tx_packets);
+		zodiac_port_stats.rx_bytes = htonll(phys10_port_stats[port-1].rx_bytes);
+		zodiac_port_stats.tx_bytes = htonll(phys10_port_stats[port-1].tx_bytes);
+		zodiac_port_stats.rx_crc_err = htonll(phys10_port_stats[port-1].rx_crc_err);
+		zodiac_port_stats.rx_dropped = htonll(phys10_port_stats[port-1].rx_dropped);
+		zodiac_port_stats.tx_dropped = htonll(phys10_port_stats[port-1].tx_dropped);
+		zodiac_port_stats.rx_frame_err = 0;
+		zodiac_port_stats.rx_over_err = 0;
+		zodiac_port_stats.tx_errors = 0;
+		zodiac_port_stats.rx_errors = 0;
+		zodiac_port_stats.collisions = 0;
 
 		memcpy(shared_buffer, &reply, sizeof(struct ofp10_stats_reply));
-		memcpy(shared_buffer + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[port], stats_size);
+		memcpy(shared_buffer + sizeof(struct ofp10_stats_reply), &zodiac_port_stats, stats_size);
 	}
 	sendtcp(&shared_buffer, len);
 	return;

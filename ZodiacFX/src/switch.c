@@ -64,7 +64,7 @@ uint8_t port_status[8];
 uint8_t last_port_status[8];
 uint8_t total_ports = 4;
 int slave_timer = 0;
-static volatile uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
+uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 uint8_t stats_rr = 0;
 
 /* GMAC HW configurations */

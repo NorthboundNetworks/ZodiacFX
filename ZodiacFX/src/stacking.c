@@ -36,7 +36,7 @@
 #include "openflow/openflow.h"
 
 /* SPI clock setting (Hz). */
-static uint32_t gs_ul_spi_clock = 500000;
+static uint32_t gs_ul_spi_clock = 1000000;
 
 /* Chip select. */
 #define SPI_CHIP_SEL 0
@@ -54,6 +54,7 @@ static uint32_t gs_ul_spi_clock = 500000;
 extern uint8_t last_port_status[8];
 extern uint8_t port_status[8];
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
+extern uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 extern int OF_Version;
 extern struct ofp10_port_stats phys10_port_stats[8];
 extern struct ofp13_port_stats phys13_port_stats[8];
@@ -230,21 +231,21 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 	TRACE("stacking.c: Sending packet to slave (%d bytes for port %d)", ul_size, port);
 	// Write preamble
 	spi_write(SPI_MASTER_BASE, 0xcd, 0, 0);
-	for(int x = 0;x<10000;x++);
+	for(int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, 0xcd, 0, 0);
-	for(int x = 0;x<10000;x++);
+	for(int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, port, 0, 0);
-	for(int x = 0;x<10000;x++);
+	for(int x = 0;x<SPI_SEND_WAIT;x++);
 	
 	for (int i = 0; i < ul_size; i++) {
-		for(int x = 0;x<10000;x++);
+		for(int x = 0;x<SPI_SEND_WAIT;x++);
 		spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 0);
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	}
 	// Write end bytes
-	for(int x = 0;x<10000;x++);
+	for(int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, 0xde, 0, 0);
-	for(int x = 0;x<10000;x++);
+	for(int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, 0xef, 0, 0);
 	return;
 }
@@ -272,7 +273,7 @@ void MasterStackRcv(void)
 	spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);	
 	while(spi_count < spi_read_size)
 	{
-		for(int x = 0;x<10000;x++);
+		for(int x = 0;x<SPI_SEND_WAIT;x++);
 		spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 		spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
@@ -316,7 +317,8 @@ void MasterStackRcv(void)
 	{
 		TRACE("stacking.c: %d bytes of packet data received from slave", spi_count);
 		spi_packet = &shared_buffer;
-		nnOF_tablelookup(&spi_packet->pkt_buffer, &spi_packet->ul_rcv_size, spi_packet->tag);
+		memcpy(gs_uc_eth_buffer, &spi_packet->pkt_buffer, GMAC_FRAME_LENTGH_MAX);
+		nnOF_tablelookup(gs_uc_eth_buffer, &spi_packet->ul_rcv_size, spi_packet->tag);
 	} else 
 	{
 		TRACE("stacking.c: %d bytes of unknown data received from slave", spi_count);
