@@ -38,6 +38,8 @@
 #define SPI_SEND_CLEAR	0
 #define SPI_SEND_STATS	1
 #define SPI_SEND_PKT	2
+#define SPI_RECEIVE		3
+#define SPI_RCV_PREAMBLE	4
 #define SPI_STATS_PREAMBLE		0xABAB
 #define SPI_PACKET_PREAMBLE		0xBCBC
 
@@ -62,7 +64,7 @@ struct spi_packet {
 	
 void stacking_init(bool master);
 void MasterReady(void);
-void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size);
+void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port);
 void MasterStackRcv(void);
 void Slave_timer(void);
 

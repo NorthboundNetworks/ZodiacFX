@@ -58,6 +58,7 @@ extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern struct zodiac_config Zodiac_Config;
 extern struct ofp_switch_config Switch_config;
 extern uint8_t total_ports;
+extern bool stackenabled;
 
 //Internal Functions
 void packet_in(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason);
@@ -173,30 +174,13 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					{
 						case OFPAT10_OUTPUT:
 						action_out = act_hdr;
-						if (ntohs(action_out->port) <= 255 && ntohs(action_out->port) != port) // physical port
-						{
-							outport = (1<< (ntohs(action_out->port)-1));
-							gmac_write(p_uc_data, packet_size, outport);
-						}
-
-						if (ntohs(action_out->port) == OFPP_IN_PORT)
-						{
-							outport = (1<< (port-1));
-							gmac_write(p_uc_data, packet_size, outport);
-						}
-
-						if (ntohs(action_out->port) == OFPP_ALL || ntohs(action_out->port) == OFPP_FLOOD)
-						{
-							outport = (15 - NativePortMatrix) - (1<<(port-1));
-							gmac_write(p_uc_data, packet_size, outport);
-						}
-
 						if (ntohs(action_out->port) == OFPP_CONTROLLER)
 						{
 							int pisize = ntohs(action_out->max_len);
 							if (pisize > packet_size) pisize = packet_size;
 							packet_in(p_uc_data, pisize, port, OFPR_ACTION);
 						}
+						gmac_write(p_uc_data, packet_size, ntohs(action_out->port), port);
 						break;
 
 						case OFPAT10_SET_DL_SRC:
@@ -427,6 +411,10 @@ void features_reply10(uint32_t xid)
 	{
 		if(Zodiac_Config.of_port[n]==1)numofports++;
 	}
+	if(stackenabled == true)
+	{
+		numofports += 4;	// Add the slave ports	
+	}
 	struct ofp10_switch_features features;
 	struct ofp10_phy_port phys_port[numofports];
 	uint8_t buf[256];
@@ -445,15 +433,14 @@ void features_reply10(uint32_t xid)
 	features.n_tables = 1;		// Number of flow tables
 	features.capabilities = htonl(OFPC10_FLOW_STATS + OFPC10_TABLE_STATS + OFPC10_PORT_STATS);	// Switch Capabilities
 	features.actions = htonl((1 << OFPAT10_OUTPUT) + (1 << OFPAT10_SET_VLAN_VID) + (1 << OFPAT10_SET_DL_SRC) + (1 << OFPAT10_SET_DL_DST) + (1 << OFPAT10_SET_NW_SRC) + (1 << OFPAT10_SET_NW_DST) + (1 << OFPAT10_SET_TP_SRC) + (1 << OFPAT10_SET_TP_DST));		// Action Capabilities
-
 	uint8_t mac[] = {0x00,0x00,0x00,0x00,0x00,0x00};
 
 	memcpy(&buf, &features, sizeof(struct ofp10_switch_features));
 	update_port_status();		//update port status
 
-	for(l = 0; l< 4; l++)
+	for(l = 0; l< total_ports; l++)
 	{
-		if(Zodiac_Config.of_port[l] == 1)
+		if(Zodiac_Config.of_port[l] == 1 || l > 3)	// If l > 3 then stacking is enabled so include the 4 port from the slave
 		{
 			phys_port[j].port_no = HTONS(l+1);
 			for(k = 0; k<6; k++)            // Generate random MAC address
@@ -476,7 +463,6 @@ void features_reply10(uint32_t xid)
 			j ++;
 		}
 	}
-
 	memcpy(&buf[sizeof(struct ofp10_switch_features)], phys_port, sizeof(phys_port));
 	sendtcp(&buf, bufsize);
 	return;
@@ -729,23 +715,14 @@ void packet_out(struct ofp_header *msg)
 	int size = NTOHS(po->header.length) - ((sizeof(struct ofp_packet_out) + NTOHS(po->actions_len)));
 	uint16_t *eport;
 	eport = ptr - 4;
-	int outPort = NTOHS(*eport);
-	int inPort = NTOHS(*iport);
-
-	if (outPort == OFPP_TABLE)
+	TRACE("openflow_10.c: Packet out port 0x%X (%d bytes)", NTOHS(*eport), size);
+	
+	if (NTOHS(*eport) == OFPP_TABLE)
 	{
-		nnOF_tablelookup(ptr, &size, inPort);
+		nnOF_tablelookup(ptr, &size, NTOHS(*iport));
 		return;
 	}
-
-	if (outPort == OFPP_FLOOD || outPort == OFPP13_ALL)
-	{
-		outPort = (15 - NativePortMatrix) - (1<<(inPort-1));
-	} else
-	{
-		outPort = 1 << (outPort-1);
-	}
-	gmac_write(ptr, size, outPort);
+	gmac_write(ptr, size, NTOHS(*eport), NTOHS(*iport));
 	return;
 }
 

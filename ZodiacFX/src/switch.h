@@ -37,7 +37,7 @@
 void spi_init(void);
 void switch_init(void);
 void task_switch(struct netif *netif);
-void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port);
+void gmac_write(uint8_t *p_buffer, uint16_t ul_size, int port, int inport);
 int switch_read(uint8_t param1);
 int switch_write(uint8_t param1, uint8_t param2);
 void update_port_stats(void);
@@ -45,7 +45,6 @@ void update_port_status(void);
 void disableOF(void);
 void enableOF(void);
 void stacking_init(bool master);
-void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size);
 void MasterStackRcv(void);
 
 int readtxbytes(int port);
