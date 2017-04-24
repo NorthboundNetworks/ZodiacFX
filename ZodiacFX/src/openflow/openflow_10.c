@@ -630,8 +630,10 @@ void stats_port_reply(struct ofp_stats_request *msg)
 	struct ofp10_port_stats_request *port_req = msg->body;
 	int stats_size = 0;
 	int k, len;
-	char buf[1024];
 	int port = ntohs(port_req->port_no);
+
+	// Clear shared_buffer
+	memset(&shared_buffer, 0, SHARED_BUFFER_LEN);
 
 	if (port == OFPP_NONE)
 	{
@@ -662,8 +664,8 @@ void stats_port_reply(struct ofp_stats_request *msg)
 			zodiac_port_stats[k].collisions = 0;
 
 		}
-		memcpy(buf, &reply, sizeof(struct ofp10_stats_reply));
-		memcpy(buf + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[0], stats_size);
+		memcpy(shared_buffer, &reply, sizeof(struct ofp10_stats_reply));
+		memcpy(shared_buffer + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[0], stats_size);
 
 	} else
 	{
@@ -691,10 +693,10 @@ void stats_port_reply(struct ofp_stats_request *msg)
 		zodiac_port_stats[port].rx_errors = 0;
 		zodiac_port_stats[port].collisions = 0;
 
-		memcpy(buf, &reply, sizeof(struct ofp10_stats_reply));
-		memcpy(buf + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[port], stats_size);
+		memcpy(shared_buffer, &reply, sizeof(struct ofp10_stats_reply));
+		memcpy(shared_buffer + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[port], stats_size);
 	}
-	sendtcp(&buf, len);
+	sendtcp(&shared_buffer, len);
 	return;
 }
 
