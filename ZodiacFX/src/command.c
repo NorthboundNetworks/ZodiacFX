@@ -335,22 +335,29 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 			printf("\r\nPort %d\r\n",i+1);
 			if (port_status[i] == 1) printf(" Status: UP\r\n");
 			if (port_status[i] == 0) printf(" Status: DOWN\r\n");
-			for (int x=0;x<MAX_VLANS;x++)
+			if (i > 3)
 			{
-				if (Zodiac_Config.vlan_list[x].portmap[i] == 1)
+				printf(" VLAN type: OpenFlow\r\n");
+				printf(" VLAN ID: n/a\r\n");
+			} else
+			{
+				for (int x=0;x<MAX_VLANS;x++)
 				{
-					if (Zodiac_Config.vlan_list[x].uVlanType == 0) printf(" VLAN type: Unassigned\r\n");
-					if (Zodiac_Config.vlan_list[x].uVlanType == 1) printf(" VLAN type: OpenFlow\r\n");
-					if (Zodiac_Config.vlan_list[x].uVlanType == 2) printf(" VLAN type: Native\r\n");
-					printf(" VLAN ID: %d\r\n", Zodiac_Config.vlan_list[x].uVlanID);
+					if (Zodiac_Config.vlan_list[x].portmap[i] == 1)
+					{
+						if (Zodiac_Config.vlan_list[x].uVlanType == 0) printf(" VLAN type: Unassigned\r\n");
+						if (Zodiac_Config.vlan_list[x].uVlanType == 1) printf(" VLAN type: OpenFlow\r\n");
+						if (Zodiac_Config.vlan_list[x].uVlanType == 2) printf(" VLAN type: Native\r\n");
+						printf(" VLAN ID: %d\r\n", Zodiac_Config.vlan_list[x].uVlanID);
+					}
 				}
 			}
 			if( OF_Version == 1)
 			{
 				printf(" RX Bytes: %" PRIu64 "\r\n", phys10_port_stats[i].rx_bytes);
 				printf(" TX Bytes: %" PRIu64 "\r\n", phys10_port_stats[i].tx_bytes);
-				if (Zodiac_Config.of_port[i] == 1) printf(" RX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].rx_packets);
-				if (Zodiac_Config.of_port[i] == 1) printf(" TX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].tx_packets);
+				if (Zodiac_Config.of_port[i] == 1 || i > 3) printf(" RX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].rx_packets);
+				if (Zodiac_Config.of_port[i] == 1 || i > 3) printf(" TX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].tx_packets);
 				printf(" RX Dropped Packets: %" PRIu64 "\r\n", phys10_port_stats[i].rx_dropped);
 				printf(" TX Dropped Packets: %" PRIu64 "\r\n", phys10_port_stats[i].tx_dropped);
 				printf(" RX CRC Errors: %" PRIu64 "\r\n", phys10_port_stats[i].rx_crc_err);
@@ -359,8 +366,8 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 			{
 				printf(" RX Bytes: %" PRIu64 "\r\n", phys13_port_stats[i].rx_bytes);
 				printf(" TX Bytes: %" PRIu64 "\r\n", phys13_port_stats[i].tx_bytes);
-				if (Zodiac_Config.of_port[i] == 1) printf(" RX Packets: %" PRIu64 "\r\n", phys13_port_stats[i].rx_packets);
-				if (Zodiac_Config.of_port[i] == 1) printf(" TX Packets: %" PRIu64 "\r\n", phys13_port_stats[i].tx_packets);
+				if (Zodiac_Config.of_port[i] == 1 || i > 3) printf(" RX Packets: %" PRIu64 "\r\n", phys13_port_stats[i].rx_packets);
+				if (Zodiac_Config.of_port[i] == 1 || i > 3) printf(" TX Packets: %" PRIu64 "\r\n", phys13_port_stats[i].tx_packets);
 				printf(" RX Dropped Packets: %" PRIu64 "\r\n", phys13_port_stats[i].rx_dropped);
 				printf(" TX Dropped Packets: %" PRIu64 "\r\n", phys13_port_stats[i].tx_dropped);
 				printf(" RX CRC Errors: %" PRIu64 "\r\n", phys13_port_stats[i].rx_crc_err);
