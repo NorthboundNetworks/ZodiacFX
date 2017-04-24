@@ -1170,6 +1170,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 	else
 	{
 		TRACE("openflow_13.c: requested port is out of range");
+		of_error13(buffer, OFPET13_BAD_REQUEST, OFPBRC13_BAD_PORT);
 	}
 	return len;
 }
