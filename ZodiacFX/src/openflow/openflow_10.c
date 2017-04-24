@@ -625,19 +625,34 @@ void stats_table_reply(struct ofp_stats_request *msg)
 */
 void stats_port_reply(struct ofp_stats_request *msg)
 {
-	struct ofp10_port_stats zodiac_port_stats[total_ports-1];
+	struct ofp10_port_stats zodiac_port_stats;
 	struct ofp10_stats_reply reply;
 	struct ofp10_port_stats_request *port_req = msg->body;
 	int stats_size = 0;
-	int k, len;
-	char buf[1024];
+	int len = 0;
 	int port = ntohs(port_req->port_no);
+	uint8_t * buffer = shared_buffer;	// Local position index
+
+	// Clear shared_buffer
+	memset(&shared_buffer, 0, SHARED_BUFFER_LEN);
 
 	if (port == OFPP_NONE)
 	{
-		stats_size = (sizeof(struct ofp10_port_stats) * (total_ports-1));
-		len = sizeof(struct ofp10_stats_reply) + stats_size;
+		// Find number of OpenFlow ports present
+		uint8_t ofports = 0;
+		for(uint8_t k=0; k<total_ports; k++)
+		{
+			// Check if port is NOT native
+			if(!(NativePortMatrix & (1<<(k))))
+			{
+				ofports++;
+			}
+		}
+		
+		stats_size = (sizeof(struct ofp10_port_stats) * ofports);	// Calculate length of stats
+		len = sizeof(struct ofp10_stats_reply) + stats_size;		// Calculate total reply length
 
+		// Format reply header
 		reply.header.version = OF_Version;
 		reply.header.type = OFPT10_STATS_REPLY;
 		reply.header.length = htons(len);
@@ -645,26 +660,38 @@ void stats_port_reply(struct ofp_stats_request *msg)
 		reply.type = htons(OFPST_PORT);
 		reply.flags = 0;
 
-		for(k=0; k<(total_ports-1);k++)
+		// Write reply header to buffer
+		memcpy(buffer, &reply, sizeof(struct ofp10_stats_reply));
+		buffer += sizeof(struct ofp10_stats_reply);
+
+	// Write port stats to reply message
+		for(uint8_t k=0; k<total_ports; k++)
 		{
-			zodiac_port_stats[k].port_no = htons(k+1);
-			zodiac_port_stats[k].rx_packets = htonll(phys10_port_stats[k].rx_packets);
-			zodiac_port_stats[k].tx_packets = htonll(phys10_port_stats[k].tx_packets);
-			zodiac_port_stats[k].rx_bytes = htonll(phys10_port_stats[k].rx_bytes);
-			zodiac_port_stats[k].tx_bytes = htonll(phys10_port_stats[k].tx_bytes);
-			zodiac_port_stats[k].rx_crc_err = htonll(phys10_port_stats[k].rx_crc_err);
-			zodiac_port_stats[k].rx_dropped = htonll(phys10_port_stats[k].rx_dropped);
-			zodiac_port_stats[k].tx_dropped = htonll(phys10_port_stats[k].tx_dropped);
-			zodiac_port_stats[k].rx_frame_err = 0;
-			zodiac_port_stats[k].rx_over_err = 0;
-			zodiac_port_stats[k].tx_errors = 0;
-			zodiac_port_stats[k].rx_errors = 0;
-			zodiac_port_stats[k].collisions = 0;
-
+			// Check if port is NOT native
+			if(!(NativePortMatrix & (1<<(k))))
+			{
+				zodiac_port_stats.port_no = htons(k+1);
+				zodiac_port_stats.rx_packets = htonll(phys10_port_stats[k].rx_packets);
+				zodiac_port_stats.tx_packets = htonll(phys10_port_stats[k].tx_packets);
+				zodiac_port_stats.rx_bytes = htonll(phys10_port_stats[k].rx_bytes);
+				zodiac_port_stats.tx_bytes = htonll(phys10_port_stats[k].tx_bytes);
+				zodiac_port_stats.rx_crc_err = htonll(phys10_port_stats[k].rx_crc_err);
+				zodiac_port_stats.rx_dropped = htonll(phys10_port_stats[k].rx_dropped);
+				zodiac_port_stats.tx_dropped = htonll(phys10_port_stats[k].tx_dropped);
+				zodiac_port_stats.rx_frame_err = 0;
+				zodiac_port_stats.rx_over_err = 0;
+				zodiac_port_stats.tx_errors = 0;
+				zodiac_port_stats.rx_errors = 0;
+				zodiac_port_stats.collisions = 0;
+				
+				// Write port stats to buffer
+				memcpy(buffer, &zodiac_port_stats, sizeof(struct ofp10_port_stats));
+				// Increment buffer pointer
+				buffer += sizeof(struct ofp10_port_stats);
+				
+				// *************** ADD ERROR MESSAGE OUTPUTS **************************
+			}
 		}
-		memcpy(buf, &reply, sizeof(struct ofp10_stats_reply));
-		memcpy(buf + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[0], stats_size);
-
 	} else
 	{
 		stats_size = sizeof(struct ofp10_port_stats);
@@ -691,10 +718,10 @@ void stats_port_reply(struct ofp_stats_request *msg)
 		zodiac_port_stats[port].rx_errors = 0;
 		zodiac_port_stats[port].collisions = 0;
 
-		memcpy(buf, &reply, sizeof(struct ofp10_stats_reply));
-		memcpy(buf + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[port], stats_size);
+		memcpy(shared_buffer, &reply, sizeof(struct ofp10_stats_reply));
+		memcpy(shared_buffer + sizeof(struct ofp10_stats_reply), &zodiac_port_stats[port], stats_size);
 	}
-	sendtcp(&buf, len);
+	sendtcp(&shared_buffer, len);
 	return;
 }
 
