@@ -36,7 +36,7 @@
 #include "openflow/openflow.h"
 
 /* SPI clock setting (Hz). */
-static uint32_t gs_ul_spi_clock = 1000000;
+static uint32_t gs_ul_spi_clock = 2000000;
 
 /* Chip select. */
 #define SPI_CHIP_SEL 0
