@@ -495,6 +495,15 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 				
 					if(interfaceCreate_Display_Ports(2))
 					{
+						http_send(&shared_buffer, pcb, 0);
+					}
+					else
+					{
+						TRACE("http.c: Unable to serve page - buffer at %d bytes", strlen(shared_buffer));
+					}
+				
+					if(interfaceCreate_Display_Ports(3))
+					{
 						http_send(&shared_buffer, pcb, 1);
 						TRACE("http.c: Page sent successfully - %d bytes", strlen(shared_buffer));
 					}
@@ -838,7 +847,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						// Only write to buffer - don't send
 						http_send(&shared_buffer, pcb, 0);
-						TRACE("http.c: updated ports page sent successfully (1/3) - %d bytes", strlen(shared_buffer));
+						TRACE("http.c: updated ports page sent successfully (1/4) - %d bytes", strlen(shared_buffer));
 					}
 					else
 					{
@@ -849,7 +858,7 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					{
 						// Call TCP output & close the connection
 						http_send(&shared_buffer, pcb, 0);
-						TRACE("http.c: updated ports page sent successfully (2/3) - %d bytes", strlen(shared_buffer));
+						TRACE("http.c: updated ports page sent successfully (2/4) - %d bytes", strlen(shared_buffer));
 					}
 					else
 					{
@@ -859,8 +868,19 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 					if(interfaceCreate_Display_Ports(2))
 					{
 						// Call TCP output & close the connection
+						http_send(&shared_buffer, pcb, 0);
+						TRACE("http.c: updated ports page sent successfully (3/4) - %d bytes", strlen(shared_buffer));
+					}
+					else
+					{
+						TRACE("http.c: unable to serve updated page - buffer at %d bytes", strlen(shared_buffer));
+					}
+
+					if(interfaceCreate_Display_Ports(3))
+					{
+						// Call TCP output & close the connection
 						http_send(&shared_buffer, pcb, 1);
-						TRACE("http.c: updated ports page sent successfully (3/3) - %d bytes", strlen(shared_buffer));
+						TRACE("http.c: updated ports page sent successfully (4/4) - %d bytes", strlen(shared_buffer));
 					}
 					else
 					{
@@ -2340,7 +2360,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 			TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
 			return 0;
 		}
-// ------------------------------------------------------
 	}
 	else if(step == 1)
 	{
@@ -2522,42 +2541,10 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							"<td>%"PRIu64"</td>"\
 						  "</tr>"\
-						  "<tr>"\
-							"<td id=\"row\">RX Dropped Packets:</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-						  "</tr>"\
-						  "<tr>"\
-							"<td id=\"row\">TX Dropped Packets:</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-						  "</tr>"\
-						  "<tr>"\
-							"<td id=\"row\">RX CRC Errors:</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-						  "</tr>"\
-						"</table>"\
-						"<br>"\
-							"<input type=\"submit\" name=\"ports_submit\" value=\"Save\">"\
-							"<input type=\"reset\" name=\"ports_cancel\" value=\"Cancel\"><br>"\
-						"</fieldset>"\
-						"</form>"\
-					"</body>"\
-				"</html>"\
 				, phys10_port_stats[0].rx_bytes, phys10_port_stats[1].rx_bytes, phys10_port_stats[2].rx_bytes, phys10_port_stats[3].rx_bytes
 				, phys10_port_stats[0].tx_bytes, phys10_port_stats[1].tx_bytes, phys10_port_stats[2].tx_bytes, phys10_port_stats[3].tx_bytes
 				, phys10_port_stats[0].rx_packets, phys10_port_stats[1].rx_packets, phys10_port_stats[2].rx_packets, phys10_port_stats[3].rx_packets
 				, phys10_port_stats[0].tx_packets, phys10_port_stats[1].tx_packets, phys10_port_stats[2].tx_packets, phys10_port_stats[3].tx_packets
-				, phys10_port_stats[0].rx_dropped, phys10_port_stats[1].rx_dropped, phys10_port_stats[2].rx_dropped, phys10_port_stats[3].rx_dropped
-				, phys10_port_stats[0].tx_dropped, phys10_port_stats[1].tx_dropped, phys10_port_stats[2].tx_dropped, phys10_port_stats[3].tx_dropped
-				, phys10_port_stats[0].rx_crc_err, phys10_port_stats[1].rx_crc_err, phys10_port_stats[2].rx_crc_err, phys10_port_stats[3].rx_crc_err
 			) < SHARED_BUFFER_LEN)
 			{
 				TRACE("http.c: html (2/2) written to buffer");
@@ -2587,7 +2574,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							"<td>%"PRIu64"</td>"\
 						  "</tr>"\
-// ----------------------------------------------------------------------------------------------------------
 						  "<tr>"\
 							"<td id=\"row\">RX Packets:</td>"\
 							"<td>%"PRIu64"</td>"\
@@ -2602,6 +2588,28 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							"<td>%"PRIu64"</td>"\
 						  "</tr>"\
+				, phys13_port_stats[0].rx_bytes, phys13_port_stats[1].rx_bytes, phys13_port_stats[2].rx_bytes, phys13_port_stats[3].rx_bytes
+				, phys13_port_stats[0].tx_bytes, phys13_port_stats[1].tx_bytes, phys13_port_stats[2].tx_bytes, phys13_port_stats[3].tx_bytes
+				, phys13_port_stats[0].rx_packets, phys13_port_stats[1].rx_packets, phys13_port_stats[2].rx_packets, phys13_port_stats[3].rx_packets
+				, phys13_port_stats[0].tx_packets, phys13_port_stats[1].tx_packets, phys13_port_stats[2].tx_packets, phys13_port_stats[3].tx_packets
+			) < SHARED_BUFFER_LEN)
+			{
+				TRACE("http.c: html (2/2) written to buffer");
+				return 1;
+			}
+			else
+			{
+				TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+				return 0;
+			}
+		}
+	}
+		else if(step == 3)
+	{
+		if(OF_Version == 1)
+		{
+			// of v1.0
+			if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
 						  "<tr>"\
 							"<td id=\"row\">RX Dropped Packets:</td>"\
 							"<td>%"PRIu64"</td>"\
@@ -2631,10 +2639,53 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						"</form>"\
 					"</body>"\
 				"</html>"\
-				, phys13_port_stats[0].rx_bytes, phys13_port_stats[1].rx_bytes, phys13_port_stats[2].rx_bytes, phys13_port_stats[3].rx_bytes
-				, phys13_port_stats[0].tx_bytes, phys13_port_stats[1].tx_bytes, phys13_port_stats[2].tx_bytes, phys13_port_stats[3].tx_bytes
-				, phys13_port_stats[0].rx_packets, phys13_port_stats[1].rx_packets, phys13_port_stats[2].rx_packets, phys13_port_stats[3].rx_packets
-				, phys13_port_stats[0].tx_packets, phys13_port_stats[1].tx_packets, phys13_port_stats[2].tx_packets, phys13_port_stats[3].tx_packets
+				, phys10_port_stats[0].rx_dropped, phys10_port_stats[1].rx_dropped, phys10_port_stats[2].rx_dropped, phys10_port_stats[3].rx_dropped
+				, phys10_port_stats[0].tx_dropped, phys10_port_stats[1].tx_dropped, phys10_port_stats[2].tx_dropped, phys10_port_stats[3].tx_dropped
+				, phys10_port_stats[0].rx_crc_err, phys10_port_stats[1].rx_crc_err, phys10_port_stats[2].rx_crc_err, phys10_port_stats[3].rx_crc_err
+			) < SHARED_BUFFER_LEN)
+			{
+				TRACE("http.c: html (2/2) written to buffer");
+				return 1;
+			}
+			else
+			{
+				TRACE("http.c: WARNING: html truncated to prevent buffer overflow");
+				return 0;
+			}
+		}
+		else
+		{
+			// of v1.3
+			if( snprintf(shared_buffer, SHARED_BUFFER_LEN,\
+						  "<tr>"\
+							"<td id=\"row\">RX Dropped Packets:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">TX Dropped Packets:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						  "<tr>"\
+							"<td id=\"row\">RX CRC Errors:</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+							"<td>%"PRIu64"</td>"\
+						  "</tr>"\
+						"</table>"\
+						"<br>"\
+							"<input type=\"submit\" name=\"ports_submit\" value=\"Save\">"\
+							"<input type=\"reset\" name=\"ports_cancel\" value=\"Cancel\"><br>"\
+						"</fieldset>"\
+						"</form>"\
+					"</body>"\
+				"</html>"\
 				, phys13_port_stats[0].rx_dropped, phys13_port_stats[1].rx_dropped, phys13_port_stats[2].rx_dropped, phys13_port_stats[3].rx_dropped
 				, phys13_port_stats[0].tx_dropped, phys13_port_stats[1].tx_dropped, phys13_port_stats[2].tx_dropped, phys13_port_stats[3].tx_dropped
 				, phys13_port_stats[0].rx_crc_err, phys13_port_stats[1].rx_crc_err, phys13_port_stats[2].rx_crc_err, phys13_port_stats[3].rx_crc_err
@@ -2650,6 +2701,7 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 			}
 		}
 	}
+
 	else
 	{
 		TRACE("http.c: Display: Ports step error");
