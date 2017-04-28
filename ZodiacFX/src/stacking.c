@@ -316,7 +316,7 @@ void MasterStackRcv(void)
 	{
 		TRACE("stacking.c: %d bytes of packet data received from slave", spi_count);
 		spi_packet = &shared_buffer;
-		nnOF_tablelookup(spi_packet->pkt_buffer, &spi_packet->ul_rcv_size, spi_packet->tag);
+		nnOF_tablelookup(&spi_packet->pkt_buffer, &spi_packet->ul_rcv_size, spi_packet->tag);
 	} else 
 	{
 		TRACE("stacking.c: %d bytes of unknown data received from slave", spi_count);
