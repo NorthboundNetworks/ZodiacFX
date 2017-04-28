@@ -732,14 +732,14 @@ void stats_port_reply(struct ofp_stats_request *msg)
 		}
 		else
 		{
-			TRACE("openflow_13.c: requested port is out of range");
-			of_error13(buffer, OFPET13_BAD_REQUEST, OFPBRC13_BAD_PORT);
+			TRACE("openflow_10.c: requested port is out of range");
+			of10_error(buffer, OFPET10_BAD_REQUEST, OFPBRC10_BAD_STAT);
 		}
 	}
 	else
 	{
-		TRACE("openflow_13.c: requested port is out of range");
-		of_error13(buffer, OFPET13_BAD_REQUEST, OFPBRC13_BAD_PORT);
+		TRACE("openflow_10.c: requested port is out of range");
+		of10_error(buffer, OFPET10_BAD_REQUEST, OFPBRC10_BAD_STAT);
 	}
 	sendtcp(&shared_buffer, len);
 	return;
