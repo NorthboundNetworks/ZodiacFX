@@ -664,7 +664,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 		memcpy(buffer, &reply, sizeof(struct ofp10_stats_reply));
 		buffer += sizeof(struct ofp10_stats_reply);
 
-	// Write port stats to reply message
+		// Write port stats to reply message
 		for(uint8_t k=0; k<total_ports; k++)
 		{
 			// Check if port is NOT native
@@ -684,42 +684,62 @@ void stats_port_reply(struct ofp_stats_request *msg)
 				zodiac_port_stats.rx_errors = 0;
 				zodiac_port_stats.collisions = 0;
 				
-				// Write port stats to buffer
-				memcpy(buffer, &zodiac_port_stats, sizeof(struct ofp10_port_stats));
-				// Increment buffer pointer
-				buffer += sizeof(struct ofp10_port_stats);
-				
-				// *************** ADD ERROR MESSAGE OUTPUTS **************************
+				if((buffer + sizeof(struct ofp10_port_stats)) < (shared_buffer + SHARED_BUFFER_LEN))
+				{
+					// Write port stats to buffer
+					memcpy(buffer, &zodiac_port_stats, sizeof(struct ofp10_port_stats));
+					// Increment buffer pointer
+					buffer += sizeof(struct ofp10_port_stats);
+				}
+				else
+				{
+					TRACE("openflow_10.c: unable to write port stats to shared buffer");
+				}
 			}
 		}
-	} else
+	}
+	else if (port > 0 && port <= total_ports)	// Respond to request for ports 1-4 or 1-8 (stacking)
 	{
-		stats_size = sizeof(struct ofp10_port_stats);
-		len = sizeof(struct ofp10_stats_reply) + stats_size;
+		// Check if port is NOT native
+		if(!(NativePortMatrix & (1<<(port-1))))
+		{
+			stats_size = sizeof(struct ofp10_port_stats);
+			len = sizeof(struct ofp10_stats_reply) + stats_size;
 
-		reply.header.version = OF_Version;
-		reply.header.type = OFPT10_STATS_REPLY;
-		reply.header.length = htons(len);
-		reply.header.xid = msg->header.xid;
-		reply.type = htons(OFPST_PORT);
-		reply.flags = 0;
+			reply.header.version = OF_Version;
+			reply.header.type = OFPT10_STATS_REPLY;
+			reply.header.length = htons(len);
+			reply.header.xid = msg->header.xid;
+			reply.type = htons(OFPST_PORT);
+			reply.flags = 0;
 
-		zodiac_port_stats.port_no = htons(port);
-		zodiac_port_stats.rx_packets = htonll(phys10_port_stats[port-1].rx_packets);
-		zodiac_port_stats.tx_packets = htonll(phys10_port_stats[port-1].tx_packets);
-		zodiac_port_stats.rx_bytes = htonll(phys10_port_stats[port-1].rx_bytes);
-		zodiac_port_stats.tx_bytes = htonll(phys10_port_stats[port-1].tx_bytes);
-		zodiac_port_stats.rx_crc_err = htonll(phys10_port_stats[port-1].rx_crc_err);
-		zodiac_port_stats.rx_dropped = htonll(phys10_port_stats[port-1].rx_dropped);
-		zodiac_port_stats.tx_dropped = htonll(phys10_port_stats[port-1].tx_dropped);
-		zodiac_port_stats.rx_frame_err = 0;
-		zodiac_port_stats.rx_over_err = 0;
-		zodiac_port_stats.tx_errors = 0;
-		zodiac_port_stats.rx_errors = 0;
-		zodiac_port_stats.collisions = 0;
+			zodiac_port_stats.port_no = htons(port);
+			zodiac_port_stats.rx_packets = htonll(phys10_port_stats[port-1].rx_packets);
+			zodiac_port_stats.tx_packets = htonll(phys10_port_stats[port-1].tx_packets);
+			zodiac_port_stats.rx_bytes = htonll(phys10_port_stats[port-1].rx_bytes);
+			zodiac_port_stats.tx_bytes = htonll(phys10_port_stats[port-1].tx_bytes);
+			zodiac_port_stats.rx_crc_err = htonll(phys10_port_stats[port-1].rx_crc_err);
+			zodiac_port_stats.rx_dropped = htonll(phys10_port_stats[port-1].rx_dropped);
+			zodiac_port_stats.tx_dropped = htonll(phys10_port_stats[port-1].tx_dropped);
+			zodiac_port_stats.rx_frame_err = 0;
+			zodiac_port_stats.rx_over_err = 0;
+			zodiac_port_stats.tx_errors = 0;
+			zodiac_port_stats.rx_errors = 0;
+			zodiac_port_stats.collisions = 0;
 
-		memcpy(shared_buffer, &reply, sizeof(struct ofp10_stats_reply));
-		memcpy(shared_buffer + sizeof(struct ofp10_stats_reply), &zodiac_port_stats, stats_size);
+			memcpy(shared_buffer, &reply, sizeof(struct ofp10_stats_reply));
+			memcpy(shared_buffer + sizeof(struct ofp10_stats_reply), &zodiac_port_stats, stats_size);
+		}
+		else
+		{
+			TRACE("openflow_10.c: requested port is out of range");
+			of10_error(buffer, OFPET10_BAD_REQUEST, OFPBRC10_BAD_STAT);
+		}
+	}
+	else
+	{
+		TRACE("openflow_10.c: requested port is out of range");
+		of10_error(buffer, OFPET10_BAD_REQUEST, OFPBRC10_BAD_STAT);
 	}
 	sendtcp(&shared_buffer, len);
 	return;
