@@ -1155,10 +1155,17 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 				zodiac_port_stats.rx_errors = 0;
 				zodiac_port_stats.collisions = 0;
 
-				// Write port stats to buffer
-				memcpy(buffer, &zodiac_port_stats, sizeof(struct ofp13_port_stats));
-				// Increment buffer pointer
-				buffer += sizeof(struct ofp13_port_stats);
+				if((buffer + sizeof(struct ofp13_port_stats)) < (shared_buffer + SHARED_BUFFER_LEN))
+				{
+					// Write port stats to buffer
+					memcpy(buffer, &zodiac_port_stats, sizeof(struct ofp13_port_stats));
+					// Increment buffer pointer
+					buffer += sizeof(struct ofp13_port_stats);
+				}
+				else
+				{
+					TRACE("openflow_13.c: unable to write port stats to shared buffer");
+				}
 			}
 		}
 	}
