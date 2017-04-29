@@ -588,8 +588,13 @@ void task_switch(struct netif *netif)
 				spi_packet = &shared_buffer;
 				spi_packet->premable = SPI_PACKET_PREAMBLE;
 				spi_packet->ul_rcv_size = ul_rcv_size;
+				spi_packet->spi_crc = 0;
+				for(int x = 0;x<ul_rcv_size;x++)
+				{
+					spi_packet->spi_crc += gs_uc_eth_buffer[x];
+				}
 				spi_packet->tag = tag + 4;
-				spi_packet->spi_size = 9 + ul_rcv_size;
+				spi_packet->spi_size = 11 + ul_rcv_size;
 				memcpy(&spi_packet->pkt_buffer, &gs_uc_eth_buffer, ul_rcv_size);
 				pending_spi_command = SPI_SEND_PKT;	// We are waiting to forward the packet
 				spi_slave_send_size = spi_packet->spi_size;

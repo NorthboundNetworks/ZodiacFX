@@ -241,10 +241,13 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 	TRACE("stacking.c: Sending packet to slave (%d bytes for port %d)", ul_size, port);
 	// Write preamble
 	spi_write(SPI_MASTER_BASE, 0xcd, 0, 0);
+	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	for(int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, 0xcd, 0, 0);
+	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	for(int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, port, 0, 0);
+	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	for(int x = 0;x<SPI_SEND_WAIT;x++);
 	
 	for (int i = 0; i < ul_size; i++) {
@@ -255,8 +258,10 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 	// Write end bytes
 	for(int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, 0xde, 0, 0);
+	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	for(int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, 0xef, 0, 0);
+	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	return;
 }
 
@@ -270,6 +275,7 @@ void MasterStackRcv(void)
 	uint8_t uc_pcs;
 	int spi_count = 0;
 	uint16_t spi_read_size;
+	uint32_t spi_crc_rcv;
 
 	for (int i = 0; i<6;i++)
 	{
@@ -323,10 +329,22 @@ void MasterStackRcv(void)
 			phys13_port_stats[7].rx_bytes += spi_p_stats.rx_bytes[3];
 		}
 	}
-	else if (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)		// Stats message
+	else if (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)		// packet
 	{
 		TRACE("stacking.c: %d bytes of packet data received from slave", spi_count);
+		spi_crc_rcv = 0;
 		spi_packet = &shared_buffer;
+		if (spi_packet->ul_rcv_size > GMAC_FRAME_LENTGH_MAX) return;	// Packet size is corrupt
+		for(int x = 0;x<spi_packet->ul_rcv_size;x++)
+		{
+			spi_crc_rcv += spi_packet->pkt_buffer[x];
+		}
+		// Make sure we received the entire packet
+		if (spi_packet->spi_crc != spi_crc_rcv)
+		{
+			TRACE("stacking.c: Corrupt slave packet CRC mismatch %x != %x",spi_packet->spi_crc ,spi_crc_rcv);
+			return;
+		}
 		memcpy(gs_uc_eth_buffer, &spi_packet->pkt_buffer, GMAC_FRAME_LENTGH_MAX);
 		phys10_port_stats[spi_packet->tag-1].rx_packets++;
 		phys13_port_stats[spi_packet->tag-1].rx_packets++;
@@ -335,7 +353,6 @@ void MasterStackRcv(void)
 	{
 		TRACE("stacking.c: %d bytes of unknown data received from slave", spi_count);
 	}
-	
 	return;
 }
 	
@@ -426,7 +443,6 @@ void SPI_Handler(void)
 	if(pending_spi_command == SPI_RECEIVE)
 	{
 		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
-		//printf("stacking.c: SPI data received %0x\r\n", data);
 		// Check if this is an end marker
 		if (data == 0xde)
 		{

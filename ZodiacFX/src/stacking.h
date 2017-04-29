@@ -42,7 +42,7 @@
 #define SPI_RCV_PREAMBLE	4
 #define SPI_STATS_PREAMBLE		0xABAB
 #define SPI_PACKET_PREAMBLE		0xBCBC
-#define SPI_SEND_WAIT		200
+#define SPI_SEND_WAIT		500
 
 struct spi_port_stats {
 	uint16_t premable;
@@ -59,6 +59,7 @@ struct spi_packet {
 	uint16_t premable;
 	uint16_t spi_size;
 	uint32_t ul_rcv_size;
+	uint16_t spi_crc;
 	uint8_t tag;
 	uint8_t pkt_buffer[GMAC_FRAME_LENTGH_MAX];
 };	
