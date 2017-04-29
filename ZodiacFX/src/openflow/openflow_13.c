@@ -89,7 +89,7 @@ int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
 int multi_meter_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_meter_features_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
-void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason, int flow);
+void packet_in13(uint8_t *buffer, uint16_t ul_size, uint32_t port, uint8_t reason, int flow);
 void packet_out13(struct ofp_header *msg);
 void meter_mod13(struct ofp_header *msg);
 void meter_add13(struct ofp_header *msg);
@@ -1889,7 +1889,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 *	@param reason - reason for the packet in.
 *
 */
-void packet_in13(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason, int flow)
+void packet_in13(uint8_t *buffer, uint16_t ul_size, uint32_t port, uint8_t reason, int flow)
 {
 	TRACE("openflow_13.c: Packet in from packet received on port %d reason = %d (%d bytes)", port, reason, ul_size);
 	uint16_t size = 0;
@@ -1944,6 +1944,14 @@ void packet_out13(struct ofp_header *msg)
 	if (ntohs(act_hdr->type) != OFPAT13_OUTPUT) return;
 	struct ofp13_action_output *act_out = act_hdr;
 	uint32_t outPort = htonl(act_out->port);
+
+	if (outPort == OFPP13_TABLE)
+	{
+		TRACE("openflow_13.c: Packet out TABLE (port %d)", inPort);
+		nnOF13_tablelookup(ptr, &size, inPort);
+		return;
+	}
+
 	if (outPort == OFPP13_FLOOD)
 	{
 		outPort = 7 - (1 << (inPort-1));	// Need to fix this, may also send out the Non-OpenFlow port
