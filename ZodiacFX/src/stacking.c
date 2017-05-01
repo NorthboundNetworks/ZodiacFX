@@ -400,10 +400,11 @@ void SPI_Handler(void)
 		return;	
 	}
 
-	if(pending_spi_command == SPI_SEND_PKT)	// We send the master our port stats
+	if(pending_spi_command == SPI_SEND_PKT)	// Send slave packet to master
 	{
 		if (spi_slave_send_count <= 0)
 		{
+			// Flush out last two bytes
 			if (spi_dummy_bytes < 2)
 			{
 				spi_write(SPI_SLAVE_BASE, 0xff, 0, 0);
@@ -414,8 +415,14 @@ void SPI_Handler(void)
 			ioport_set_pin_level(SPI_IRQ1, false);	// turn off the IRQ because we are done
 			spi_dummy_bytes = 0;
 		} else {
-			spi_write(SPI_SLAVE_BASE, shared_buffer[spi_slave_send_size - spi_slave_send_count], 0, 0);
-			spi_slave_send_count--;
+			while(spi_slave_send_count > 0)
+			{
+				// CHECK IF INTERRUPTS NEED TO BE DISABLED
+				spi_write(SPI_SLAVE_BASE, shared_buffer[spi_slave_send_size - spi_slave_send_count], 0, 0);
+				spi_slave_send_count--;
+				// Wait for master to send the next byte
+				while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);
+			}
 		}
 		return;
 	}
