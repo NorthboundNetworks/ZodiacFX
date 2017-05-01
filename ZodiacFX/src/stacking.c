@@ -34,6 +34,7 @@
 #include "switch.h"
 #include "lwip/def.h"
 #include "openflow/openflow.h"
+#include "timers.h"
 
 /* SPI clock setting (Hz). */
 static uint32_t gs_ul_spi_clock = 2000000;
@@ -239,30 +240,32 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 	}
 	
 	TRACE("stacking.c: Sending packet to slave (%d bytes for port %d)", ul_size, port);
+	uint32_t snd_time = sys_get_ms();
 	// Write preamble
 	spi_write(SPI_MASTER_BASE, 0xcd, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
-	for(int x = 0;x<SPI_SEND_WAIT;x++);
+	for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, 0xcd, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
-	for(int x = 0;x<SPI_SEND_WAIT;x++);
+	for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 	// Write port
 	spi_write(SPI_MASTER_BASE, port, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
-	for(int x = 0;x<SPI_SEND_WAIT;x++);
+	for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 	
 	for (int i = 0; i < ul_size; i++) {
-		for(int x = 0;x<SPI_SEND_WAIT;x++);
+		for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 		spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 0);
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	}
 	// Write end bytes
-	for(int x = 0;x<SPI_SEND_WAIT;x++);
+	for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, 0xde, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
-	for(int x = 0;x<SPI_SEND_WAIT;x++);
+	for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, 0xef, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
+	TRACE("stacking.c: ------- ------- Master -> Slave %d", sys_get_ms() - snd_time);
 	return;
 }
 
@@ -287,10 +290,11 @@ void MasterStackRcv(void)
 	
 	if (shared_buffer[0] != 0xAB && shared_buffer[0] != 0xBC) return;
 	spi_count = 4;
-	spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);	
+	spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
+	uint32_t rcv_time = sys_get_ms();
 	while(spi_count < spi_read_size)
 	{
-		for(int x = 0;x<SPI_SEND_WAIT;x++);
+		for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 		spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 		spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
@@ -366,6 +370,7 @@ void MasterStackRcv(void)
 void SPI_Handler(void)
 {
 	static uint16_t data;
+	static uint32_t receive_timeout = 0;	// Timeout for SPI data receive (MASTER->SLAVE)
 	uint8_t uc_pcs;
 	
 	if (slave_ready == false)		// Is this the first data we have received?
@@ -442,6 +447,7 @@ void SPI_Handler(void)
 		if (data == 0xcd) 
 		{
 			pending_spi_command = SPI_RECEIVE;
+			receive_timeout = sys_get_ms();
 			memset(&shared_buffer,0,sizeof(shared_buffer));
 		} else {
 			pending_spi_command = SPI_SEND_CLEAR;
