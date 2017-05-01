@@ -246,6 +246,7 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 	spi_write(SPI_MASTER_BASE, 0xcd, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	for(int x = 0;x<SPI_SEND_WAIT;x++);
+	// Write port
 	spi_write(SPI_MASTER_BASE, port, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	for(int x = 0;x<SPI_SEND_WAIT;x++);
@@ -295,6 +296,7 @@ void MasterStackRcv(void)
 		spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
 		spi_count++;
 	}
+	TRACE("stacking.c: ------- ------- Slave -> Master %d", sys_get_ms() - rcv_time);
 	
 	if (shared_buffer[0] == 0xAB && shared_buffer[1] == 0xAB)		// Stats message
 	{
@@ -417,7 +419,6 @@ void SPI_Handler(void)
 		} else {
 			while(spi_slave_send_count > 0)
 			{
-				// CHECK IF INTERRUPTS NEED TO BE DISABLED
 				spi_write(SPI_SLAVE_BASE, shared_buffer[spi_slave_send_size - spi_slave_send_count], 0, 0);
 				spi_slave_send_count--;
 				// Wait for master to send the next byte
@@ -431,6 +432,7 @@ void SPI_Handler(void)
 	{
 		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
 		if (data == 0xcd) pending_spi_command = SPI_RCV_PREAMBLE;
+		// START PROCESSING
 		return;
 	}
 	

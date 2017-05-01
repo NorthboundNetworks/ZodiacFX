@@ -91,6 +91,8 @@ static bool restart_required = false;		// Track if any configuration changes are
 static bool file_upload = false;	// Multi-part firmware file upload flag
 static bool post_pending = false;
 
+extern bool stackenabled;
+
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
 void http_send(char *buffer, struct tcp_pcb *pcb, bool out);

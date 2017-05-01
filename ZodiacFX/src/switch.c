@@ -580,6 +580,7 @@ void task_switch(struct netif *netif)
 		{
 			if (slave_ready == true && pending_spi_command == SPI_SEND_CLEAR)
 			{
+				// Prepare packet to send from SLAVE to MASTER
 				uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
 				uint8_t tag = *tail_tag + 1;
 				phys10_port_stats[tag-1].rx_packets++;
