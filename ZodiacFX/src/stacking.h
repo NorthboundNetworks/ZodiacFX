@@ -59,7 +59,7 @@ struct spi_packet {
 	uint16_t premable;
 	uint16_t spi_size;
 	uint32_t ul_rcv_size;
-	uint16_t spi_crc;
+	uint32_t spi_crc;
 	uint8_t tag;
 	uint8_t pkt_buffer[GMAC_FRAME_LENTGH_MAX];
 };	
