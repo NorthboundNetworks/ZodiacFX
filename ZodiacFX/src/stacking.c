@@ -291,11 +291,16 @@ void MasterStackRcv(void)
 	// Preamble must be 0xABAB or 0xBCBC
 	if (!((shared_buffer[0] == 0xAB && shared_buffer[1] == 0xAB) || (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)))
 	{
-		TRACE("stacking.c: ERROR - BAD SPI HEADER - PACKET DROPPED");
+		TRACE("stacking.c: ERROR - BAD SPI HEADER PREAMBLE - PACKET DROPPED");
 		return;
 	}
 	spi_count = 4;
 	spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
+	if(spi_read_size > 1600)
+	{
+		TRACE("stacking.c: ERROR - BAD SPI HEADER READ SIZE - PACKET DROPPED");
+		return;
+	}
 	uint32_t rcv_time = sys_get_ms();
 	while(spi_count < spi_read_size)
 	{
