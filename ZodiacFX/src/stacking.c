@@ -281,14 +281,19 @@ void MasterStackRcv(void)
 	uint16_t spi_read_size;
 	uint32_t spi_crc_rcv;
 
-	for (int i = 0; i<6;i++)
+	for (int i = 0; i<7;i++)
 	{
 		spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);		// Write 1 more byte to clean out buffer
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 		if (i > 2) spi_read(SPI_MASTER_BASE, &shared_buffer[i-3], &uc_pcs);		// skip for first 2 bytes
 	}
 	
-	if (shared_buffer[0] != 0xAB && shared_buffer[0] != 0xBC) return;
+	// Preamble must be 0xABAB or 0xBCBC
+	if (!((shared_buffer[0] == 0xAB && shared_buffer[1] == 0xAB) || (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)))
+	{
+		TRACE("stacking.c: ERROR - BAD SPI HEADER - PACKET DROPPED");
+		return;
+	}
 	spi_count = 4;
 	spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
 	uint32_t rcv_time = sys_get_ms();
