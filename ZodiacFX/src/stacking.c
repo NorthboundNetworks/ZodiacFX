@@ -304,11 +304,12 @@ void MasterStackRcv(void)
 	uint32_t rcv_time = sys_get_ms();
 	while(spi_count < spi_read_size)
 	{
-		for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
-		spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
-		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 		spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
+		//for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
+		spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
 		spi_count++;
+		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
+		//TRACE("%x", shared_buffer[spi_count]);
 	}
 	TRACE("stacking.c: ------- ------- Slave -> Master %d", sys_get_ms() - rcv_time);
 	
@@ -438,6 +439,7 @@ void SPI_Handler(void)
 				spi_slave_send_count--;
 				// Wait for master to send the next byte
 				while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);
+				spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
 			}
 		}
 		return;
