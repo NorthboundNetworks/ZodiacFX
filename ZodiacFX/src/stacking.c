@@ -72,7 +72,7 @@ struct spi_port_stats spi_p_stats;
 uint8_t spi_stats_rr = 0;
 uint8_t spi_stats_buffer[sizeof(struct spi_port_stats)];
 struct spi_packet *spi_packet;
-bool end_receive;
+bool end_check;
 uint8_t spi_receive_port = 0;
 uint16_t spi_receive_count;
 
@@ -461,20 +461,34 @@ void SPI_Handler(void)
 		// Check if this is an end marker
 		if (data == 0xde)
 		{
-			end_receive = true;
-		} else if (data == 0xef && end_receive == true)
-		{
-			if (spi_receive_port == 255)
-			{
-				gmac_write(&shared_buffer, spi_receive_count, OFPP13_FLOOD, 0);
-			} else{	
-				gmac_write(&shared_buffer, spi_receive_count, spi_receive_port-4, 0);
-			}
-			pending_spi_command = SPI_SEND_CLEAR;
-			spi_receive_port = 0;
-			end_receive = false;
-			spi_receive_count =0;
+			end_check = true;
 			return;
+		}
+		else if (end_check == true)
+		{
+			if(data == 0xef)
+			{
+				if (spi_receive_port == 255)
+				{
+					gmac_write(&shared_buffer, spi_receive_count, OFPP13_FLOOD, 0);
+				} else{	
+					gmac_write(&shared_buffer, spi_receive_count, spi_receive_port-4, 0);
+				}
+				pending_spi_command = SPI_SEND_CLEAR;
+				spi_receive_port = 0;
+				end_check = false;
+				spi_receive_count =0;
+				return;
+			}
+			else
+			{
+				shared_buffer[spi_receive_count] = 0xde;
+				spi_receive_count++;
+				shared_buffer[spi_receive_count] = data;
+				spi_receive_count++;
+				end_check = false;
+				return;
+			}
 		}
 				
 		if (spi_receive_port == 0) 
