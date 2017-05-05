@@ -49,7 +49,7 @@ static uint32_t gs_ul_spi_clock = 2000000;
 /* Delay before SPCK. */
 #define SPI_DLYBS 0x40
 /* Delay between consecutive transfers. */
-#define SPI_DLYBCT 0x10
+#define SPI_DLYBCT 0x10//0x10
 
 // Global variables
 extern uint8_t last_port_status[8];
@@ -348,7 +348,7 @@ void MasterStackRcv(void)
 	uint16_t spi_read_size;
 	uint32_t spi_crc_rcv;
 
-// TEST ________________________________________________________________
+	// ***** Modified SLAVE -> MASTER receive *****
 	spi_read_size = 1600;
 	// ignore dummy bytes
 	spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
@@ -379,8 +379,6 @@ void MasterStackRcv(void)
 			}
 		spi_count++;
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
-		//TRACE("%x", shared_buffer[spi_count]);
-
 	}
 	TRACE("stacking.c: ------- ------- Slave -> Master %d", sys_get_ms() - rcv_time);
 	
@@ -395,7 +393,11 @@ void MasterStackRcv(void)
 	{
 		spi_crc_rcv = 0;
 		spi_packet = &shared_buffer;
-		if (spi_packet->ul_rcv_size > GMAC_FRAME_LENTGH_MAX) return;	// Packet size is corrupt
+		if (spi_packet->ul_rcv_size > GMAC_FRAME_LENTGH_MAX)
+		{
+			TRACE("stacking.c: ERROR - BAD PACKET SIZE");
+			return;	// Packet size is corrupt
+		}
 		for(int x = 0;x<spi_packet->ul_rcv_size;x++)
 		{
 			spi_crc_rcv += spi_packet->pkt_buffer[x];
@@ -414,7 +416,9 @@ void MasterStackRcv(void)
 		return;
 	}
 	return;
-// END TEST ________________________________________________________________
+	// ***** END *****
+
+	// ***** Previous implementation below - port stats needs to be re-implemented
 
 	//for (int i = 0; i<7;i++)
 	//{
@@ -560,7 +564,7 @@ void SPI_Handler(void)
 			// Flush out last two bytes
 			if (spi_dummy_bytes < 2)
 			{
-				spi_write(SPI_SLAVE_BASE, 0xff, 0, 0);
+				spi_write(SPI_SLAVE_BASE, 0xff, 0, 0); // *****
 				spi_dummy_bytes++;
 				return;
 			}
