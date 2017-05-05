@@ -43,6 +43,7 @@
 #define SPI_STATS_PREAMBLE		0xABAB
 #define SPI_PACKET_PREAMBLE		0xBCBC
 #define SPI_SEND_WAIT		500
+#define SPI_HEADER_SIZE	13
 
 struct spi_port_stats {
 	uint16_t premable;
