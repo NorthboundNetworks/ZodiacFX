@@ -243,8 +243,9 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 	uint8_t uc_pcs;
 	static uint16_t data;
 	uint8_t *p_buffer;
-	p_buffer = p_uc_data;
 	uint8_t outport;
+	
+	uint8_t spi_head_buffer[SPI_HEADER_SIZE] = {0};
 	
 	if (port < 255)
 	{
@@ -263,6 +264,48 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 		if (port_status[7] == 1) phys13_port_stats[7].tx_packets++;
 	}
 	
+	// ***** Prepare packet to send from MASTER to SLAVE *****
+						// ***** TODO: check if packet statistics need to be updated at this point *****
+						//phys10_port_stats[tag-1].rx_packets++;
+						//phys13_port_stats[tag-1].rx_packets++;
+	// Prepare header (shared_buffer already contains the packet data)
+	spi_packet = &spi_head_buffer;
+	spi_packet->premable = SPI_PACKET_PREAMBLE;
+	spi_packet->ul_rcv_size = ul_size;
+	spi_packet->spi_crc = 0;
+	for(int x = 0;x<ul_size;x++)
+	{
+		spi_packet->spi_crc += p_uc_data[x];
+	}
+	spi_packet->tag = port;
+	spi_packet->spi_size = SPI_HEADER_SIZE + ul_size;
+	
+	TRACE("stacking.c: Sending packet to slave (%d bytes for port %d)", ul_size, port);
+	TRACE("stacking.c: ------- ------- Master -> Slave");
+	
+	// Send a dummy byte
+	//spi_write(SPI_MASTER_BASE, 0xff, 0, 0);
+	
+	// Send the SPI packet header
+	for(uint16_t ct=0; ct<SPI_HEADER_SIZE; ct++)
+	{
+		spi_read(SPI_MASTER_BASE, &data, &uc_pcs);
+		spi_write(SPI_MASTER_BASE, spi_head_buffer[ct], 0, 0);
+		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
+	}
+	// Send the SPI packet body
+	for(uint16_t ct=0; ct<ul_size; ct++)
+	{
+		spi_read(SPI_MASTER_BASE, &data, &uc_pcs);
+		spi_write(SPI_MASTER_BASE, p_uc_data[ct], 0, 0);
+		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
+	}
+	
+	return;
+	
+	// ***** END *****
+	
+	// ***** Previous MASTER -> SLAVE method - this will never run in the current implementation *****
 	TRACE("stacking.c: Sending packet to slave (%d bytes for port %d)", ul_size, port);
 	uint32_t snd_time = sys_get_ms();
 	// Write preamble
