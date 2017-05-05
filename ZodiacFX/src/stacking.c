@@ -586,71 +586,81 @@ void SPI_Handler(void)
 
 	if(pending_spi_command == SPI_SEND_CLEAR)
 	{
-		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
-		if (data == 0xcd) pending_spi_command = SPI_RCV_PREAMBLE;
-		// START PROCESSING
-		return;
-	}
-	
-	if(pending_spi_command == SPI_RCV_PREAMBLE)
-	{
-		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
-		if (data == 0xcd) 
-		{
-			pending_spi_command = SPI_RECEIVE;
-			receive_timeout = sys_get_ms();
-			memset(&shared_buffer,0,sizeof(shared_buffer));
-		} else {
-			pending_spi_command = SPI_SEND_CLEAR;
-		}
-		return;
-	}
+		// ***** Modified MASTER -> SLAVE receiver *****
+		uint16_t spi_count = 0;
+		uint16_t spi_read_size = 1600;
 		
-	if(pending_spi_command == SPI_RECEIVE)
-	{
+		// Discard dummy byte (attempts to prevent unwanted bytes before first proper read)
+		spi_write(SPI_SLAVE_BASE, 0xbb, 0, 0);
 		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
-		// Check if this is an end marker
-		if (data == 0xde)
+		spi_write(SPI_SLAVE_BASE, 0xbb, 0, 0);
+		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
+		
+		// Testing - additional preamble read detection (i.e. detect 0xBC 0xBC SPI header preamble before main loop)
+		//spi_read(SPI_SLAVE_BASE, &shared_buffer[spi_count], &uc_pcs);
+		//spi_write(SPI_SLAVE_BASE, 0xbb, 0, 0);
+		//spi_count++;
+		//spi_read(SPI_SLAVE_BASE, &shared_buffer[spi_count], &uc_pcs);
+		//spi_write(SPI_SLAVE_BASE, 0xbb, 0, 0);
+		//spi_count++;
+		
+		while(spi_count < spi_read_size)
 		{
-			end_check = true;
-			return;
-		}
-		else if (end_check == true)
-		{
-			if(data == 0xef)
+			spi_write(SPI_SLAVE_BASE, 0xbb, 0, 0);
+			while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);
+			spi_read(SPI_SLAVE_BASE, &shared_buffer[spi_count], &uc_pcs);
+			// (processing may cause timing problems - none found during testing)
+			if(spi_read_size == 1600)
 			{
-				if (spi_receive_port == 255)
+				if(spi_count == 3)
 				{
-					gmac_write(&shared_buffer, spi_receive_count, OFPP13_FLOOD, 0);
-				} else{	
-					gmac_write(&shared_buffer, spi_receive_count, spi_receive_port-4, 0);
+					spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
+					if(spi_read_size > 1600)
+					{
+						spi_read_size = 1600;
+					}
 				}
-				pending_spi_command = SPI_SEND_CLEAR;
-				spi_receive_port = 0;
-				end_check = false;
-				spi_receive_count =0;
-				return;
 			}
-			else
-			{
-				shared_buffer[spi_receive_count] = 0xde;
-				spi_receive_count++;
-				shared_buffer[spi_receive_count] = data;
-				spi_receive_count++;
-				end_check = false;
-				return;
-			}
+			spi_count++;
 		}
-				
-		if (spi_receive_port == 0) 
+		
+		uint32_t spi_crc_rcv = 0;
+		spi_packet = &shared_buffer;
+		
+		// Check that the preamble is as expected
+		if (!(shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC))
 		{
-			spi_receive_port = data;
 			return;
 		}
 		
-		shared_buffer[spi_receive_count] = data;
-		spi_receive_count++;
-		//spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
+		// Check against maximum packet size
+		if (spi_packet->ul_rcv_size > GMAC_FRAME_LENTGH_MAX)
+		{
+			return;
+		}
+		
+		// Calculated CRC of the received data
+		for(uint16_t ct=0; ct<spi_packet->ul_rcv_size; ct++)
+		{
+			spi_crc_rcv += spi_packet->pkt_buffer[ct];
+		}
+		
+		// Check calculated CRC against received CRC
+		if (spi_packet->spi_crc != spi_crc_rcv)
+		{
+			return;
+		}
+		
+		if (spi_packet->tag == 255)
+		{
+			gmac_write(&spi_packet->pkt_buffer, spi_packet->ul_rcv_size, OFPP13_FLOOD, 0);
+		}
+		else if (spi_packet->tag <= 8)
+		{
+			gmac_write(&spi_packet->pkt_buffer, spi_packet->ul_rcv_size, spi_packet->tag-4, 0);
+		}
+		return;
+
+		// ***** END *****
 	}
-			
 }
