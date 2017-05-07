@@ -66,12 +66,6 @@ extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
 extern uint8_t total_ports;
 
-// ***** Support for SPI test pattern *****
-uint8_t test_pattern(void);
-extern void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port);
-extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
-// ***** END *****
-
 // Local Variables
 uint8_t timer_alt;
 static uint16_t VLAN_VID_MASK = 0x0fff;
@@ -154,10 +148,6 @@ void nnOF_timer(void)
 		}
 		timer_alt = 2;
 	} else if (timer_alt == 2){
-			// ***** Generate SPI MASTER -> SLAVE test pattern *****
-				test_pattern();
-				MasterStackSend(&shared_buffer, 1400, 8);
-			// ***** END *****
 		flow_timeouts();
 		timer_alt = 0;
 	}
@@ -1451,15 +1441,3 @@ uint32_t get_bound_flows(uint32_t id)
 	
 	return count;
 }
-
-// ***** Generate SPI test pattern *****
-uint8_t test_pattern(void)
-{
-	uint8_t pattern = 0;
-	for(uint16_t i=0;i<1400;i++)
-	{
-		shared_buffer[i] = pattern++;
-	}
-	return;
-}
-// ***** END *****

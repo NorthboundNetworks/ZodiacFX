@@ -350,7 +350,7 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, int port, int inport)
 		if(masterselect == false)	// If we are the master then send to the slave
 		{
 			TRACE("switch13.c: Sending packet to slave to send out port %d (%d bytes)", port, ul_size);
-			MasterStackSend(p_buffer, ul_size, port);	// Send it to slave
+			MasterStackSend(p_buffer, ul_size, port);	// Send it slave
 			return;
 		}
 		// If slave then write to port
@@ -580,7 +580,6 @@ void task_switch(struct netif *netif)
 		{
 			if (slave_ready == true && pending_spi_command == SPI_SEND_CLEAR)
 			{
-				// Prepare packet to send from SLAVE to MASTER
 				uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
 				uint8_t tag = *tail_tag + 1;
 				phys10_port_stats[tag-1].rx_packets++;
@@ -595,7 +594,7 @@ void task_switch(struct netif *netif)
 					spi_packet->spi_crc += gs_uc_eth_buffer[x];
 				}
 				spi_packet->tag = tag + 4;
-				spi_packet->spi_size = SPI_HEADER_SIZE + ul_rcv_size;
+				spi_packet->spi_size = 11 + ul_rcv_size;
 				memcpy(&spi_packet->pkt_buffer, &gs_uc_eth_buffer, ul_rcv_size);
 				pending_spi_command = SPI_SEND_PKT;	// We are waiting to forward the packet
 				spi_slave_send_size = spi_packet->spi_size;
