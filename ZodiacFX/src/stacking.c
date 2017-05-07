@@ -34,6 +34,7 @@
 #include "switch.h"
 #include "lwip/def.h"
 #include "openflow/openflow.h"
+#include "timers.h"
 
 /* SPI clock setting (Hz). */
 static uint32_t gs_ul_spi_clock = 2000000;
@@ -48,7 +49,7 @@ static uint32_t gs_ul_spi_clock = 2000000;
 /* Delay before SPCK. */
 #define SPI_DLYBS 0x40
 /* Delay between consecutive transfers. */
-#define SPI_DLYBCT 0x10
+#define SPI_DLYBCT 0x10//0x10
 
 // Global variables
 extern uint8_t last_port_status[8];
@@ -71,7 +72,7 @@ struct spi_port_stats spi_p_stats;
 uint8_t spi_stats_rr = 0;
 uint8_t spi_stats_buffer[sizeof(struct spi_port_stats)];
 struct spi_packet *spi_packet;
-bool end_receive;
+bool end_check;
 uint8_t spi_receive_port = 0;
 uint16_t spi_receive_count;
 
@@ -158,6 +159,30 @@ void Slave_timer(void)
 	{
 		spi_port_status();
 		timer_alt = 2;
+			// ***** Generate SLAVE -> MASTER test pattern *****
+				//if (slave_ready == true && pending_spi_command == SPI_SEND_CLEAR)
+				//{
+					//// PREPARE TEST PACKET from SLAVE to MASTER
+					//spi_packet = &shared_buffer;
+					//spi_packet->premable = SPI_PACKET_PREAMBLE;
+					//spi_packet->ul_rcv_size = 1400;
+					//spi_packet->spi_crc = 0;
+					//uint8_t*ind_ptr = &spi_packet->pkt_buffer;
+					//uint8_t walk = 0;
+					//for(uint16_t x = 0;x<1400;x++)
+					//{
+						//ind_ptr[x] = walk;
+						//spi_packet->spi_crc += walk;
+						//walk++;
+					//}
+					//spi_packet->tag = 2 + 4;
+					//spi_packet->spi_size = SPI_HEADER_SIZE + 1400;
+					//pending_spi_command = SPI_SEND_PKT;	// We are waiting to forward the packet
+					//spi_slave_send_size = spi_packet->spi_size;
+					//spi_slave_send_count = spi_slave_send_size;
+					//ioport_set_pin_level(SPI_IRQ1, true);	// Set the IRQ to signal the slave wants to send something
+				//}
+			// ***** END *****
 		return;
 	} else if (timer_alt == 2)
 	{
@@ -218,8 +243,9 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 	uint8_t uc_pcs;
 	static uint16_t data;
 	uint8_t *p_buffer;
-	p_buffer = p_uc_data;
 	uint8_t outport;
+	
+	uint8_t spi_head_buffer[SPI_HEADER_SIZE] = {0};
 	
 	if (port < 255)
 	{
@@ -238,30 +264,75 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 		if (port_status[7] == 1) phys13_port_stats[7].tx_packets++;
 	}
 	
+	// ***** Prepare packet to send from MASTER to SLAVE *****
+						// ***** TODO: check if packet statistics need to be updated at this point *****
+						//phys10_port_stats[tag-1].rx_packets++;
+						//phys13_port_stats[tag-1].rx_packets++;
+	// Prepare header (shared_buffer already contains the packet data)
+	spi_packet = &spi_head_buffer;
+	spi_packet->premable = SPI_PACKET_PREAMBLE;
+	spi_packet->ul_rcv_size = ul_size;
+	spi_packet->spi_crc = 0;
+	for(int x = 0;x<ul_size;x++)
+	{
+		spi_packet->spi_crc += p_uc_data[x];
+	}
+	spi_packet->tag = port;
+	spi_packet->spi_size = SPI_HEADER_SIZE + ul_size;
+	
 	TRACE("stacking.c: Sending packet to slave (%d bytes for port %d)", ul_size, port);
+	TRACE("stacking.c: ------- ------- Master -> Slave");
+	
+	// Send a dummy byte
+	//spi_write(SPI_MASTER_BASE, 0xff, 0, 0);
+	
+	// Send the SPI packet header
+	for(uint16_t ct=0; ct<SPI_HEADER_SIZE; ct++)
+	{
+		spi_read(SPI_MASTER_BASE, &data, &uc_pcs);
+		spi_write(SPI_MASTER_BASE, spi_head_buffer[ct], 0, 0);
+		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
+	}
+	// Send the SPI packet body
+	for(uint16_t ct=0; ct<ul_size; ct++)
+	{
+		spi_read(SPI_MASTER_BASE, &data, &uc_pcs);
+		spi_write(SPI_MASTER_BASE, p_uc_data[ct], 0, 0);
+		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
+	}
+	
+	return;
+	
+	// ***** END *****
+	
+	// ***** Previous MASTER -> SLAVE method - this will never run in the current implementation *****
+	TRACE("stacking.c: Sending packet to slave (%d bytes for port %d)", ul_size, port);
+	uint32_t snd_time = sys_get_ms();
 	// Write preamble
 	spi_write(SPI_MASTER_BASE, 0xcd, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
-	for(int x = 0;x<SPI_SEND_WAIT;x++);
+	//for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, 0xcd, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
-	for(int x = 0;x<SPI_SEND_WAIT;x++);
+	//for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
+	// Write port
 	spi_write(SPI_MASTER_BASE, port, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
-	for(int x = 0;x<SPI_SEND_WAIT;x++);
+	//for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 	
 	for (int i = 0; i < ul_size; i++) {
-		for(int x = 0;x<SPI_SEND_WAIT;x++);
+		//for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 		spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 0);
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	}
 	// Write end bytes
-	for(int x = 0;x<SPI_SEND_WAIT;x++);
+	//for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, 0xde, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
-	for(int x = 0;x<SPI_SEND_WAIT;x++);
+	//for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 	spi_write(SPI_MASTER_BASE, 0xef, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
+	TRACE("stacking.c: ------- ------- Master -> Slave %d", sys_get_ms() - snd_time);
 	return;
 }
 
@@ -277,64 +348,56 @@ void MasterStackRcv(void)
 	uint16_t spi_read_size;
 	uint32_t spi_crc_rcv;
 
-	for (int i = 0; i<6;i++)
-	{
-		spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);		// Write 1 more byte to clean out buffer
-		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
-		if (i > 2) spi_read(SPI_MASTER_BASE, &shared_buffer[i-3], &uc_pcs);		// skip for first 2 bytes
-	}
+	// ***** Modified SLAVE -> MASTER receive *****
+	spi_read_size = 1600;
+	// ignore dummy bytes
+	spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
+	spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
+	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
+	spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
+	spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
+	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	
-	if (shared_buffer[0] != 0xAB && shared_buffer[0] != 0xBC) return;
-	spi_count = 4;
-	spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);	
+	uint32_t rcv_time = sys_get_ms();
+	
 	while(spi_count < spi_read_size)
 	{
-		for(int x = 0;x<SPI_SEND_WAIT;x++);
-		spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
-		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 		spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
+		//for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
+		spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
+			// MAY CAUSE TIMING PROBLEMS
+			if(spi_read_size == 1600)
+			{
+				if(spi_count == 3)
+				{
+					spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
+					if(spi_read_size > 1600)
+					{
+						spi_read_size = 1600;
+					}
+				}
+			}
 		spi_count++;
+		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
+	}
+	TRACE("stacking.c: ------- ------- Slave -> Master %d", sys_get_ms() - rcv_time);
+	
+	TRACE("stacking.c: MASTER received preamble - %x, %x", shared_buffer[0], shared_buffer[1]);
+	if (!((shared_buffer[0] == 0xAB && shared_buffer[1] == 0xAB) || (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)))
+	{
+		TRACE("stacking.c: ERROR - BAD SPI HEADER PREAMBLE");
+		return;
 	}
 	
-	if (shared_buffer[0] == 0xAB && shared_buffer[1] == 0xAB)		// Stats message
+	if (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)
 	{
-		TRACE("stacking.c: %d bytes of port stats data received from slave", spi_count);
-		memcpy(&spi_p_stats, &shared_buffer, sizeof(struct spi_port_stats));
-		port_status[4] = spi_p_stats.port_status[0];
-		port_status[5] = spi_p_stats.port_status[1];
-		port_status[6] = spi_p_stats.port_status[2];
-		port_status[7] = spi_p_stats.port_status[3];
-		
-		if (OF_Version == 1)
-		{
-			phys10_port_stats[4].tx_bytes += spi_p_stats.tx_bytes[0];
-			phys10_port_stats[4].rx_bytes += spi_p_stats.rx_bytes[0];
-			phys10_port_stats[5].tx_bytes += spi_p_stats.tx_bytes[1];
-			phys10_port_stats[5].rx_bytes += spi_p_stats.rx_bytes[1];
-			phys10_port_stats[6].tx_bytes += spi_p_stats.tx_bytes[2];
-			phys10_port_stats[6].rx_bytes += spi_p_stats.rx_bytes[2];
-			phys10_port_stats[7].tx_bytes += spi_p_stats.tx_bytes[3];
-			phys10_port_stats[7].rx_bytes += spi_p_stats.rx_bytes[3];
-		}
-
-		if (OF_Version == 4)
-		{
-			phys13_port_stats[4].tx_bytes += spi_p_stats.tx_bytes[0];
-			phys13_port_stats[4].rx_bytes += spi_p_stats.rx_bytes[0];
-			phys13_port_stats[5].tx_bytes += spi_p_stats.tx_bytes[1];
-			phys13_port_stats[5].rx_bytes += spi_p_stats.rx_bytes[1];
-			phys13_port_stats[6].tx_bytes += spi_p_stats.tx_bytes[2];
-			phys13_port_stats[6].rx_bytes += spi_p_stats.rx_bytes[2];
-			phys13_port_stats[7].tx_bytes += spi_p_stats.tx_bytes[3];
-			phys13_port_stats[7].rx_bytes += spi_p_stats.rx_bytes[3];
-		}
-	}
-	else if (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)		// packet
-	{
-		TRACE("stacking.c: %d bytes of packet data received from slave", spi_count);
 		spi_crc_rcv = 0;
 		spi_packet = &shared_buffer;
-		if (spi_packet->ul_rcv_size > GMAC_FRAME_LENTGH_MAX) return;	// Packet size is corrupt
+		if (spi_packet->ul_rcv_size > GMAC_FRAME_LENTGH_MAX)
+		{
+			TRACE("stacking.c: ERROR - BAD PACKET SIZE");
+			return;	// Packet size is corrupt
+		}
 		for(int x = 0;x<spi_packet->ul_rcv_size;x++)
 		{
 			spi_crc_rcv += spi_packet->pkt_buffer[x];
@@ -345,15 +408,108 @@ void MasterStackRcv(void)
 			TRACE("stacking.c: Corrupt slave packet CRC mismatch %x != %x",spi_packet->spi_crc ,spi_crc_rcv);
 			return;
 		}
+		TRACE("stacking.c: received packet (%d bytes)", spi_packet->ul_rcv_size);
 		memcpy(gs_uc_eth_buffer, &spi_packet->pkt_buffer, GMAC_FRAME_LENTGH_MAX);
 		phys10_port_stats[spi_packet->tag-1].rx_packets++;
 		phys13_port_stats[spi_packet->tag-1].rx_packets++;
 		nnOF_tablelookup(gs_uc_eth_buffer, &spi_packet->ul_rcv_size, spi_packet->tag);
-	} else 
-	{
-		TRACE("stacking.c: %d bytes of unknown data received from slave", spi_count);
+		return;
 	}
 	return;
+	// ***** END *****
+
+	// ***** Previous implementation below - port stats needs to be re-implemented
+
+	//for (int i = 0; i<7;i++)
+	//{
+		//spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);		// Write 1 more byte to clean out buffer
+		//while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
+		//if (i > 2) spi_read(SPI_MASTER_BASE, &shared_buffer[i-3], &uc_pcs);		// skip for first 2 bytes
+	//}
+	//
+	//// Preamble must be 0xABAB or 0xBCBC
+	//if (!((shared_buffer[0] == 0xAB && shared_buffer[1] == 0xAB) || (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)))
+	//{
+		//TRACE("stacking.c: ERROR - BAD SPI HEADER PREAMBLE - PACKET DROPPED");
+		//return;
+	//}
+	//spi_count = 4;
+	//spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
+	//if(spi_read_size > 1600)
+	//{
+		//TRACE("stacking.c: ERROR - BAD SPI HEADER READ SIZE - PACKET DROPPED");
+		//return;
+	//}
+	//uint32_t rcv_time = sys_get_ms();
+	//while(spi_count < spi_read_size)
+	//{
+		//spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
+		////for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
+		//spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
+		//spi_count++;
+		//while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
+		////TRACE("%x", shared_buffer[spi_count]);
+	//}
+	//TRACE("stacking.c: ------- ------- Slave -> Master %d", sys_get_ms() - rcv_time);
+	//
+	//if (shared_buffer[0] == 0xAB && shared_buffer[1] == 0xAB)		// Stats message
+	//{
+		//TRACE("stacking.c: %d bytes of port stats data received from slave", spi_count);
+		//memcpy(&spi_p_stats, &shared_buffer, sizeof(struct spi_port_stats));
+		//port_status[4] = spi_p_stats.port_status[0];
+		//port_status[5] = spi_p_stats.port_status[1];
+		//port_status[6] = spi_p_stats.port_status[2];
+		//port_status[7] = spi_p_stats.port_status[3];
+		//
+		//if (OF_Version == 1)
+		//{
+			//phys10_port_stats[4].tx_bytes += spi_p_stats.tx_bytes[0];
+			//phys10_port_stats[4].rx_bytes += spi_p_stats.rx_bytes[0];
+			//phys10_port_stats[5].tx_bytes += spi_p_stats.tx_bytes[1];
+			//phys10_port_stats[5].rx_bytes += spi_p_stats.rx_bytes[1];
+			//phys10_port_stats[6].tx_bytes += spi_p_stats.tx_bytes[2];
+			//phys10_port_stats[6].rx_bytes += spi_p_stats.rx_bytes[2];
+			//phys10_port_stats[7].tx_bytes += spi_p_stats.tx_bytes[3];
+			//phys10_port_stats[7].rx_bytes += spi_p_stats.rx_bytes[3];
+		//}
+//
+		//if (OF_Version == 4)
+		//{
+			//phys13_port_stats[4].tx_bytes += spi_p_stats.tx_bytes[0];
+			//phys13_port_stats[4].rx_bytes += spi_p_stats.rx_bytes[0];
+			//phys13_port_stats[5].tx_bytes += spi_p_stats.tx_bytes[1];
+			//phys13_port_stats[5].rx_bytes += spi_p_stats.rx_bytes[1];
+			//phys13_port_stats[6].tx_bytes += spi_p_stats.tx_bytes[2];
+			//phys13_port_stats[6].rx_bytes += spi_p_stats.rx_bytes[2];
+			//phys13_port_stats[7].tx_bytes += spi_p_stats.tx_bytes[3];
+			//phys13_port_stats[7].rx_bytes += spi_p_stats.rx_bytes[3];
+		//}
+	//}
+	//else if (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)		// packet
+	//{
+		//TRACE("stacking.c: %d bytes of packet data received from slave", spi_count);
+		//spi_crc_rcv = 0;
+		//spi_packet = &shared_buffer;
+		//if (spi_packet->ul_rcv_size > GMAC_FRAME_LENTGH_MAX) return;	// Packet size is corrupt
+		//for(int x = 0;x<spi_packet->ul_rcv_size;x++)
+		//{
+			//spi_crc_rcv += spi_packet->pkt_buffer[x];
+		//}
+		//// Make sure we received the entire packet
+		//if (spi_packet->spi_crc != spi_crc_rcv)
+		//{
+			//TRACE("stacking.c: Corrupt slave packet CRC mismatch %x != %x",spi_packet->spi_crc ,spi_crc_rcv);
+			//return;
+		//}
+		//memcpy(gs_uc_eth_buffer, &spi_packet->pkt_buffer, GMAC_FRAME_LENTGH_MAX);
+		//phys10_port_stats[spi_packet->tag-1].rx_packets++;
+		//phys13_port_stats[spi_packet->tag-1].rx_packets++;
+		//nnOF_tablelookup(gs_uc_eth_buffer, &spi_packet->ul_rcv_size, spi_packet->tag);
+	//} else 
+	//{
+		//TRACE("stacking.c: %d bytes of unknown data received from slave", spi_count);
+	//}
+	//return;
 }
 	
 /*
@@ -364,6 +520,7 @@ void MasterStackRcv(void)
 void SPI_Handler(void)
 {
 	static uint16_t data;
+	static uint32_t receive_timeout = 0;	// Timeout for SPI data receive (MASTER->SLAVE)
 	uint8_t uc_pcs;
 	
 	if (slave_ready == false)		// Is this the first data we have received?
@@ -400,13 +557,14 @@ void SPI_Handler(void)
 		return;	
 	}
 
-	if(pending_spi_command == SPI_SEND_PKT)	// We send the master our port stats
+	if(pending_spi_command == SPI_SEND_PKT)	// Send slave packet to master
 	{
 		if (spi_slave_send_count <= 0)
 		{
+			// Flush out last two bytes
 			if (spi_dummy_bytes < 2)
 			{
-				spi_write(SPI_SLAVE_BASE, 0xff, 0, 0);
+				spi_write(SPI_SLAVE_BASE, 0xff, 0, 0); // *****
 				spi_dummy_bytes++;
 				return;
 			}
@@ -414,62 +572,95 @@ void SPI_Handler(void)
 			ioport_set_pin_level(SPI_IRQ1, false);	// turn off the IRQ because we are done
 			spi_dummy_bytes = 0;
 		} else {
-			spi_write(SPI_SLAVE_BASE, shared_buffer[spi_slave_send_size - spi_slave_send_count], 0, 0);
-			spi_slave_send_count--;
+			while(spi_slave_send_count > 0)
+			{
+				spi_write(SPI_SLAVE_BASE, shared_buffer[spi_slave_send_size - spi_slave_send_count], 0, 0);
+				spi_slave_send_count--;
+				// Wait for master to send the next byte
+				while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);
+				spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
+			}
 		}
 		return;
 	}
 
 	if(pending_spi_command == SPI_SEND_CLEAR)
 	{
-		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
-		if (data == 0xcd) pending_spi_command = SPI_RCV_PREAMBLE;
-		return;
-	}
-	
-	if(pending_spi_command == SPI_RCV_PREAMBLE)
-	{
-		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
-		if (data == 0xcd) 
-		{
-			pending_spi_command = SPI_RECEIVE;
-			memset(&shared_buffer,0,sizeof(shared_buffer));
-		} else {
-			pending_spi_command = SPI_SEND_CLEAR;
-		}
-		return;
-	}
+		// ***** Modified MASTER -> SLAVE receiver *****
+		uint16_t spi_count = 0;
+		uint16_t spi_read_size = 1600;
 		
-	if(pending_spi_command == SPI_RECEIVE)
-	{
+		// Discard dummy byte (attempts to prevent unwanted bytes before first proper read)
+		spi_write(SPI_SLAVE_BASE, 0xbb, 0, 0);
 		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
-		// Check if this is an end marker
-		if (data == 0xde)
+		spi_write(SPI_SLAVE_BASE, 0xbb, 0, 0);
+		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
+		
+		// Testing - additional preamble read detection (i.e. detect 0xBC 0xBC SPI header preamble before main loop)
+		//spi_read(SPI_SLAVE_BASE, &shared_buffer[spi_count], &uc_pcs);
+		//spi_write(SPI_SLAVE_BASE, 0xbb, 0, 0);
+		//spi_count++;
+		//spi_read(SPI_SLAVE_BASE, &shared_buffer[spi_count], &uc_pcs);
+		//spi_write(SPI_SLAVE_BASE, 0xbb, 0, 0);
+		//spi_count++;
+		
+		while(spi_count < spi_read_size)
 		{
-			end_receive = true;
-		} else if (data == 0xef && end_receive == true)
-		{
-			if (spi_receive_port == 255)
+			spi_write(SPI_SLAVE_BASE, 0xbb, 0, 0);
+			while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);
+			spi_read(SPI_SLAVE_BASE, &shared_buffer[spi_count], &uc_pcs);
+			// (processing may cause timing problems - none found during testing)
+			if(spi_read_size == 1600)
 			{
-				gmac_write(&shared_buffer, spi_receive_count, OFPP13_FLOOD, 0);
-			} else{	
-				gmac_write(&shared_buffer, spi_receive_count, spi_receive_port-4, 0);
+				if(spi_count == 3)
+				{
+					spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
+					if(spi_read_size > 1600)
+					{
+						spi_read_size = 1600;
+					}
+				}
 			}
-			pending_spi_command = SPI_SEND_CLEAR;
-			spi_receive_port = 0;
-			end_receive = false;
-			spi_receive_count =0;
-			return;
+			spi_count++;
 		}
-				
-		if (spi_receive_port == 0) 
+		
+		uint32_t spi_crc_rcv = 0;
+		spi_packet = &shared_buffer;
+		
+		// Check that the preamble is as expected
+		if (!(shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC))
 		{
-			spi_receive_port = data;
 			return;
 		}
 		
-		shared_buffer[spi_receive_count] = data;
-		spi_receive_count++;
+		// Check against maximum packet size
+		if (spi_packet->ul_rcv_size > GMAC_FRAME_LENTGH_MAX)
+		{
+			return;
+		}
+		
+		// Calculated CRC of the received data
+		for(uint16_t ct=0; ct<spi_packet->ul_rcv_size; ct++)
+		{
+			spi_crc_rcv += spi_packet->pkt_buffer[ct];
+		}
+		
+		// Check calculated CRC against received CRC
+		if (spi_packet->spi_crc != spi_crc_rcv)
+		{
+			return;
+		}
+		
+		if (spi_packet->tag == 255)
+		{
+			gmac_write(&spi_packet->pkt_buffer, spi_packet->ul_rcv_size, OFPP13_FLOOD, 0);
+		}
+		else if (spi_packet->tag <= 8)
+		{
+			gmac_write(&spi_packet->pkt_buffer, spi_packet->ul_rcv_size, spi_packet->tag-4, 0);
+		}
+		return;
+
+		// ***** END *****
 	}
-			
 }
