@@ -42,8 +42,7 @@
 #define SPI_RCV_PREAMBLE	4
 #define SPI_STATS_PREAMBLE		0xABAB
 #define SPI_PACKET_PREAMBLE		0xBCBC
-#define SPI_SEND_WAIT		0
-#define SPI_HEADER_SIZE	13
+#define SPI_SEND_WAIT		500
 
 struct spi_port_stats {
 	uint16_t premable;
@@ -57,11 +56,11 @@ struct spi_port_stats {
 };
 
 struct spi_packet {
-	uint16_t premable;		// Transmission preamble
-	uint16_t spi_size;		// SPI transmission size
-	uint32_t ul_rcv_size;	// Actual packet size
-	uint32_t spi_crc;		// Calculated CRC of packet
-	uint8_t tag;			// Port number (1-8, or 255)
+	uint16_t premable;
+	uint16_t spi_size;
+	uint32_t ul_rcv_size;
+	uint16_t spi_crc;
+	uint8_t tag;
 	uint8_t pkt_buffer[GMAC_FRAME_LENTGH_MAX];
 };	
 	
