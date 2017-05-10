@@ -327,7 +327,7 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, int port, int inport)
 		TRACE("switch.c: Packet out FLOOD (%d bytes)", ul_size);
 		if(masterselect == false)
 		{
-			MasterStackSend(p_buffer, ul_size, port);
+			//MasterStackSend(p_buffer, ul_size, port); // Send it slave
 			if (inport < 5) 
 			{
 				port = (15 - NativePortMatrix) - (1<<(inport-1)); 
@@ -350,7 +350,7 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, int port, int inport)
 		if(masterselect == false)	// If we are the master then send to the slave
 		{
 			TRACE("switch13.c: Sending packet to slave to send out port %d (%d bytes)", port, ul_size);
-			MasterStackSend(p_buffer, ul_size, port);	// Send it slave
+			//MasterStackSend(p_buffer, ul_size, port);	// Send it slave
 			return;
 		}
 		// If slave then write to port
@@ -528,7 +528,7 @@ void task_switch(struct netif *netif)
 		if((sys_get_ms() - slave_timer) > 500)	// every 500 ms (0.5 secs)
 		{
 			slave_timer = sys_get_ms();	
-			Slave_timer(); // Slave timer
+			//Slave_timer(); // Slave timer
 		}
 		
 	}
@@ -580,26 +580,26 @@ void task_switch(struct netif *netif)
 		{
 			if (slave_ready == true && pending_spi_command == SPI_SEND_CLEAR)
 			{
-				uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
-				uint8_t tag = *tail_tag + 1;
-				phys10_port_stats[tag-1].rx_packets++;
-				phys13_port_stats[tag-1].rx_packets++;
-				ul_rcv_size--; // remove the tail first
-				spi_packet = &shared_buffer;
-				spi_packet->premable = SPI_PACKET_PREAMBLE;
-				spi_packet->ul_rcv_size = ul_rcv_size;
-				spi_packet->spi_crc = 0;
-				for(int x = 0;x<ul_rcv_size;x++)
-				{
-					spi_packet->spi_crc += gs_uc_eth_buffer[x];
-				}
-				spi_packet->tag = tag + 4;
-				spi_packet->spi_size = 11 + ul_rcv_size;
-				memcpy(&spi_packet->pkt_buffer, &gs_uc_eth_buffer, ul_rcv_size);
-				pending_spi_command = SPI_SEND_PKT;	// We are waiting to forward the packet
-				spi_slave_send_size = spi_packet->spi_size;
-				spi_slave_send_count = spi_slave_send_size;
-				ioport_set_pin_level(SPI_IRQ1, true);	// Set the IRQ to signal the slave wants to send something
+				//uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
+				//uint8_t tag = *tail_tag + 1;
+				//phys10_port_stats[tag-1].rx_packets++;
+				//phys13_port_stats[tag-1].rx_packets++;
+				//ul_rcv_size--; // remove the tail first
+				//spi_packet = &shared_buffer;
+				//spi_packet->premable = SPI_PACKET_PREAMBLE;
+				//spi_packet->ul_rcv_size = ul_rcv_size;
+				//spi_packet->spi_crc = 0;
+				//for(int x = 0;x<ul_rcv_size;x++)
+				//{
+					//spi_packet->spi_crc += gs_uc_eth_buffer[x];
+				//}
+				//spi_packet->tag = tag + 4;
+				//spi_packet->spi_size = 11 + ul_rcv_size;
+				//memcpy(&spi_packet->pkt_buffer, &gs_uc_eth_buffer, ul_rcv_size);
+				//pending_spi_command = SPI_SEND_PKT;	// We are waiting to forward the packet
+				//spi_slave_send_size = spi_packet->spi_size;
+				//spi_slave_send_count = spi_slave_send_size;
+				//ioport_set_pin_level(SPI_IRQ1, true);	// Set the IRQ to signal the slave wants to send something
 				return;
 			}
 		}

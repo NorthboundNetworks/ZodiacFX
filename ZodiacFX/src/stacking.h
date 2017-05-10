@@ -42,7 +42,8 @@
 #define SPI_RCV_PREAMBLE	4
 #define SPI_STATS_PREAMBLE		0xABAB
 #define SPI_PACKET_PREAMBLE		0xBCBC
-#define SPI_SEND_WAIT		100
+#define SPI_SEND_WAIT		0
+#define SPI_HEADER_SIZE	13
 
 struct spi_port_stats {
 	uint16_t premable;
@@ -56,11 +57,11 @@ struct spi_port_stats {
 };
 
 struct spi_packet {
-	uint16_t premable;
-	uint16_t spi_size;
-	uint32_t ul_rcv_size;
-	uint16_t spi_crc;
-	uint8_t tag;
+	uint16_t premable;		// Transmission preamble
+	uint16_t spi_size;		// SPI transmission size
+	uint32_t ul_rcv_size;	// Actual packet size
+	uint32_t spi_crc;		// Calculated CRC of packet
+	uint8_t tag;			// Port number (1-8, or 255)
 	uint8_t pkt_buffer[GMAC_FRAME_LENTGH_MAX];
 };	
 	
@@ -69,5 +70,9 @@ void MasterReady(void);
 void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port);
 void MasterStackRcv(void);
 void Slave_timer(void);
+
+// ***** Stacking Test Functions *****
+uint8_t masterslave_test(void);		// Send pattern from master -> slave
+uint8_t slavemaster_test(void);		// Send pattern from slave -> master
 
 #endif /* STACKING_H_ */
