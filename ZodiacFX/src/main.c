@@ -202,7 +202,6 @@ int main (void)
 	while(1)
 	{
 		task_switch(&gs_net_if);
-		//task_command(cCommand, cCommand_last);
 		// Only run the following tasks if set to Master
 		if(masterselect == false)
 		{

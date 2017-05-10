@@ -50,7 +50,7 @@ static uint32_t gs_ul_spi_clock = 120000000;
 /* Delay before SPCK. */
 #define SPI_DLYBS 0x30
 /* Delay between consecutive transfers. */
-#define SPI_DLYBCT 0x10
+#define SPI_DLYBCT 0x15
 
 // Global variables
 extern uint8_t last_port_status[8];
@@ -82,7 +82,6 @@ void spi_master_initialize(void);
 void spi_slave_initialize(void);
 void spi_port_stats(void);
 void spi_port_status(void);
-void SPI_Handler1(void);
 
 /*
 *	Initialize the SPI interface to MASTER or SLAVE based on the stacking jumper
@@ -253,6 +252,7 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 	spi_packet->premable = SPI_PACKET_PREAMBLE;
 	spi_packet->ul_rcv_size = ul_size;
 	spi_packet->spi_crc = 0;
+	// Calculate CRC value
 	for(int x = 0;x<ul_size;x++)
 	{
 		spi_packet->spi_crc += p_uc_data[x];
@@ -261,7 +261,6 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 	spi_packet->spi_size = SPI_HEADER_SIZE + ul_size;
 	
 	TRACE("stacking.c: Sending packet to slave (%d bytes for port %d)", ul_size, port);
-	TRACE("stacking.c: ------- ------- Master -> Slave");
 	
 	// Send the SPI packet header
 	for(uint16_t ct=0; ct<SPI_HEADER_SIZE; ct++)
@@ -293,7 +292,6 @@ void MasterStackRcv(void)
 	uint16_t spi_read_size;
 	uint32_t spi_crc_rcv;
 
-	// ***** Modified SLAVE -> MASTER receive *****
 	spi_read_size = 1600;
 	// ignore dummy bytes
 	spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
@@ -306,7 +304,6 @@ void MasterStackRcv(void)
 	while(spi_count < spi_read_size)
 	{
 		spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
-		//for(volatile int x = 0;x<SPI_SEND_WAIT;x++);
 		spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
 			// MAY CAUSE TIMING PROBLEMS
 			if(spi_read_size == 1600)
@@ -544,7 +541,7 @@ void SPI_Handler(void)
 			pending_spi_command = SPI_SEND_CLEAR;
 			spi_count = 2;
 			spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
-			slavemaster_test();
+			//slavemaster_test();
 			return;
 		}
 		
@@ -583,26 +580,6 @@ void SPI_Handler(void)
 
 	}
 
-}
-
-
-void SPI_Handler1(void)
-{
-	static uint16_t spi_count = 0;
-	uint8_t uc_pcs;
-	
-	if((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_OVRES) == 0)
-	{
-		printf("overrun!\r\n");
-	}
-	while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);
-	spi_read(SPI_SLAVE_BASE, &shared_buffer[spi_count], &uc_pcs);
-	spi_count++;
-	if (spi_count > 2000)
-	{
-		printf("full!\r\n");
-		spi_count = 0;
-	}
 }
 
 // ##################### SPI Test Functions #####################
