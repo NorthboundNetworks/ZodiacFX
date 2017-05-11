@@ -50,7 +50,7 @@ static uint32_t gs_ul_spi_clock = 120000000;
 /* Delay before SPCK. */
 #define SPI_DLYBS 0x30
 /* Delay between consecutive transfers. */
-#define SPI_DLYBCT 0x15
+#define SPI_DLYBCT 0x20
 
 // Global variables
 extern uint8_t last_port_status[8];
@@ -423,6 +423,7 @@ void SPI_Handler(void)
 	static uint16_t data;
 	static uint32_t receive_timeout = 0;	// Timeout for SPI data receive (MASTER->SLAVE)
 	uint8_t uc_pcs;
+	uint32_t spi_crc_rcv = 0;
 	
 	//	SPI initialisation
 	if (slave_ready == false)		// Is this the first data we have received?
@@ -439,7 +440,7 @@ void SPI_Handler(void)
 		}
 	}
 	
-	// We send the master our port stats
+	// We are sending the master our port stats
 	if(pending_spi_command == SPI_SEND_STATS)	
 	{
 		if (spi_slave_send_count <= 0)
@@ -460,7 +461,7 @@ void SPI_Handler(void)
 		return;	
 	}
 
-	// Send slave packet to master
+	// We are sending the master a packet
 	if(pending_spi_command == SPI_SEND_PKT)	
 	{
 		if (spi_slave_send_count <= 0)
@@ -499,73 +500,67 @@ void SPI_Handler(void)
 		return;
 	}
 
-	// Recieve data from the master
+	// We recieved the first preamble bytes from the master
 	if(pending_spi_command == SPI_RCV_PREAMBLE)
 	{
 		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
 		if (data == 0xBCBC)
 		{
-			pending_spi_command = SPI_RECEIVE;
-			shared_buffer[0] = 0xBC;
-			shared_buffer[1] = 0xBC;
-			shared_buffer[2] = 0xBC;
-			shared_buffer[3] = 0xBC;
-		}
-		else
+			while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);
+			spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
+			if (data == 0xBCBC)
+			{
+				pending_spi_command = SPI_RECEIVE;
+				shared_buffer[0] = 0xBC;
+				shared_buffer[1] = 0xBC;
+				shared_buffer[2] = 0xBC;
+				shared_buffer[3] = 0xBC;
+			} else 
+			{
+				pending_spi_command = SPI_SEND_READY;
+				return;
+			}
+		} else
 		{
 			pending_spi_command = SPI_SEND_READY;
+			return;
 		}
-		return;
 	}
 	
 	if(pending_spi_command == SPI_RECEIVE)
 	{
 		// ***** Modified MASTER -> SLAVE receiver *****
-		static uint16_t spi_count = 2;
+		static uint16_t spi_count = 4;
 		static uint16_t spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
-		
-		// Read next byte
-		spi_write(SPI_SLAVE_BASE, 0xbb, 0, 0);
-		while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);
-		spi_read(SPI_SLAVE_BASE, &shared_buffer[spi_count], &uc_pcs);
+		bool eof_flag = false;
 
-		if(spi_read_size == GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE && spi_count == 3)
+		// Read receive bytes
+		while(spi_count < SPI_MAX_PKT_SIZE)
 		{
-			spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
-			if(spi_read_size > GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE)
+			if (spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF)
 			{
-				// ERROR: over-sized packet data
-				// Clean up and return
-				pending_spi_command = SPI_SEND_READY;
-				spi_count = 2;
-				spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
-				return;
+				spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
+				if (data = SPI_PACKET_EOF)
+				{
+					if (eof_flag == false) eof_flag = true;
+					if (eof_flag == true) break;
+				}
+				memcpy(&shared_buffer + spi_count, &data, 2);
+				spi_count += 2;
 			}
 		}
-		
-		// Check if more bytes need to be read
-		if(spi_count < (spi_read_size-1))
-		{
-			// Wait for next interrupt
-			spi_count++;
-			return;
-		}
-		
-		uint32_t spi_crc_rcv = 0;
-		spi_packet = &shared_buffer;
-				
+			
 		// Check against maximum packet size
+		spi_packet = &shared_buffer;
 		if (spi_packet->ul_rcv_size > GMAC_FRAME_LENTGH_MAX)
 		{
 			// ERROR: payload data too large
 			// Clean up and return
 			pending_spi_command = SPI_SEND_READY;
-			spi_count = 2;
-			spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
-			//slavemaster_test();
+			TRACE("stacking.c: ERROR - Slave receive bad packet size!");
 			return;
 		}
-		
+
 		// Calculated CRC of the received data
 		for(uint16_t ct=0; ct<spi_packet->ul_rcv_size; ct++)
 		{
@@ -578,8 +573,7 @@ void SPI_Handler(void)
 			// ERROR: corrupt packet
 			// Clean up and return
 			pending_spi_command = SPI_SEND_READY;
-			spi_count = 2;
-			spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
+			TRACE("stacking.c: ERROR - Slave receive bad CRC!");
 			return;
 		}
 		
@@ -591,11 +585,10 @@ void SPI_Handler(void)
 		{
 			gmac_write(&spi_packet->pkt_buffer, spi_packet->ul_rcv_size, spi_packet->tag-4, 0);
 		}
+
 		// Packet receive complete
 		// Clean up and return
 		pending_spi_command = SPI_SEND_READY;
-		spi_count = 2;
-		spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
 		slavemaster_test();
 		return;
 
