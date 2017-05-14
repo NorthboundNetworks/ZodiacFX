@@ -578,7 +578,7 @@ void task_switch(struct netif *netif)
 			}
 		} else
 		{
-			if (slave_ready == true && pending_spi_command == SPI_SEND_READY)
+			if (slave_ready == true && pending_spi_command == SPI_SEND_CLEAR)
 			{
 				//uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
 				//uint8_t tag = *tail_tag + 1;
@@ -586,6 +586,7 @@ void task_switch(struct netif *netif)
 				//phys13_port_stats[tag-1].rx_packets++;
 				//ul_rcv_size--; // remove the tail first
 				//spi_packet = &shared_buffer;
+				//spi_packet->premable = SPI_PACKET_PREAMBLE;
 				//spi_packet->ul_rcv_size = ul_rcv_size;
 				//spi_packet->spi_crc = 0;
 				//for(int x = 0;x<ul_rcv_size;x++)
@@ -593,13 +594,13 @@ void task_switch(struct netif *netif)
 					//spi_packet->spi_crc += gs_uc_eth_buffer[x];
 				//}
 				//spi_packet->tag = tag + 4;
-				//spi_packet->spi_size = SPI_HEADER_SIZE + ul_rcv_size;
+				//spi_packet->spi_size = 11 + ul_rcv_size;
 				//memcpy(&spi_packet->pkt_buffer, &gs_uc_eth_buffer, ul_rcv_size);
 				//pending_spi_command = SPI_SEND_PKT;	// We are waiting to forward the packet
 				//spi_slave_send_size = spi_packet->spi_size;
 				//spi_slave_send_count = spi_slave_send_size;
 				//ioport_set_pin_level(SPI_IRQ1, true);	// Set the IRQ to signal the slave wants to send something
-				//return;
+				return;
 			}
 		}
 	}
