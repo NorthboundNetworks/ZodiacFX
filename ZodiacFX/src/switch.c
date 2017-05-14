@@ -578,7 +578,7 @@ void task_switch(struct netif *netif)
 			}
 		} else
 		{
-			if (slave_ready == true && pending_spi_command == SPI_SEND_CLEAR)
+			if (slave_ready == true && pending_spi_command == SPI_SEND_READY)
 			{
 				//uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
 				//uint8_t tag = *tail_tag + 1;

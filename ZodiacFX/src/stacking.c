@@ -38,7 +38,7 @@
 #include "timers.h"
 
 /* SPI clock setting (Hz). */
-static uint32_t gs_ul_spi_clock = 120000000;
+static uint32_t gs_ul_spi_clock = 20000000;
 
 /* Chip select. */
 #define SPI_CHIP_SEL 0
@@ -65,7 +65,7 @@ extern struct ofp13_port_stats phys13_port_stats[8];
 uint16_t spi_slave_send_size;
 uint16_t spi_slave_send_count;
 uint8_t timer_alt;
-uint8_t pending_spi_command = SPI_SEND_CLEAR;
+uint8_t pending_spi_command = SPI_SEND_READY;
 bool master_ready;
 bool slave_ready;
 uint8_t spi_dummy_bytes = 0;
@@ -166,7 +166,7 @@ void Slave_timer(void)
 	} else if (timer_alt == 2)
 	{
 		// Send SLAVE port stats if SLAVE is in the clear state
-		if (slave_ready == true && pending_spi_command == SPI_SEND_CLEAR)
+		if (slave_ready == true && pending_spi_command == SPI_SEND_READY)
 		{
 			spi_p_stats.premable = SPI_STATS_PREAMBLE;
 			spi_p_stats.spi_size = sizeof(struct spi_port_stats);
@@ -432,7 +432,7 @@ void SPI_Handler(void)
 				spi_dummy_bytes++;
 				return;
 			}			
-			pending_spi_command = SPI_SEND_CLEAR;	// Clear the pending command
+			pending_spi_command = SPI_SEND_READY;	// Clear the pending command
 			ioport_set_pin_level(SPI_IRQ1, false);	// turn off the IRQ because we are done
 			spi_dummy_bytes = 0;
 		} else {
@@ -453,7 +453,7 @@ void SPI_Handler(void)
 				spi_dummy_bytes++;
 				return;
 			}
-			pending_spi_command = SPI_SEND_CLEAR;	// Clear the pending command
+			pending_spi_command = SPI_SEND_READY;	// Clear the pending command
 			ioport_set_pin_level(SPI_IRQ1, false);	// turn off the IRQ because we are done
 			spi_dummy_bytes = 0;
 		} else {
@@ -469,7 +469,7 @@ void SPI_Handler(void)
 		return;
 	}
 
-	if(pending_spi_command == SPI_SEND_CLEAR)
+	if(pending_spi_command == SPI_SEND_READY)
 	{
 		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
 		if (data == 0xBC)
@@ -492,7 +492,7 @@ void SPI_Handler(void)
 		}
 		else
 		{
-			pending_spi_command = SPI_SEND_CLEAR;
+			pending_spi_command = SPI_SEND_READY;
 		}
 		return;
 	}
@@ -515,7 +515,7 @@ void SPI_Handler(void)
 			{
 				// ERROR: over-sized packet data
 				// Clean up and return
-				pending_spi_command = SPI_SEND_CLEAR;
+				pending_spi_command = SPI_SEND_READY;
 				spi_count = 2;
 				spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
 				return;
@@ -538,7 +538,7 @@ void SPI_Handler(void)
 		{
 			// ERROR: payload data too large
 			// Clean up and return
-			pending_spi_command = SPI_SEND_CLEAR;
+			pending_spi_command = SPI_SEND_READY;
 			spi_count = 2;
 			spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
 			//slavemaster_test();
@@ -556,7 +556,7 @@ void SPI_Handler(void)
 		{
 			// ERROR: corrupt packet
 			// Clean up and return
-			pending_spi_command = SPI_SEND_CLEAR;
+			pending_spi_command = SPI_SEND_READY;
 			spi_count = 2;
 			spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
 			return;
@@ -572,7 +572,7 @@ void SPI_Handler(void)
 		}
 		// Packet receive complete
 		// Clean up and return
-		pending_spi_command = SPI_SEND_CLEAR;
+		pending_spi_command = SPI_SEND_READY;
 		spi_count = 2;
 		spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
 		slavemaster_test();
@@ -599,7 +599,7 @@ uint8_t masterslave_test(void)
 uint8_t slavemaster_test(void)
 {
 	// Note: the pending check may need to be moved outside of the function call
-	if (slave_ready == true && pending_spi_command == SPI_SEND_CLEAR)
+	if (slave_ready == true && pending_spi_command == SPI_SEND_READY)
 	{
 		// PREPARE TEST PACKET from SLAVE to MASTER
 		spi_packet = &shared_buffer;

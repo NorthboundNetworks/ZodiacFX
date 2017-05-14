@@ -35,7 +35,7 @@
 #define SPI_Handler     SPI_Handler
 #define SPI_IRQn        SPI_IRQn
 
-#define SPI_SEND_CLEAR	0
+#define SPI_SEND_READY	0
 #define SPI_SEND_STATS	1
 #define SPI_SEND_PKT	2
 #define SPI_RECEIVE		3
