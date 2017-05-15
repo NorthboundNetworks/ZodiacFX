@@ -87,6 +87,12 @@ void tcp_error(void * arg, err_t err);
 static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
 static err_t of_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len);
 
+// ####### Stacking debug stats #######
+extern uint32_t spi_debug_slave_rx_errors;
+extern uint32_t spi_debug_master_rx_errors;
+extern uint32_t spi_debug_master_rx_count;
+extern uint32_t spi_debug_master_tx_count;
+
 /*
 *	Converts a 64bit value from host to network format
 *
@@ -357,6 +363,19 @@ void task_openflow(void)
 		fast_of_timer = sys_get_ms();
 		nnOF_timer();
 		if (stackenabled == true) masterslave_test();
+		
+		// ####### print master debug stats every 5s #######
+		static time_ctr = 0;
+		if(time_ctr == 10)
+		{
+			printf("master rx errors: %d\nmaster rx count: %d\nmaster tx count: %d\n",spi_debug_master_rx_errors,spi_debug_master_rx_count,spi_debug_master_tx_count);
+			time_ctr = 0;		
+		}
+		else
+		{
+			time_ctr++;
+		}
+		// ####### END #######
 
 		if (heartbeat > (HB_INTERVAL * 2) && tcp_con_state == 1)	//If we haven't heard anything from the controller for more then the heartbeat interval send an echo request
 		{
