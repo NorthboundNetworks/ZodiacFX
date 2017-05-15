@@ -292,7 +292,7 @@ void MasterStackRcv(void)
 	uint16_t spi_read_size;
 	uint32_t spi_crc_rcv;
 
-	spi_read_size = 1600;
+	spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
 	// ignore dummy bytes
 	spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
 	spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
@@ -306,14 +306,14 @@ void MasterStackRcv(void)
 		spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
 		spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
 			// MAY CAUSE TIMING PROBLEMS
-			if(spi_read_size == 1600)
+			if(spi_read_size == GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE)
 			{
 				if(spi_count == 3)
 				{
 					spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
-					if(spi_read_size > 1600)
+					if(spi_read_size > GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE)
 					{
-						spi_read_size = 1600;
+						spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
 					}
 				}
 			}
