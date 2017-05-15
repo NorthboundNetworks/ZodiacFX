@@ -81,12 +81,6 @@ void spi_slave_initialize(void);
 void spi_port_stats(void);
 void spi_port_status(void);
 
-// ########## Test Variables ##########
-uint32_t spi_debug_slave_rx_errors = 0;
-uint32_t spi_debug_master_rx_errors = 0;
-uint32_t spi_debug_master_rx_count = 0;
-uint32_t spi_debug_master_tx_count = 0;
-
 /*
 *	Initialize the SPI interface to MASTER or SLAVE based on the stacking jumper
 *
@@ -331,7 +325,6 @@ void MasterStackRcv(void)
 	if (!((shared_buffer[0] == 0xAB && shared_buffer[1] == 0xAB) || (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)))
 	{
 		TRACE("stacking.c: ERROR - BAD SPI HEADER PREAMBLE");
-		spi_debug_master_rx_errors++;
 		return;
 	}
 	
@@ -343,7 +336,6 @@ void MasterStackRcv(void)
 		if (spi_packet->ul_rcv_size > GMAC_FRAME_LENTGH_MAX)
 		{
 			TRACE("stacking.c: ERROR - BAD PACKET SIZE");
-			spi_debug_master_rx_errors++;
 			return;	// Packet size is corrupt
 		}
 		for(int x = 0;x<spi_packet->ul_rcv_size;x++)
@@ -354,12 +346,8 @@ void MasterStackRcv(void)
 		if (spi_packet->spi_crc != spi_crc_rcv)
 		{
 			TRACE("stacking.c: Corrupt slave packet CRC mismatch %x != %x",spi_packet->spi_crc ,spi_crc_rcv);
-			spi_debug_master_rx_errors++;
 			return;
 		}
-		
-		spi_debug_master_rx_count++;
-		
 		TRACE("stacking.c: received packet (%d bytes)", spi_packet->ul_rcv_size);
 		// Copy packet into Ethernet buffer
 		memcpy(gs_uc_eth_buffer, &spi_packet->pkt_buffer, GMAC_FRAME_LENTGH_MAX);
@@ -457,7 +445,7 @@ void SPI_Handler(void)
 	}
 
 	if(pending_spi_command == SPI_SEND_PKT)	// Send slave packet to master
-	{
+	{		
 		for(uint16_t ct=0; ct<spi_slave_send_size; ct+=2)
 		{
 			spi_write(SPI_SLAVE_BASE, *(uint16_t*)&shared_buffer[ct], 0, 0);
@@ -589,9 +577,6 @@ uint8_t masterslave_test(void)
 	}
 	rcv_time = sys_get_ms();
 	MasterStackSend(&shared_buffer, 1400, 8);
-	
-	spi_debug_master_tx_count++;
-	
 	return;
 }
 
