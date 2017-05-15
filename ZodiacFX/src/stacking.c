@@ -263,17 +263,17 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 	TRACE("stacking.c: Sending packet to slave (%d bytes for port %d)", ul_size, port);
 	
 	// Send the SPI packet header
-	for(uint16_t ct=0; ct<SPI_HEADER_SIZE; ct++)
+	for(uint16_t ct=0; ct<SPI_HEADER_SIZE; ct+=2)
 	{
 		spi_read(SPI_MASTER_BASE, NULL, NULL);
-		spi_write(SPI_MASTER_BASE, spi_head_buffer[ct], 0, 0);
+		spi_write(SPI_MASTER_BASE, *(uint16_t*)&spi_head_buffer[ct], 0, 0);
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	}
 	// Send the SPI packet body
-	for(uint16_t ct=0; ct<ul_size; ct++)
+	for(uint16_t ct=0; ct<ul_size; ct+=2)
 	{
 		spi_read(SPI_MASTER_BASE, NULL, NULL);
-		spi_write(SPI_MASTER_BASE, p_uc_data[ct], 0, 0);
+		spi_write(SPI_MASTER_BASE, *(uint16_t*)&p_uc_data[ct], 0, 0);
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	}
 	
@@ -473,27 +473,9 @@ void SPI_Handler(void)
 	if(pending_spi_command == SPI_SEND_READY)
 	{
 		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
-		if (data == 0xBC)
-		{
-			pending_spi_command = SPI_RCV_PREAMBLE;
-		}
-		return;
-	}
-
-	if(pending_spi_command == SPI_RCV_PREAMBLE)
-	{
-		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
-		if (data == 0xBC)
+		if (data == 0xBCBC)
 		{
 			pending_spi_command = SPI_RECEIVE;
-			//memset(&shared_buffer,0,sizeof(shared_buffer));	// *****
-			// Write preamble to SPI packet header
-			shared_buffer[0] = 0xBC;
-			shared_buffer[1] = 0xBC;
-		}
-		else
-		{
-			pending_spi_command = SPI_SEND_READY;
 		}
 		return;
 	}
@@ -503,13 +485,20 @@ void SPI_Handler(void)
 		// ***** Modified MASTER -> SLAVE receiver *****
 		static uint16_t spi_count = 2;
 		static uint16_t spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
+	
+		// Write preamble to SPI packet header
+		shared_buffer[0] = 0xBC;
+		shared_buffer[1] = 0xBC;
 		
 		// Read next byte
 		spi_write(SPI_SLAVE_BASE, 0xbb, 0, 0);
 		while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);
-		spi_read(SPI_SLAVE_BASE, &shared_buffer[spi_count], &uc_pcs);
+		spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
+		
+		shared_buffer[spi_count] = data;		// lower 8 bits
+		shared_buffer[spi_count+1] = (data>>8);	// upper 8 bits
 
-		if(spi_read_size == GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE && spi_count == 3)
+		if(spi_read_size == GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE && spi_count == 4)
 		{
 			spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
 			if(spi_read_size > GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE)
@@ -523,11 +512,12 @@ void SPI_Handler(void)
 			}
 		}
 		
+		// Increment the index
+		spi_count+=2;
 		// Check if more bytes need to be read
 		if(spi_count < (spi_read_size-1))
 		{
 			// Wait for next interrupt
-			spi_count++;
 			return;
 		}
 		
@@ -578,7 +568,6 @@ void SPI_Handler(void)
 		spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
 		slavemaster_test();
 		return;
-
 	}
 
 }
