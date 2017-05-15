@@ -432,28 +432,8 @@ void SPI_Handler(void)
 			return;
 		}
 	}
-	
-	if(pending_spi_command == SPI_SEND_STATS)	// We send the master our port stats
-	{
-		if (spi_slave_send_count <= 0)
-		{
-			if (spi_dummy_bytes < 2)
-			{
-				spi_write(SPI_SLAVE_BASE, 0xff, 0, 0);
-				spi_dummy_bytes++;
-				return;
-			}			
-			pending_spi_command = SPI_SEND_READY;	// Clear the pending command
-			ioport_set_pin_level(SPI_IRQ1, false);	// turn off the IRQ because we are done
-			spi_dummy_bytes = 0;
-		} else {
-			spi_write(SPI_SLAVE_BASE, spi_stats_buffer[spi_slave_send_size - spi_slave_send_count], 0, 0);
-			spi_slave_send_count--;
-		}		
-		return;	
-	}
 
-	if(pending_spi_command == SPI_SEND_PKT)	// Send slave packet to master
+	if(pending_spi_command == SPI_SEND_PKT || pending_spi_command == SPI_SEND_STATS)	// Send data to master
 	{
 		if (spi_slave_send_count <= 0)
 		{
