@@ -63,7 +63,7 @@ extern struct ofp13_port_stats phys13_port_stats[8];
 
 // Local variables
 uint16_t spi_slave_send_size;
-uint16_t spi_slave_send_count;
+int32_t spi_slave_send_count;
 uint8_t timer_alt;
 uint8_t pending_spi_command = SPI_SEND_READY;
 bool master_ready;
@@ -303,12 +303,16 @@ void MasterStackRcv(void)
 	
 	while(spi_count < spi_read_size)
 	{
-		spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
+		// Read 2 bytes and store into buffer
+		spi_read(SPI_MASTER_BASE, &data, &uc_pcs);
+		shared_buffer[spi_count] = data;		// lower 8 bits
+		shared_buffer[spi_count+1] = (data>>8);	// upper 8 bits
+		
 		spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
 			// MAY CAUSE TIMING PROBLEMS
 			if(spi_read_size == GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE)
 			{
-				if(spi_count == 3)
+				if(spi_count == 4)
 				{
 					spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
 					if(spi_read_size > GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE)
@@ -317,7 +321,7 @@ void MasterStackRcv(void)
 					}
 				}
 			}
-		spi_count++;
+		spi_count+=2;
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	}
 	printf("stacking.c: ------- ------- rtt %d\r\n", sys_get_ms() - rcv_time);
@@ -457,11 +461,13 @@ void SPI_Handler(void)
 			pending_spi_command = SPI_SEND_READY;	// Clear the pending command
 			ioport_set_pin_level(SPI_IRQ1, false);	// turn off the IRQ because we are done
 			spi_dummy_bytes = 0;
-		} else {
+		}
+		else
+		{
 			while(spi_slave_send_count > 0)
 			{
-				spi_write(SPI_SLAVE_BASE, shared_buffer[spi_slave_send_size - spi_slave_send_count], 0, 0);
-				spi_slave_send_count--;
+				spi_write(SPI_SLAVE_BASE, *(uint16_t*)&shared_buffer[spi_slave_send_size - spi_slave_send_count], 0, 0);
+				spi_slave_send_count-=2;
 				// Wait for master to send the next byte
 				while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);
 				spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
