@@ -83,6 +83,8 @@ void spi_slave_initialize(void);
 void spi_port_stats(void);
 void spi_port_status(void);
 
+struct spi_debug_stats spi_debug;
+
 /*
 *	Initialize the SPI interface to MASTER or SLAVE based on the stacking jumper
 *
@@ -330,6 +332,7 @@ void MasterStackRcv(void)
 	if (!((shared_buffer[0] == 0xAB && shared_buffer[1] == 0xAB) || (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)))
 	{
 		TRACE("stacking.c: ERROR - BAD SPI HEADER PREAMBLE");
+		spi_debug.master_rx_error_bad_preamble++;
 		return;
 	}
 	
@@ -341,6 +344,7 @@ void MasterStackRcv(void)
 		if (spi_packet->ul_rcv_size > GMAC_FRAME_LENTGH_MAX)
 		{
 			TRACE("stacking.c: ERROR - BAD PACKET SIZE");
+			spi_debug.master_rx_error_bad_size++;
 			return;	// Packet size is corrupt
 		}
 		for(int x = 0;x<spi_packet->ul_rcv_size;x++)
@@ -351,6 +355,7 @@ void MasterStackRcv(void)
 		if (spi_packet->spi_crc != spi_crc_rcv)
 		{
 			TRACE("stacking.c: Corrupt slave packet CRC mismatch %x != %x",spi_packet->spi_crc ,spi_crc_rcv);
+			spi_debug.master_rx_error_bad_crc++;
 			return;
 		}
 		TRACE("stacking.c: received packet (%d bytes)", spi_packet->ul_rcv_size);
@@ -362,6 +367,7 @@ void MasterStackRcv(void)
 		// Send packet to OpenFlow table lookup function for processing
 		nnOF_tablelookup(gs_uc_eth_buffer, &spi_packet->ul_rcv_size, spi_packet->tag);
 		printf("stacking.c: ------- ------- response ok\r\n");
+		spi_debug.master_rx_count++;
 		return;
 	}
 	else if (shared_buffer[0] == 0xAB && shared_buffer[1] == 0xAB)
@@ -588,6 +594,7 @@ uint8_t masterslave_test(void)
 		shared_buffer[i] = pattern++;
 	}
 	rcv_time = sys_get_ms();
+	spi_debug.master_tx_count++;
 	MasterStackSend(&shared_buffer, 1400, 8);
 	return;
 }

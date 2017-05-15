@@ -64,7 +64,15 @@ struct spi_packet {
 	uint8_t tag;			// Port number (1-8, or 255)
 	uint8_t pad;			// Pad to 14 bytes
 	uint8_t pkt_buffer[GMAC_FRAME_LENTGH_MAX];
-};	
+};
+
+struct spi_debug_stats {
+	uint32_t master_tx_count;
+	uint32_t master_rx_count;
+	uint32_t master_rx_error_bad_preamble;
+	uint32_t master_rx_error_bad_size;
+	uint32_t master_rx_error_bad_crc;
+};
 	
 void stacking_init(bool master);
 void MasterReady(void);
