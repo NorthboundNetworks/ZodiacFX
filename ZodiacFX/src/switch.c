@@ -327,7 +327,7 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, int port, int inport)
 		TRACE("switch.c: Packet out FLOOD (%d bytes)", ul_size);
 		if(masterselect == false)
 		{
-			//MasterStackSend(p_buffer, ul_size, port); // Send it slave
+			MasterStackSend(p_buffer, ul_size, port); // Send it slave
 			if (inport < 5) 
 			{
 				port = (15 - NativePortMatrix) - (1<<(inport-1)); 
@@ -350,7 +350,7 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, int port, int inport)
 		if(masterselect == false)	// If we are the master then send to the slave
 		{
 			TRACE("switch13.c: Sending packet to slave to send out port %d (%d bytes)", port, ul_size);
-			//MasterStackSend(p_buffer, ul_size, port);	// Send it slave
+			MasterStackSend(p_buffer, ul_size, port);	// Send it slave
 			return;
 		}
 		// If slave then write to port
@@ -528,7 +528,7 @@ void task_switch(struct netif *netif)
 		if((sys_get_ms() - slave_timer) > 500)	// every 500 ms (0.5 secs)
 		{
 			slave_timer = sys_get_ms();	
-			//Slave_timer(); // Slave timer
+			Slave_timer(); // Slave timer
 		}
 		
 	}
