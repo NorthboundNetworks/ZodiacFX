@@ -359,25 +359,25 @@ void task_openflow(void)
 	{
 		fast_of_timer = sys_get_ms();
 		nnOF_timer();
-		if (stackenabled == true) masterslave_test();
-		
-		// ####### print master debug stats every 5s #######
-		static time_ctr = 0;
-		if(time_ctr == 10)
-		{
-			printf("master tx packets: %d\r\nmaster rx packets: %d\r\nmaster rx bad size: %d\r\nmaster rx bad preamble: %d\r\nmaster rx bad crc: %d\r\n",\
-					spi_debug.master_tx_count,\
-					spi_debug.master_rx_count,\
-					spi_debug.master_rx_error_bad_size,\
-					spi_debug.master_rx_error_bad_preamble,\
-					spi_debug.master_rx_error_bad_crc);
-			time_ctr = 0;
-		}
-		else
-		{
-			time_ctr++;
-		}
-		// ####### END #######
+		////if (stackenabled == true) masterslave_test();
+		////
+		////// ####### print master debug stats every 5s #######
+		////static time_ctr = 0;
+		////if(time_ctr == 10)
+		////{
+			////printf("master tx packets: %d\r\nmaster rx packets: %d\r\nmaster rx bad size: %d\r\nmaster rx bad preamble: %d\r\nmaster rx bad crc: %d\r\n",\
+					////spi_debug.master_tx_count,\
+					////spi_debug.master_rx_count,\
+					////spi_debug.master_rx_error_bad_size,\
+					////spi_debug.master_rx_error_bad_preamble,\
+					////spi_debug.master_rx_error_bad_crc);
+			////time_ctr = 0;
+		////}
+		////else
+		////{
+			////time_ctr++;
+		////}
+		////// ####### END #######
 
 		if (heartbeat > (HB_INTERVAL * 2) && tcp_con_state == 1)	//If we haven't heard anything from the controller for more then the heartbeat interval send an echo request
 		{
