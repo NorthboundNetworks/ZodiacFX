@@ -460,16 +460,16 @@ void SPI_Handler(void)
 	{
 		for(uint16_t ct=0; ct<spi_slave_send_size; ct+=2)
 		{
+			spi_read(SPI_SLAVE_BASE, &data, NULL);
 			spi_write(SPI_SLAVE_BASE, *(uint16_t*)&shared_buffer[ct], 0, 0);
 			while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);	// ***** ***** TODO: MODIFY TO IF STATEMENT; REMOVE spi_slave_send_count ***** *****
-			spi_read(SPI_SLAVE_BASE, NULL, NULL);
 		}
 		
 		// Flush out last two bytes
 		for(uint8_t spi_dummy_bytes=0; spi_dummy_bytes<2; spi_dummy_bytes++)
 		{
+			spi_read(SPI_SLAVE_BASE, &data, NULL);
 			spi_write(SPI_SLAVE_BASE, 0xFFFF, 0, 0); // *****
-			spi_dummy_bytes++;
 		}
 		
 		// Cleanup
