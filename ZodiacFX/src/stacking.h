@@ -43,7 +43,7 @@
 #define SPI_STATS_PREAMBLE		0xABAB
 #define SPI_PACKET_PREAMBLE		0xBCBC
 #define SPI_SEND_WAIT		0
-#define SPI_HEADER_SIZE	13
+#define SPI_HEADER_SIZE	14
 
 struct spi_port_stats {
 	uint16_t premable;
@@ -62,6 +62,7 @@ struct spi_packet {
 	uint32_t ul_rcv_size;	// Actual packet size
 	uint32_t spi_crc;		// Calculated CRC of packet
 	uint8_t tag;			// Port number (1-8, or 255)
+	uint8_t pad;			// Pad to 14 bytes
 	uint8_t pkt_buffer[GMAC_FRAME_LENTGH_MAX];
 };	
 	
