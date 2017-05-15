@@ -265,14 +265,14 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 	// Send the SPI packet header
 	for(uint16_t ct=0; ct<SPI_HEADER_SIZE; ct++)
 	{
-		spi_read(SPI_MASTER_BASE, &data, &uc_pcs);
+		spi_read(SPI_MASTER_BASE, NULL, NULL);
 		spi_write(SPI_MASTER_BASE, spi_head_buffer[ct], 0, 0);
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	}
 	// Send the SPI packet body
 	for(uint16_t ct=0; ct<ul_size; ct++)
 	{
-		spi_read(SPI_MASTER_BASE, &data, &uc_pcs);
+		spi_read(SPI_MASTER_BASE, NULL, NULL);
 		spi_write(SPI_MASTER_BASE, p_uc_data[ct], 0, 0);
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	}
