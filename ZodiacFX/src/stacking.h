@@ -46,7 +46,7 @@
 #define SPI_HEADER_SIZE	14
 
 struct spi_port_stats {
-	uint16_t premable;
+	uint16_t preamble;
 	uint16_t spi_size;
 	uint8_t port_status[4];
 	uint8_t last_port_status[4];
@@ -57,7 +57,7 @@ struct spi_port_stats {
 };
 
 struct spi_packet {
-	uint16_t premable;		// Transmission preamble
+	uint16_t preamble;		// Transmission preamble
 	uint16_t spi_size;		// SPI transmission size
 	uint32_t ul_rcv_size;	// Actual packet size
 	uint32_t spi_crc;		// Calculated CRC of packet

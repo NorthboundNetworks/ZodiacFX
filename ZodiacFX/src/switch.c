@@ -586,7 +586,7 @@ void task_switch(struct netif *netif)
 				//phys13_port_stats[tag-1].rx_packets++;
 				//ul_rcv_size--; // remove the tail first
 				//spi_packet = &shared_buffer;
-				//spi_packet->premable = SPI_PACKET_PREAMBLE;
+				//spi_packet->preamble = SPI_PACKET_PREAMBLE;
 				//spi_packet->ul_rcv_size = ul_rcv_size;
 				//spi_packet->spi_crc = 0;
 				//for(int x = 0;x<ul_rcv_size;x++)

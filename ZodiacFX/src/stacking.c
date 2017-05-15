@@ -170,7 +170,7 @@ void Slave_timer(void)
 		// Send SLAVE port stats if SLAVE is in the clear state
 		if (slave_ready == true && pending_spi_command == SPI_SEND_READY)
 		{
-			spi_p_stats.premable = SPI_STATS_PREAMBLE;
+			spi_p_stats.preamble = SPI_STATS_PREAMBLE;
 			spi_p_stats.spi_size = sizeof(struct spi_port_stats);
 			memcpy(&spi_stats_buffer, &spi_p_stats, sizeof(struct spi_port_stats));
 			ioport_set_pin_level(SPI_IRQ1, true);	// Set the IRQ to signal the slave wants to send something
@@ -251,7 +251,7 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 	}
 	// Prepare header (shared_buffer already contains the packet data)
 	spi_packet = &spi_head_buffer;
-	spi_packet->premable = SPI_PACKET_PREAMBLE;
+	spi_packet->preamble = SPI_PACKET_PREAMBLE;
 	spi_packet->ul_rcv_size = ul_size;
 	spi_packet->spi_crc = 0;
 	// Calculate CRC value
@@ -613,7 +613,7 @@ uint8_t slavemaster_test(void)
 	{
 		// PREPARE TEST PACKET from SLAVE to MASTER
 		spi_packet = &shared_buffer;
-		spi_packet->premable = SPI_PACKET_PREAMBLE;
+		spi_packet->preamble = SPI_PACKET_PREAMBLE;
 		spi_packet->ul_rcv_size = 1400;
 		spi_packet->spi_crc = 0;
 		uint8_t*ind_ptr = &spi_packet->pkt_buffer;
