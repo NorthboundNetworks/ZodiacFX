@@ -63,10 +63,12 @@ extern struct ofp13_port_stats phys13_port_stats[8];
 
 // Local variables
 uint16_t spi_slave_send_size;
+uint16_t spi_slave_send_count;
 uint8_t timer_alt;
 uint8_t pending_spi_command = SPI_SEND_READY;
 bool master_ready;
 bool slave_ready;
+uint8_t spi_dummy_bytes = 0;
 struct spi_port_stats spi_p_stats;
 uint8_t spi_stats_rr = 0;
 uint8_t spi_stats_buffer[sizeof(struct spi_port_stats)];
@@ -172,6 +174,7 @@ void Slave_timer(void)
 			ioport_set_pin_level(SPI_IRQ1, true);	// Set the IRQ to signal the slave wants to send something
 			pending_spi_command = SPI_SEND_STATS;	// We are waiting to send port stats
 			spi_slave_send_size = sizeof(struct spi_port_stats);
+			spi_slave_send_count = spi_slave_send_size;
 			timer_alt = 0;
 		}
 		return;
@@ -289,34 +292,32 @@ void MasterStackRcv(void)
 	uint16_t spi_read_size;
 	uint32_t spi_crc_rcv;
 
-	spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
+	spi_read_size = 1600;
 	// ignore dummy bytes
-	spi_read(SPI_MASTER_BASE, &data, &uc_pcs);
+	spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
 	spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
-	spi_read(SPI_MASTER_BASE, &data, &uc_pcs);
+	spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
 	spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
 	while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	
 	while(spi_count < spi_read_size)
 	{
-		spi_read(SPI_MASTER_BASE, &data, &uc_pcs);
+		spi_read(SPI_MASTER_BASE, &shared_buffer[spi_count], &uc_pcs);
 		spi_write(SPI_MASTER_BASE, 0xbb, 0, 0);
-		
-		shared_buffer[spi_count] = data;		// lower 8 bits
-		shared_buffer[spi_count+1] = (data>>8);	// upper 8 bits
-		
 			// MAY CAUSE TIMING PROBLEMS
-			if(spi_read_size == GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE && spi_count == 4)
+			if(spi_read_size == 1600)
 			{
-				spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
-				if(spi_read_size > GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE)
+				if(spi_count == 3)
 				{
-					spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
+					spi_read_size = shared_buffer[2] + (shared_buffer[3]*256);
+					if(spi_read_size > 1600)
+					{
+						spi_read_size = 1600;
+					}
 				}
 			}
-			
-		spi_count+=2;
+		spi_count++;
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	}
 	printf("stacking.c: ------- ------- Slave -> Master %d\r\n", sys_get_ms() - rcv_time);
@@ -390,10 +391,7 @@ void MasterStackRcv(void)
 			phys13_port_stats[7].tx_bytes += spi_p_stats.tx_bytes[3];
 			phys13_port_stats[7].rx_bytes += spi_p_stats.rx_bytes[3];
 		}
-		
-		return;
 	}
-	
 	return;
 }
 
@@ -445,24 +443,29 @@ void SPI_Handler(void)
 	}
 
 	if(pending_spi_command == SPI_SEND_PKT)	// Send slave packet to master
-	{		
-		for(uint16_t ct=0; ct<spi_slave_send_size; ct+=2)
+	{
+		if (spi_slave_send_count <= 0)
 		{
-			spi_write(SPI_SLAVE_BASE, *(uint16_t*)&shared_buffer[ct], 0, 0);
-			while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);	// ***** ***** TODO: MODIFY TO IF STATEMENT; REMOVE spi_slave_send_count ***** *****
-			spi_read(SPI_SLAVE_BASE, NULL, NULL);
+			// Flush out last two bytes
+			if (spi_dummy_bytes < 2)
+			{
+				spi_write(SPI_SLAVE_BASE, 0xff, 0, 0); // *****
+				spi_dummy_bytes++;
+				return;
+			}
+			pending_spi_command = SPI_SEND_READY;	// Clear the pending command
+			ioport_set_pin_level(SPI_IRQ1, false);	// turn off the IRQ because we are done
+			spi_dummy_bytes = 0;
+		} else {
+			while(spi_slave_send_count > 0)
+			{
+				spi_write(SPI_SLAVE_BASE, shared_buffer[spi_slave_send_size - spi_slave_send_count], 0, 0);
+				spi_slave_send_count--;
+				// Wait for master to send the next byte
+				while ((spi_read_status(SPI_SLAVE_BASE) & SPI_SR_RDRF) == 0);
+				spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
+			}
 		}
-		
-		// Flush out last two bytes
-		for(uint8_t spi_dummy_bytes=0; spi_dummy_bytes<2; spi_dummy_bytes++)
-		{
-			spi_write(SPI_SLAVE_BASE, 0xFFFF, 0, 0); // *****
-			spi_dummy_bytes++;
-		}
-		
-		// Cleanup
-		pending_spi_command = SPI_SEND_READY;	// Clear the pending command
-		ioport_set_pin_level(SPI_IRQ1, false);	// turn off the IRQ because we are done
 		return;
 	}
 
@@ -602,6 +605,7 @@ uint8_t slavemaster_test(void)
 		spi_packet->spi_size = SPI_HEADER_SIZE + 1400;
 		pending_spi_command = SPI_SEND_PKT;	// We are waiting to forward the packet
 		spi_slave_send_size = spi_packet->spi_size;
+		spi_slave_send_count = spi_slave_send_size;
 		ioport_set_pin_level(SPI_IRQ1, true);	// Set the IRQ to signal the slave wants to send something
 	}
 	return;

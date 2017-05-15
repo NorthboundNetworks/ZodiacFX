@@ -53,6 +53,7 @@ extern struct spi_packet *spi_packet;
 extern bool slave_ready;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern uint16_t spi_slave_send_size;
+extern uint16_t spi_slave_send_count;
 
 // Local variables
 gmac_device_t gs_gmac_dev;
@@ -597,6 +598,7 @@ void task_switch(struct netif *netif)
 				//memcpy(&spi_packet->pkt_buffer, &gs_uc_eth_buffer, ul_rcv_size);
 				//pending_spi_command = SPI_SEND_PKT;	// We are waiting to forward the packet
 				//spi_slave_send_size = spi_packet->spi_size;
+				//spi_slave_send_count = spi_slave_send_size;
 				//ioport_set_pin_level(SPI_IRQ1, true);	// Set the IRQ to signal the slave wants to send something
 				return;
 			}
