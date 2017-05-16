@@ -594,7 +594,7 @@ void task_switch(struct netif *netif)
 					spi_packet->spi_crc += gs_uc_eth_buffer[x];
 				}
 				spi_packet->tag = tag + 4;
-				spi_packet->spi_size = SPI_HEADER_SIZE + ul_rcv_size;
+				spi_packet->spi_size = 11 + ul_rcv_size;
 				memcpy(&spi_packet->pkt_buffer, &gs_uc_eth_buffer, ul_rcv_size);
 				pending_spi_command = SPI_SEND_PKT;	// We are waiting to forward the packet
 				spi_slave_send_size = spi_packet->spi_size;
