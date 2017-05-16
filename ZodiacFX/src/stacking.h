@@ -72,6 +72,13 @@ struct spi_debug_stats {
 	uint32_t master_rx_error_bad_preamble;
 	uint32_t master_rx_error_bad_size;
 	uint32_t master_rx_error_bad_crc;
+	uint32_t slave_tx_count;
+	uint32_t slave_rx_count;
+	uint32_t slave_tx_error_timeout;
+	uint32_t slave_rx_error_bad_preamble;
+	uint32_t slave_rx_error_bad_size;
+	uint32_t slave_rx_error_bad_crc;
+	uint32_t slave_rx_error_timeout;
 };
 	
 void stacking_init(bool master);
