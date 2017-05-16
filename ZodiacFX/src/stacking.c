@@ -38,7 +38,7 @@
 #include "timers.h"
 
 /* SPI clock setting (Hz). */
-static uint32_t gs_ul_spi_clock = 30000000;
+static uint32_t gs_ul_spi_clock = 10000000;
 
 /* Chip select. */
 #define SPI_CHIP_SEL 0
