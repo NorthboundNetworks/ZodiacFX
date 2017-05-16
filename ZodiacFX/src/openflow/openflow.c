@@ -87,9 +87,6 @@ void tcp_error(void * arg, err_t err);
 static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
 static err_t of_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len);
 
-// ####### SPI debug output #######
-extern struct spi_debug_stats spi_debug;
-
 /*
 *	Converts a 64bit value from host to network format
 *

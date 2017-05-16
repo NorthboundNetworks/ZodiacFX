@@ -463,6 +463,8 @@ void SPI_Handler(void)
 					{
 						pending_spi_command = SPI_SEND_READY;	// Clear the pending command
 						ioport_set_pin_level(SPI_IRQ1, false);	// turn off the IRQ because we are done
+						
+						spi_debug.slave_tx_error_timeout++;
 						return;
 					}
 					else
@@ -472,6 +474,7 @@ void SPI_Handler(void)
 				}
 				spi_read(SPI_SLAVE_BASE, &data, &uc_pcs);
 			}
+			spi_debug.slave_tx_count++;
 		}
 		return;
 	}
@@ -509,6 +512,7 @@ void SPI_Handler(void)
 					pending_spi_command = SPI_SEND_READY;	// Clear the pending command
 					spi_count = 2;
 					spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
+					spi_debug.slave_rx_error_timeout++;
 					return;
 				}
 				else
@@ -531,6 +535,7 @@ void SPI_Handler(void)
 					pending_spi_command = SPI_SEND_READY;
 					spi_count = 2;
 					spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
+					spi_debug.slave_rx_error_bad_size++;
 					return;
 				}
 			}
@@ -552,6 +557,7 @@ void SPI_Handler(void)
 			pending_spi_command = SPI_SEND_READY;
 			spi_count = 2;
 			spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
+			spi_debug.slave_rx_error_bad_size++;
 			return;
 		}
 		
@@ -569,6 +575,7 @@ void SPI_Handler(void)
 			pending_spi_command = SPI_SEND_READY;
 			spi_count = 2;
 			spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
+			spi_debug.slave_rx_error_bad_crc++;
 			return;
 		}
 		
@@ -586,6 +593,7 @@ void SPI_Handler(void)
 		spi_count = 2;
 		spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
 		////slavemaster_test();
+		spi_debug.slave_rx_count++;
 		return;
 	}
 
