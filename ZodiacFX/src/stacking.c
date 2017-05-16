@@ -326,7 +326,7 @@ void MasterStackRcv(void)
 		spi_count+=2;
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	}
-	////printf("stacking.c: ------- ------- rtt %d\r\n", sys_get_ms() - rcv_time);
+	printf("stacking.c: ------- ------- rtt %d\r\n", sys_get_ms() - rcv_time);
 	
 	TRACE("stacking.c: MASTER received preamble - %x, %x", shared_buffer[0], shared_buffer[1]);
 	if (!((shared_buffer[0] == 0xAB && shared_buffer[1] == 0xAB) || (shared_buffer[0] == 0xBC && shared_buffer[1] == 0xBC)))
@@ -366,7 +366,7 @@ void MasterStackRcv(void)
 		phys13_port_stats[spi_packet->tag-1].rx_packets++;
 		// Send packet to OpenFlow table lookup function for processing
 		nnOF_tablelookup(gs_uc_eth_buffer, &spi_packet->ul_rcv_size, spi_packet->tag);
-		////printf("stacking.c: ------- ------- response ok\r\n");
+		printf("stacking.c: ------- ------- response ok\r\n");
 		spi_debug.master_rx_count++;
 		return;
 	}
@@ -551,6 +551,7 @@ void SPI_Handler(void)
 			pending_spi_command = SPI_SEND_READY;
 			spi_count = 2;
 			spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
+			//slavemaster_test();
 			return;
 		}
 		
@@ -584,7 +585,7 @@ void SPI_Handler(void)
 		pending_spi_command = SPI_SEND_READY;
 		spi_count = 2;
 		spi_read_size = GMAC_FRAME_LENTGH_MAX + SPI_HEADER_SIZE;
-		////slavemaster_test();
+		slavemaster_test();
 		return;
 	}
 
