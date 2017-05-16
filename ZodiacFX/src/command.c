@@ -1661,6 +1661,17 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		return;
 	}	
 	
+	if (strcmp(command, "spi_stats")==0)
+	{
+		printf("master tx packets: %d\r\nmaster rx packets: %d\r\nmaster rx bad size: %d\r\nmaster rx bad preamble: %d\r\nmaster rx bad crc: %d\r\n",\
+				spi_debug.master_tx_count,\
+				spi_debug.master_rx_count,\
+				spi_debug.master_rx_error_bad_size,\
+				spi_debug.master_rx_error_bad_preamble,\
+				spi_debug.master_rx_error_bad_crc
+			);
+	}
+	
 	// Unknown Command response
 	printf("Unknown command\r\n");
 	return;

@@ -278,6 +278,8 @@ void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port)
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 	}
 	
+	spi_debug.master_tx_count++;
+	
 	return;
 }
 
@@ -599,7 +601,6 @@ uint8_t masterslave_test(void)
 		shared_buffer[i] = pattern++;
 	}
 	rcv_time = sys_get_ms();
-	spi_debug.master_tx_count++;
 	MasterStackSend(&shared_buffer, 1400, 8);
 	return;
 }
