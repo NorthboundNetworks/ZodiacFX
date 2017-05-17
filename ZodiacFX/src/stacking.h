@@ -35,17 +35,18 @@
 #define SPI_Handler     SPI_Handler
 #define SPI_IRQn        SPI_IRQn
 
-#define SPI_SEND_CLEAR	0
+#define SPI_SEND_READY	0
 #define SPI_SEND_STATS	1
 #define SPI_SEND_PKT	2
 #define SPI_RECEIVE		3
 #define SPI_RCV_PREAMBLE	4
 #define SPI_STATS_PREAMBLE		0xABAB
 #define SPI_PACKET_PREAMBLE		0xBCBC
-#define SPI_SEND_WAIT		500
+#define SPI_SEND_WAIT		0
+#define SPI_HEADER_SIZE	14
 
 struct spi_port_stats {
-	uint16_t premable;
+	uint16_t preamble;
 	uint16_t spi_size;
 	uint8_t port_status[4];
 	uint8_t last_port_status[4];
@@ -56,18 +57,38 @@ struct spi_port_stats {
 };
 
 struct spi_packet {
-	uint16_t premable;
-	uint16_t spi_size;
-	uint32_t ul_rcv_size;
-	uint16_t spi_crc;
-	uint8_t tag;
+	uint16_t preamble;		// Transmission preamble
+	uint16_t spi_size;		// SPI transmission size
+	uint32_t ul_rcv_size;	// Actual packet size
+	uint32_t spi_crc;		// Calculated CRC of packet
+	uint8_t tag;			// Port number (1-8, or 255)
+	uint8_t pad;			// Pad to 14 bytes
 	uint8_t pkt_buffer[GMAC_FRAME_LENTGH_MAX];
-};	
+};
+
+struct spi_debug_stats {
+	uint32_t master_tx_count;
+	uint32_t master_rx_count;
+	uint32_t master_rx_error_bad_preamble;
+	uint32_t master_rx_error_bad_size;
+	uint32_t master_rx_error_bad_crc;
+	uint32_t slave_tx_count;
+	uint32_t slave_rx_count;
+	uint32_t slave_tx_error_timeout;
+	uint32_t slave_rx_error_bad_preamble;
+	uint32_t slave_rx_error_bad_size;
+	uint32_t slave_rx_error_bad_crc;
+	uint32_t slave_rx_error_timeout;
+};
 	
 void stacking_init(bool master);
 void MasterReady(void);
 void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size, uint32_t port);
 void MasterStackRcv(void);
 void Slave_timer(void);
+
+// ***** Stacking Test Functions *****
+uint8_t masterslave_test(void);		// Send pattern from master -> slave
+uint8_t slavemaster_test(void);		// Send pattern from slave -> master
 
 #endif /* STACKING_H_ */

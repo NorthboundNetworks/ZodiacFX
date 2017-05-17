@@ -38,6 +38,7 @@
 #include "eeprom.h"
 #include "switch.h"
 #include "flash.h"
+#include "stacking.h"
 #include "openflow/openflow.h"
 #include "openflow/of_helper.h"
 #include "lwip/def.h"
@@ -84,6 +85,8 @@ uint8_t uCLIContext = 0;
 struct arp_header arp_test;
 uint8_t esc_char = 0;
 
+// ####### SPI debug output #######
+extern struct spi_debug_stats spi_debug;
 
 // Internal Functions
 void saveConfig(void);
@@ -1660,6 +1663,32 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		printf("Starting trace...\r\n");
 		return;
 	}	
+	
+	if (strcmp(command, "spi_stats")==0)
+	{
+		printf("master tx packets: %d\r\nmaster rx packets: %d\r\nmaster rx bad size: %d\r\nmaster rx bad preamble: %d\r\nmaster rx bad crc: %d\r\n",\
+				spi_debug.master_tx_count,\
+				spi_debug.master_rx_count,\
+				spi_debug.master_rx_error_bad_size,\
+				spi_debug.master_rx_error_bad_preamble,\
+				spi_debug.master_rx_error_bad_crc
+			);
+		return;
+	}
+		
+	if (strcmp(command, "spi_stats_slave")==0)
+	{
+		printf("slave tx packets: %d\r\nslave rx packets: %d\r\nslave tx timeout errors: %d\r\nslave rx timeout errors: %d\r\nslave rx bad size: %d\r\nslave rx bad preamble: %d\r\nslave rx bad crc: %d\r\n",\
+		spi_debug.slave_tx_count,\
+		spi_debug.slave_rx_count,\
+		spi_debug.slave_tx_error_timeout,\
+		spi_debug.slave_rx_error_timeout,\
+		spi_debug.slave_rx_error_bad_size,\
+		spi_debug.slave_rx_error_bad_preamble,\
+		spi_debug.slave_rx_error_bad_crc
+		);
+		return;
+	}
 	
 	// Unknown Command response
 	printf("Unknown command\r\n");
