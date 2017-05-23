@@ -101,7 +101,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	uint16_t packet_size;
 	struct packet_fields fields = {0};
 	packet_fields_parser(p_uc_data, &fields);
-		
+
 	memcpy(&packet_size, ul_size, 2);
 	uint16_t eth_prot;
 	memcpy(&eth_prot, p_uc_data + 12, 2);
@@ -121,6 +121,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	uint16_t tcpport;
 	uint32_t ipadr;
 	uint16_t vlantag = htons(0x8100);
+	int outport = 0;
 
 	table_counters[0].lookup_count++;
 
@@ -171,13 +172,30 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					{
 						case OFPAT10_OUTPUT:
 						action_out = act_hdr;
+						if (ntohs(action_out->port) <= 255 && ntohs(action_out->port) != port) // physical port
+						{
+							outport = (1<< (ntohs(action_out->port)-1));
+							gmac_write(p_uc_data, packet_size, outport);
+						}
+
+						if (ntohs(action_out->port) == OFPP_IN_PORT)
+						{
+							outport = (1<< (port-1));
+							gmac_write(p_uc_data, packet_size, outport);
+						}
+
+						if (ntohs(action_out->port) == OFPP_ALL || ntohs(action_out->port) == OFPP_FLOOD)
+						{
+							outport = (15 - NativePortMatrix) - (1<<(port-1));
+							gmac_write(p_uc_data, packet_size, outport);
+						}
+
 						if (ntohs(action_out->port) == OFPP_CONTROLLER)
 						{
 							int pisize = ntohs(action_out->max_len);
 							if (pisize > packet_size) pisize = packet_size;
 							packet_in(p_uc_data, pisize, port, OFPR_ACTION);
 						}
-						gmac_write(p_uc_data, packet_size, ntohs(action_out->port));
 						break;
 
 						case OFPAT10_SET_DL_SRC:
