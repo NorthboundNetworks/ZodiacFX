@@ -38,7 +38,6 @@
 #include "eeprom.h"
 #include "switch.h"
 #include "flash.h"
-#include "stacking.h"
 #include "openflow/openflow.h"
 #include "openflow/of_helper.h"
 #include "lwip/def.h"

@@ -33,7 +33,6 @@
 #include "trace.h"
 #include "openflow/openflow.h"
 #include "switch.h"
-#include "stacking.h"
 #include "conf_eth.h"
 #include "command.h"
 #include "timers.h"

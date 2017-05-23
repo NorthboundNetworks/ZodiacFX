@@ -39,7 +39,6 @@
 #include "lwip/tcp.h"
 #include "lwip/err.h"
 #include "timers.h"
-#include "stacking.h"
 
 // Global variables
 extern struct zodiac_config Zodiac_Config;

@@ -42,7 +42,6 @@
 #include "command.h"
 #include "eeprom.h"
 #include "switch.h"
-#include "stacking.h"
 #include "http.h"
 #include "flash.h"
 #include "openflow/openflow.h"
