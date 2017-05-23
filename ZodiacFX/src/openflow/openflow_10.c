@@ -57,7 +57,6 @@ extern uint8_t port_status[8];
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern struct zodiac_config Zodiac_Config;
 extern struct ofp_switch_config Switch_config;
-extern uint8_t total_ports;
 
 //Internal Functions
 void packet_in(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason);
@@ -433,7 +432,7 @@ void features_reply10(uint32_t xid)
 	memcpy(&buf, &features, sizeof(struct ofp10_switch_features));
 	update_port_status();		//update port status
 
-	for(l = 0; l<total_ports; l++)
+	for(l = 0; l<TOTAL_PORTS; l++)
 	{
 		if(Zodiac_Config.of_port[l] == 1)
 		{
@@ -635,7 +634,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 	{
 		// Find number of OpenFlow ports present
 		uint8_t ofports = 0;
-		for(uint8_t k=0; k<total_ports; k++)
+		for(uint8_t k=0; k<TOTAL_PORTS; k++)
 		{
 			// Check if port is NOT native
 			if(!(NativePortMatrix & (1<<(k))))
@@ -660,7 +659,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 		buffer += sizeof(struct ofp10_stats_reply);
 
 		// Write port stats to reply message
-		for(uint8_t k=0; k<total_ports; k++)
+		for(uint8_t k=0; k<TOTAL_PORTS; k++)
 		{
 			// Check if port is NOT native
 			if(!(NativePortMatrix & (1<<(k))))
@@ -693,7 +692,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 			}
 		}
 	}
-	else if (port > 0 && port <= total_ports)	// Respond to request for ports
+	else if (port > 0 && port <= TOTAL_PORTS)	// Respond to request for ports
 	{
 		// Check if port is NOT native
 		if(!(NativePortMatrix & (1<<(port-1))))

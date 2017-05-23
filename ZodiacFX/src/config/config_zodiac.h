@@ -33,6 +33,8 @@
 
 #define VERSION "0.81"		// Firmware version number
 
+#define TOTAL_PORTS 4		// Total number of physical ports on the Zodiac FX
+
 #define MAX_OFP_VERSION   0x04
 
 #define MAX_FLOWS_10	128		// Maximum number of flows for OpenFlow 1.0

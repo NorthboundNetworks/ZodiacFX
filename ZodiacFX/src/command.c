@@ -69,7 +69,6 @@ extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
 extern bool trace = false;
 extern struct tcp_pcb *tcp_pcb;
 extern uint8_t port_status[8];
-extern uint8_t total_ports;
 extern int totaltime;
 extern int32_t ul_temp;
 extern int OF_Version;
@@ -326,7 +325,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 	{
 		int i;
 		printf("\r\n-------------------------------------------------------------------------\r\n");
-		for (i=0;i<total_ports;i++)
+		for (i=0;i<TOTAL_PORTS;i++)
 		{
 
 			printf("\r\nPort %d\r\n",i+1);

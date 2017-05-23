@@ -67,7 +67,6 @@ extern int multi_pos;
 extern uint8_t NativePortMatrix;
 extern bool reply_more_flag;
 extern uint32_t reply_more_xid;
-extern uint8_t total_ports;
 extern int meter_handler(uint32_t id, uint16_t bytes);
 
 // Internal functions
@@ -886,7 +885,7 @@ int multi_aggregate_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
 	int numofports = 0;
-	for(int n=0;n<total_ports;n++)
+	for(int n=0;n<TOTAL_PORTS;n++)
 	{
 		if(Zodiac_Config.of_port[n]==1) numofports++;
 	}
@@ -906,7 +905,7 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	uint8_t mac[] = {0x00,0x00,0x00,0x00,0x00,0x00};
 	update_port_status();		//update port status
 
-	for(int l = 0; l<total_ports; l++)
+	for(int l = 0; l<TOTAL_PORTS; l++)
 	{
 		if(Zodiac_Config.of_port[l] == 1)
 		{
@@ -1104,7 +1103,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 	{
 		// Find number of OpenFlow ports present
 		uint8_t ofports = 0;
-		for(uint8_t k=0; k<total_ports; k++)
+		for(uint8_t k=0; k<TOTAL_PORTS; k++)
 		{
 			// Check if port is NOT native
 			if(!(NativePortMatrix & (1<<(k))))
@@ -1130,7 +1129,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 		buffer += sizeof(struct ofp13_multipart_reply);
 		
 		// Write port stats to reply message
-		for(uint8_t k=0; k<total_ports; k++)
+		for(uint8_t k=0; k<TOTAL_PORTS; k++)
 		{
 			// Check if port is NOT native
 			if(!(NativePortMatrix & (1<<(k))))
@@ -1164,7 +1163,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 			}
 		}
 	}
-	else if (port > 0 && port <= total_ports)	// Respond to request for ports
+	else if (port > 0 && port <= TOTAL_PORTS)	// Respond to request for ports
 	{
 		// Check if port is NOT native
 		if(!(NativePortMatrix & (1<<(port-1))))

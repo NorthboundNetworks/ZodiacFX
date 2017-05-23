@@ -56,7 +56,6 @@ struct ofp10_port_stats phys10_port_stats[8];
 struct ofp13_port_stats phys13_port_stats[8];
 uint8_t port_status[8];
 uint8_t last_port_status[8];
-uint8_t total_ports = 4;
 uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 uint8_t stats_rr = 0;
 
