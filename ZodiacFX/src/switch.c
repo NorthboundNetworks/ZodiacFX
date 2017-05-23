@@ -51,8 +51,6 @@ extern uint8_t pending_spi_command;
 extern struct spi_packet *spi_packet;
 extern bool slave_ready;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
-extern uint16_t spi_slave_send_size;
-extern uint16_t spi_slave_send_count;
 
 // Local variables
 gmac_device_t gs_gmac_dev;
@@ -62,7 +60,6 @@ struct ofp13_port_stats phys13_port_stats[8];
 uint8_t port_status[8];
 uint8_t last_port_status[8];
 uint8_t total_ports = 4;
-int slave_timer = 0;
 uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 uint8_t stats_rr = 0;
 
@@ -507,32 +504,6 @@ void task_switch(struct netif *netif)
 	uint8_t tag = 0;
 	int8_t in_port = 0;
 
-	// Check if the slave device has a packet to send us
-	if(masterselect == false && ioport_get_pin_level(SPI_IRQ1) && stackenabled == true)
-	{
-		MasterStackRcv();
-	}
-						
-	// Check if the slave device is connected and enable stacking
-	if(masterselect == false && !ioport_get_pin_level(SPI_IRQ1) && stackenabled == false) 
-	{
-		MasterReady();	// Let the slave know the master is ready
-		stackenabled = true;
-		total_ports = 8;
-	}
-	
-	// Slave house keeping timer
-	if(masterselect == true) 
-	{
-		if((sys_get_ms() - slave_timer) > 500)	// every 500 ms (0.5 secs)
-		{
-			slave_timer = sys_get_ms();	
-			Slave_timer(); // Slave timer
-		}
-		
-	}
-
-	
 	/* Main packet processing loop */
 	uint32_t dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_rcv_size);
 	if (dev_read == GMAC_OK)
@@ -550,55 +521,29 @@ void task_switch(struct netif *netif)
 			}
 		}
 		
-		if(masterselect == false)	// Only process packets if board is set to MASTER
+		// Process packet
+		if (ul_rcv_size > 0)
 		{
-			if (ul_rcv_size > 0)
+			uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
+			uint8_t tag = *tail_tag + 1;
+			if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[tag-1] == 1)
 			{
-				uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
-				uint8_t tag = *tail_tag + 1;
-				if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[tag-1] == 1)
-				{
-					phys10_port_stats[tag-1].rx_packets++;
-					phys13_port_stats[tag-1].rx_packets++;
-					ul_rcv_size--; // remove the tail first
-					nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
-					return;
-				} else {
-					TRACE("switch.c: %d byte received from controller", ul_rcv_size);
-					struct pbuf *p;
-					p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);
-					memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));
-					p->len = ul_rcv_size-1;
-					p->tot_len = ul_rcv_size-1;
-					netif->input(p, netif);
-					pbuf_free(p);
-					return;
-				}
-			}
-		} else
-		{
-			if (slave_ready == true && pending_spi_command == SPI_SEND_READY)
-			{
-				uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
-				uint8_t tag = *tail_tag + 1;
 				phys10_port_stats[tag-1].rx_packets++;
 				phys13_port_stats[tag-1].rx_packets++;
 				ul_rcv_size--; // remove the tail first
-				spi_packet = &shared_buffer;
-				spi_packet->preamble = SPI_PACKET_PREAMBLE;
-				spi_packet->ul_rcv_size = ul_rcv_size;
-				spi_packet->spi_crc = 0;
-				for(int x = 0;x<ul_rcv_size;x++)
-				{
-					spi_packet->spi_crc += gs_uc_eth_buffer[x];
-				}
-				spi_packet->tag = tag + 4;
-				spi_packet->spi_size = SPI_HEADER_SIZE + ul_rcv_size;
-				memcpy(&spi_packet->pkt_buffer, &gs_uc_eth_buffer, ul_rcv_size);
-				pending_spi_command = SPI_SEND_PKT;	// We are waiting to forward the packet
-				spi_slave_send_size = spi_packet->spi_size;
-				spi_slave_send_count = spi_slave_send_size;
-				ioport_set_pin_level(SPI_IRQ1, true);	// Set the IRQ to signal the slave wants to send something
+				nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
+				return;
+			}
+			else
+			{
+				TRACE("switch.c: %d byte received from controller", ul_rcv_size);
+				struct pbuf *p;
+				p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);
+				memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));
+				p->len = ul_rcv_size-1;
+				p->tot_len = ul_rcv_size-1;
+				netif->input(p, netif);
+				pbuf_free(p);
 				return;
 			}
 		}

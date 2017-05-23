@@ -44,8 +44,6 @@ void update_port_stats(void);
 void update_port_status(void);
 void disableOF(void);
 void enableOF(void);
-void stacking_init(bool master);
-void MasterStackRcv(void);
 
 int readtxbytes(int port);
 int readrxbytes(int port);
