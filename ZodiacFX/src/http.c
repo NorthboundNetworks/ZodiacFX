@@ -91,8 +91,6 @@ static bool restart_required = false;		// Track if any configuration changes are
 static bool file_upload = false;	// Multi-part firmware file upload flag
 static bool post_pending = false;
 
-extern bool stackenabled;
-
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
 void http_send(char *buffer, struct tcp_pcb *pcb, bool out);
@@ -2109,18 +2107,7 @@ static uint8_t interfaceCreate_Home(void)
 					"CPU Temp: %d C<br>"\
 					"Uptime: %02d:%02d<br>"\
 			);
-	if(stackenabled == true)
-	{
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-					"Stacking: enabled"
-			);
-	}
-	else
-	{
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-					"Stacking: disabled"
-			);
-	}
+
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\		
 				"</p>"\
 				"<form action=\"btn_default\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will be reset to factory settings. Do you wish to proceed?');\">"\

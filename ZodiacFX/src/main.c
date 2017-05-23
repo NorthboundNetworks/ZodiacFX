@@ -52,7 +52,6 @@ struct netif gs_net_if;
 struct zodiac_config Zodiac_Config;
 int charcount, charcount_last;
 bool masterselect;
-bool stackenabled;
 int portmap[4];
 int32_t ul_temp;
 uint8_t NativePortMatrix;

@@ -68,7 +68,6 @@ extern uint8_t NativePortMatrix;
 extern bool reply_more_flag;
 extern uint32_t reply_more_xid;
 extern uint8_t total_ports;
-extern bool stackenabled;
 extern int meter_handler(uint32_t id, uint16_t bytes);
 
 // Internal functions
@@ -890,10 +889,6 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	for(int n=0;n<total_ports;n++)
 	{
 		if(Zodiac_Config.of_port[n]==1) numofports++;
-	}
-	if(stackenabled == true)
-	{
-		numofports += 4;	// Add the slave ports
 	}
 	struct ofp13_multipart_reply *reply;
 	struct ofp13_port phys_port[numofports];

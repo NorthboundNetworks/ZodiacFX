@@ -58,7 +58,6 @@ extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern struct zodiac_config Zodiac_Config;
 extern struct ofp_switch_config Switch_config;
 extern uint8_t total_ports;
-extern bool stackenabled;
 
 //Internal Functions
 void packet_in(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason);
@@ -410,10 +409,6 @@ void features_reply10(uint32_t xid)
 	for(int n=0;n<4;n++)
 	{
 		if(Zodiac_Config.of_port[n]==1)numofports++;
-	}
-	if(stackenabled == true)
-	{
-		numofports += 4;	// Add the slave ports	
 	}
 	struct ofp10_switch_features features;
 	struct ofp10_phy_port phys_port[numofports];

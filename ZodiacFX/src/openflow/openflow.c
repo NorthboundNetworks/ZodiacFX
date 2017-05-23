@@ -45,7 +45,6 @@ extern struct zodiac_config Zodiac_Config;
 extern uint8_t port_status[8];
 extern struct ofp10_port_stats phys10_port_stats[8];
 extern struct ofp13_port_stats phys13_port_stats[8];
-extern bool stackenabled;
 
 // Local Variables
 struct ofp_switch_config Switch_config;
@@ -355,7 +354,6 @@ void task_openflow(void)
 	{
 		fast_of_timer = sys_get_ms();
 		nnOF_timer();
-		////if (stackenabled == true) masterslave_test();
 
 		if (heartbeat > (HB_INTERVAL * 2) && tcp_con_state == 1)	//If we haven't heard anything from the controller for more then the heartbeat interval send an echo request
 		{

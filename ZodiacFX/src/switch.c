@@ -46,7 +46,6 @@ extern struct zodiac_config Zodiac_Config;
 extern int OF_Version;
 extern uint8_t NativePortMatrix;
 extern bool masterselect;
-extern bool stackenabled;
 extern uint8_t pending_spi_command;
 extern struct spi_packet *spi_packet;
 extern bool slave_ready;
