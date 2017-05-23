@@ -179,7 +179,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							if (pisize > packet_size) pisize = packet_size;
 							packet_in(p_uc_data, pisize, port, OFPR_ACTION);
 						}
-						gmac_write(p_uc_data, packet_size, ntohs(action_out->port), port);
+						gmac_write(p_uc_data, packet_size, ntohs(action_out->port));
 						break;
 
 						case OFPAT10_SET_DL_SRC:
@@ -764,7 +764,7 @@ void packet_out(struct ofp_header *msg)
 		nnOF_tablelookup(ptr, &size, NTOHS(*iport));
 		return;
 	}
-	gmac_write(ptr, size, NTOHS(*eport), NTOHS(*iport));
+	gmac_write(ptr, size, NTOHS(*eport));
 	return;
 }
 

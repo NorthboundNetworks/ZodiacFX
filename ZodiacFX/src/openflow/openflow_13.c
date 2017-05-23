@@ -233,7 +233,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						break;
 					}
 					
-					gmac_write(p_uc_data, packet_size, htonl(act_output->port), port);
+					gmac_write(p_uc_data, packet_size, htonl(act_output->port));
 					
 				}
 				break;
@@ -2025,14 +2025,13 @@ void packet_out13(struct ofp_header *msg)
 	struct ofp13_action_header *act_hdr = po->actions;
 	if (ntohs(act_hdr->type) != OFPAT13_OUTPUT) return;
 	struct ofp13_action_output *act_out = act_hdr;
-	//uint32_t outPort = htonl(act_out->port);
 	TRACE("openflow_13.c: Packet out port 0x%X (%d bytes)", htonl(act_out->port), size);
 	if (htonl(act_out->port) == OFPP13_TABLE)
 	{
 		nnOF_tablelookup(ptr, &size, inPort);
 		return;
 	}
-	gmac_write(ptr, size, htonl(act_out->port), inPort);
+	gmac_write(ptr, size, htonl(act_out->port));
 	return;
 }
 
