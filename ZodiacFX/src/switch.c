@@ -56,7 +56,7 @@ struct ofp10_port_stats phys10_port_stats[TOTAL_PORTS];
 struct ofp13_port_stats phys13_port_stats[TOTAL_PORTS];
 uint8_t port_status[TOTAL_PORTS];
 uint8_t last_port_status[TOTAL_PORTS];
-uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
+static volatile uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 uint8_t stats_rr = 0;
 
 /* GMAC HW configurations */
