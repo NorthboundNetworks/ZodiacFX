@@ -1164,7 +1164,7 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 			}
 		}
 	}
-	else if (port > 0 && port <= total_ports)	// Respond to request for ports 1-4 or 1-8 (stacking)
+	else if (port > 0 && port <= total_ports)	// Respond to request for ports
 	{
 		// Check if port is NOT native
 		if(!(NativePortMatrix & (1<<(port-1))))

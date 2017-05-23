@@ -693,7 +693,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 			}
 		}
 	}
-	else if (port > 0 && port <= total_ports)	// Respond to request for ports 1-4 or 1-8 (stacking)
+	else if (port > 0 && port <= total_ports)	// Respond to request for ports
 	{
 		// Check if port is NOT native
 		if(!(NativePortMatrix & (1<<(port-1))))
