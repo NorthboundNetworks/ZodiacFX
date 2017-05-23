@@ -773,14 +773,23 @@ void packet_out(struct ofp_header *msg)
 	int size = NTOHS(po->header.length) - ((sizeof(struct ofp_packet_out) + NTOHS(po->actions_len)));
 	uint16_t *eport;
 	eport = ptr - 4;
-	TRACE("openflow_10.c: Packet out port 0x%X (%d bytes)", NTOHS(*eport), size);
-	
-	if (NTOHS(*eport) == OFPP_TABLE)
+	int outPort = NTOHS(*eport);
+	int inPort = NTOHS(*iport);
+
+	if (outPort == OFPP_TABLE)
 	{
-		nnOF_tablelookup(ptr, &size, NTOHS(*iport));
+		nnOF_tablelookup(ptr, &size, inPort);
 		return;
 	}
-	gmac_write(ptr, size, NTOHS(*eport));
+
+	if (outPort == OFPP_FLOOD || outPort == OFPP13_ALL)
+	{
+		outPort = (15 - NativePortMatrix) - (1<<(inPort-1));
+	} else
+	{
+		outPort = 1 << (outPort-1);
+	}
+	gmac_write(ptr, size, outPort);
 	return;
 }
 
