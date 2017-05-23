@@ -130,13 +130,6 @@ int main (void)
 	board_init();
 	get_serial(&uid_buf);
 
-	// Set up the GPIO pin for the Mater Select jumper
-	ioport_init();
-	ioport_set_pin_dir(MASTER_SEL, IOPORT_DIR_INPUT);
-
-	masterselect = ioport_get_pin_level(MASTER_SEL);	// true = slave
-	stacking_init(masterselect);	// Initialise the stacking connector as either master or slave
-
 	irq_initialize_vectors(); // Initialize interrupt vector table support.
 
 	cpu_irq_enable(); // Enable interrupts
