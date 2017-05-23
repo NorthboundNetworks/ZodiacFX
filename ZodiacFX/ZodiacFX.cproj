@@ -720,12 +720,6 @@
     <Compile Include="src\openflow\openflow_13.c">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="src\stacking.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\stacking.h">
-      <SubType>compile</SubType>
-    </Compile>
     <Compile Include="src\trace.h">
       <SubType>compile</SubType>
     </Compile>
