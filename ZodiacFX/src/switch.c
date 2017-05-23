@@ -52,10 +52,10 @@ extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 // Local variables
 gmac_device_t gs_gmac_dev;
 uint8_t gmacbuffer[GMAC_FRAME_LENTGH_MAX];
-struct ofp10_port_stats phys10_port_stats[8];
-struct ofp13_port_stats phys13_port_stats[8];
-uint8_t port_status[8];
-uint8_t last_port_status[8];
+struct ofp10_port_stats phys10_port_stats[TOTAL_PORTS];
+struct ofp13_port_stats phys13_port_stats[TOTAL_PORTS];
+uint8_t port_status[TOTAL_PORTS];
+uint8_t last_port_status[TOTAL_PORTS];
 uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 uint8_t stats_rr = 0;
 

@@ -42,9 +42,9 @@
 
 // Global variables
 extern struct zodiac_config Zodiac_Config;
-extern uint8_t port_status[8];
-extern struct ofp10_port_stats phys10_port_stats[8];
-extern struct ofp13_port_stats phys13_port_stats[8];
+extern uint8_t port_status[TOTAL_PORTS];
+extern struct ofp10_port_stats phys10_port_stats[TOTAL_PORTS];
+extern struct ofp13_port_stats phys13_port_stats[TOTAL_PORTS];
 
 // Local Variables
 struct ofp_switch_config Switch_config;
