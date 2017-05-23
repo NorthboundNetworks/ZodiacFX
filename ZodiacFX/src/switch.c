@@ -463,8 +463,6 @@ void switch_init(void)
 void task_switch(struct netif *netif)
 {
 	uint32_t ul_rcv_size = 0;
-	uint8_t tag = 0;
-	int8_t in_port = 0;
 
 	/* Main packet processing loop */
 	uint32_t dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_rcv_size);

@@ -1227,12 +1227,8 @@ int flow_stats_msg10(char *buffer, int first, int last)
 int flow_stats_msg13(char *buffer, int first, int last)
 {
 	struct ofp13_flow_stats flow_stats;
-	int stats_size = 0;
 	char *buffer_ptr = buffer;
-	int inst_size;
-	int stats_len;
 	int len;
-	int pad = 0;
 
 	for(int k = first; k<last;k++)
 	{
@@ -1264,7 +1260,6 @@ int flow_stats_msg13(char *buffer, int first, int last)
 		buffer_ptr += ntohs(flow_stats.length);
 	}
 	return (buffer_ptr - buffer);
-
 }
 
 /*

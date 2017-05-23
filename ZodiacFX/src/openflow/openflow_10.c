@@ -121,7 +121,6 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	uint16_t tcpport;
 	uint32_t ipadr;
 	uint16_t vlantag = htons(0x8100);
-	int outport = 0;
 
 	table_counters[0].lookup_count++;
 
