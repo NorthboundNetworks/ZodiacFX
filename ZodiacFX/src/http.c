@@ -2354,15 +2354,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						"<th>Port 3</th>"\
 						"<th>Port 4</th>"\
 				);
-		if (total_ports > 4)
-		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-						"<th>Port 5</th>"\
-						"<th>Port 6</th>"\
-						"<th>Port 7</th>"\
-						"<th>Port 8</th>"\
-					);
-		}
 						
 		if ( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 					  "</tr>"\
@@ -2417,17 +2408,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 					, portStatusch[port_status[0]], portStatusch[port_status[1]], portStatusch[port_status[2]], portStatusch[port_status[3]]\
 				);
 				
-		if (total_ports > 4)
-		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-						"<td>%s</td>"\
-						"<td>%s</td>"\
-						"<td>%s</td>"\
-						"<td>%s</td>"\
-					, portStatusch[port_status[4]], portStatusch[port_status[5]], portStatusch[port_status[6]], portStatusch[port_status[7]]\
-				);
-		}
-				
 		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 					"</tr>"\
 					"<tr>"\
@@ -2477,16 +2457,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 					);
 			}
 		}
-		
-		if (total_ports > 4)
-		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-					"<td>OpenFlow</td>"\
-					"<td>OpenFlow</td>"\
-					"<td>OpenFlow</td>"\
-					"<td>OpenFlow</td>"\
-			);
-		}
 				
 		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 						"</tr>"\
@@ -2534,16 +2504,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 								"</select>"\
 							"</td>"\
 					);
-		}
-		
-		if (total_ports > 4)
-		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-						"<td>-</td>"\
-						"<td>-</td>"\
-						"<td>-</td>"\
-						"<td>-</td>"\
-			);
 		}
 				
 		if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
