@@ -433,9 +433,9 @@ void features_reply10(uint32_t xid)
 	memcpy(&buf, &features, sizeof(struct ofp10_switch_features));
 	update_port_status();		//update port status
 
-	for(l = 0; l< total_ports; l++)
+	for(l = 0; l<total_ports; l++)
 	{
-		if(Zodiac_Config.of_port[l] == 1 || l > 3)	// If l > 3 then stacking is enabled so include the 4 port from the slave
+		if(Zodiac_Config.of_port[l] == 1)
 		{
 			phys_port[j].port_no = HTONS(l+1);
 			for(k = 0; k<6; k++)            // Generate random MAC address

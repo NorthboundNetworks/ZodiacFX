@@ -906,9 +906,9 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	uint8_t mac[] = {0x00,0x00,0x00,0x00,0x00,0x00};
 	update_port_status();		//update port status
 
-	for(int l = 0; l< total_ports; l++)
+	for(int l = 0; l<total_ports; l++)
 	{
-		if(Zodiac_Config.of_port[l] == 1 || l > 3)	// If l > 3 then stacking is enabled so include the 4 port from the slave
+		if(Zodiac_Config.of_port[l] == 1)
 		{
 			phys_port[j].port_no = htonl(l+1);
 			for(int k = 0; k<6; k++)            // Generate random MAC address
