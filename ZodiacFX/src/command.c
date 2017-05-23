@@ -66,7 +66,6 @@ extern struct ofp13_port_stats phys13_port_stats[8];
 extern struct table_counter table_counters[MAX_TABLES];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
-extern bool masterselect;
 extern bool trace = false;
 extern struct tcp_pcb *tcp_pcb;
 extern uint8_t port_status[8];
