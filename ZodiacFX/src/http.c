@@ -2105,6 +2105,8 @@ static uint8_t interfaceCreate_Home(void)
 					"Firmware Version: %s<br>"\
 					"CPU Temp: %d C<br>"\
 					"Uptime: %02d:%02d<br>"\
+					, uid_buf[0], uid_buf[1], uid_buf[2], uid_buf[3]\
+					, VERSION, (int)ul_temp, hr, min\
 			);
 
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\		
@@ -2114,8 +2116,7 @@ static uint8_t interfaceCreate_Home(void)
 				"</form>"\
 			"</body>"\
 		"</html>"\
-				, uid_buf[0], uid_buf[1], uid_buf[2], uid_buf[3]\
-				, VERSION, (int)ul_temp, hr, min) < SHARED_BUFFER_LEN)
+			) < SHARED_BUFFER_LEN )
 	{
 		return 1;
 	}
