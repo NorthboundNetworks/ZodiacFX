@@ -42,7 +42,6 @@
 #include "command.h"
 #include "eeprom.h"
 #include "switch.h"
-#include "stacking.h"
 #include "http.h"
 #include "flash.h"
 #include "openflow/openflow.h"
@@ -52,8 +51,6 @@
 struct netif gs_net_if;
 struct zodiac_config Zodiac_Config;
 int charcount, charcount_last;
-bool masterselect;
-bool stackenabled;
 int portmap[4];
 int32_t ul_temp;
 uint8_t NativePortMatrix;
@@ -131,13 +128,6 @@ int main (void)
 	board_init();
 	get_serial(&uid_buf);
 
-	// Set up the GPIO pin for the Mater Select jumper
-	ioport_init();
-	ioport_set_pin_dir(MASTER_SEL, IOPORT_DIR_INPUT);
-
-	masterselect = ioport_get_pin_level(MASTER_SEL);	// true = slave
-	stacking_init(masterselect);	// Initialise the stacking connector as either master or slave
-
 	irq_initialize_vectors(); // Initialize interrupt vector table support.
 
 	cpu_irq_enable(); // Enable interrupts
@@ -203,12 +193,7 @@ int main (void)
 	{
 		task_switch(&gs_net_if);
 		task_command(cCommand, cCommand_last);
-		// Only run the following tasks if set to Master
-		if(masterselect == false)
-		{
-			//task_command(cCommand, cCommand_last);
-			sys_check_timeouts();
-			task_openflow();	
-		} 
+		sys_check_timeouts();
+		task_openflow(); 
 	}
 }

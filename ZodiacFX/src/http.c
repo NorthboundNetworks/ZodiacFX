@@ -67,10 +67,9 @@ extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
 extern int iLastFlow;
 extern int iLastMeter;
-extern struct ofp10_port_stats phys10_port_stats[8];
-extern struct ofp13_port_stats phys13_port_stats[8];
+extern struct ofp10_port_stats phys10_port_stats[TOTAL_PORTS];
+extern struct ofp13_port_stats phys13_port_stats[TOTAL_PORTS];
 extern struct table_counter table_counters[MAX_TABLES];
-extern uint8_t total_ports;
 
 // Local Variables
 struct tcp_pcb *http_pcb;
@@ -90,8 +89,6 @@ bool restart_required_outer = false;
 static bool restart_required = false;		// Track if any configuration changes are pending a restart
 static bool file_upload = false;	// Multi-part firmware file upload flag
 static bool post_pending = false;
-
-extern bool stackenabled;
 
 static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err);
 static err_t http_accept(void *arg, struct tcp_pcb *pcb, err_t err);
@@ -2108,19 +2105,10 @@ static uint8_t interfaceCreate_Home(void)
 					"Firmware Version: %s<br>"\
 					"CPU Temp: %d C<br>"\
 					"Uptime: %02d:%02d<br>"\
+					, uid_buf[0], uid_buf[1], uid_buf[2], uid_buf[3]\
+					, VERSION, (int)ul_temp, hr, min\
 			);
-	if(stackenabled == true)
-	{
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-					"Stacking: enabled"
-			);
-	}
-	else
-	{
-		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-					"Stacking: disabled"
-			);
-	}
+
 	if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\		
 				"</p>"\
 				"<form action=\"btn_default\" method=\"post\"  onsubmit=\"return confirm('Zodiac FX will be reset to factory settings. Do you wish to proceed?');\">"\
@@ -2128,8 +2116,7 @@ static uint8_t interfaceCreate_Home(void)
 				"</form>"\
 			"</body>"\
 		"</html>"\
-				, uid_buf[0], uid_buf[1], uid_buf[2], uid_buf[3]\
-				, VERSION, (int)ul_temp, hr, min) < SHARED_BUFFER_LEN)
+			) < SHARED_BUFFER_LEN )
 	{
 		return 1;
 	}
@@ -2367,15 +2354,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 						"<th>Port 3</th>"\
 						"<th>Port 4</th>"\
 				);
-		if (total_ports > 4)
-		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-						"<th>Port 5</th>"\
-						"<th>Port 6</th>"\
-						"<th>Port 7</th>"\
-						"<th>Port 8</th>"\
-					);
-		}
 						
 		if ( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 					  "</tr>"\
@@ -2430,17 +2408,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 					, portStatusch[port_status[0]], portStatusch[port_status[1]], portStatusch[port_status[2]], portStatusch[port_status[3]]\
 				);
 				
-		if (total_ports > 4)
-		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-						"<td>%s</td>"\
-						"<td>%s</td>"\
-						"<td>%s</td>"\
-						"<td>%s</td>"\
-					, portStatusch[port_status[4]], portStatusch[port_status[5]], portStatusch[port_status[6]], portStatusch[port_status[7]]\
-				);
-		}
-				
 		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 					"</tr>"\
 					"<tr>"\
@@ -2490,16 +2457,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 					);
 			}
 		}
-		
-		if (total_ports > 4)
-		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-					"<td>OpenFlow</td>"\
-					"<td>OpenFlow</td>"\
-					"<td>OpenFlow</td>"\
-					"<td>OpenFlow</td>"\
-			);
-		}
 				
 		snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 						"</tr>"\
@@ -2548,16 +2505,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"</td>"\
 					);
 		}
-		
-		if (total_ports > 4)
-		{
-			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
-						"<td>-</td>"\
-						"<td>-</td>"\
-						"<td>-</td>"\
-						"<td>-</td>"\
-			);
-		}
 				
 		if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
 					"</tr>"\
@@ -2587,16 +2534,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys10_port_stats[0].rx_bytes, phys10_port_stats[1].rx_bytes, phys10_port_stats[2].rx_bytes, phys10_port_stats[3].rx_bytes
 					);
-			if(total_ports > 4)
-			{			
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys10_port_stats[4].rx_bytes, phys10_port_stats[5].rx_bytes, phys10_port_stats[6].rx_bytes, phys10_port_stats[7].rx_bytes
-					);
-			}
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 						  "<tr>"\
@@ -2609,16 +2546,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys10_port_stats[0].tx_bytes, phys10_port_stats[1].tx_bytes, phys10_port_stats[2].tx_bytes, phys10_port_stats[3].tx_bytes
 					);
-			if(total_ports > 4)
-			{			
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys10_port_stats[4].tx_bytes, phys10_port_stats[5].tx_bytes, phys10_port_stats[6].tx_bytes, phys10_port_stats[7].tx_bytes
-					);
-			}
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 						  "<tr>"\
@@ -2631,16 +2558,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys10_port_stats[0].rx_packets, phys10_port_stats[1].rx_packets, phys10_port_stats[2].rx_packets, phys10_port_stats[3].rx_packets
 					);
-			if(total_ports > 4)
-			{			
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys10_port_stats[4].rx_packets, phys10_port_stats[5].rx_packets, phys10_port_stats[6].rx_packets, phys10_port_stats[7].rx_packets
-					);
-			}
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 						  "<tr>"\
@@ -2653,16 +2570,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys10_port_stats[0].tx_packets, phys10_port_stats[1].tx_packets, phys10_port_stats[2].tx_packets, phys10_port_stats[3].tx_packets
 					);
-			if(total_ports > 4)
-			{			
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys10_port_stats[4].tx_packets, phys10_port_stats[5].tx_packets, phys10_port_stats[6].tx_packets, phys10_port_stats[7].tx_packets
-					);
-			}
 			if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 				) < SHARED_BUFFER_LEN)
@@ -2690,16 +2597,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys13_port_stats[0].rx_bytes, phys13_port_stats[1].rx_bytes, phys13_port_stats[2].rx_bytes, phys13_port_stats[3].rx_bytes
 					);
-			if(total_ports > 4)
-			{			
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys13_port_stats[4].rx_bytes, phys13_port_stats[5].rx_bytes, phys13_port_stats[6].rx_bytes, phys13_port_stats[7].rx_bytes
-					);
-			}
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 						  "<tr>"\
@@ -2712,16 +2609,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys13_port_stats[0].tx_bytes, phys13_port_stats[1].tx_bytes, phys13_port_stats[2].tx_bytes, phys13_port_stats[3].tx_bytes
 					);
-			if(total_ports > 4)
-			{			
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys13_port_stats[4].tx_bytes, phys13_port_stats[5].tx_bytes, phys13_port_stats[6].tx_bytes, phys13_port_stats[7].tx_bytes
-					);
-			}
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 						  "<tr>"\
@@ -2734,16 +2621,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys13_port_stats[0].rx_packets, phys13_port_stats[1].rx_packets, phys13_port_stats[2].rx_packets, phys13_port_stats[3].rx_packets
 					);
-			if(total_ports > 4)
-			{			
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys13_port_stats[4].rx_packets, phys13_port_stats[5].rx_packets, phys13_port_stats[6].rx_packets, phys13_port_stats[7].rx_packets
-					);
-			}
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 						  "<tr>"\
@@ -2756,16 +2633,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys13_port_stats[0].tx_packets, phys13_port_stats[1].tx_packets, phys13_port_stats[2].tx_packets, phys13_port_stats[3].tx_packets
 					);
-			if(total_ports > 4)
-			{			
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys13_port_stats[4].tx_packets, phys13_port_stats[5].tx_packets, phys13_port_stats[6].tx_packets, phys13_port_stats[7].tx_packets
-					);
-			}
 			if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 				) < SHARED_BUFFER_LEN)
@@ -2796,16 +2663,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys10_port_stats[0].rx_dropped, phys10_port_stats[1].rx_dropped, phys10_port_stats[2].rx_dropped, phys10_port_stats[3].rx_dropped
 					);
-			if(total_ports > 4)
-			{
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys10_port_stats[4].rx_dropped, phys10_port_stats[5].rx_dropped, phys10_port_stats[6].rx_dropped, phys10_port_stats[7].rx_dropped
-						);
-			}
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 						  "<tr>"\
@@ -2818,16 +2675,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys10_port_stats[0].tx_dropped, phys10_port_stats[1].tx_dropped, phys10_port_stats[2].tx_dropped, phys10_port_stats[3].tx_dropped
 					);
-			if(total_ports > 4)
-			{
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys10_port_stats[4].tx_dropped, phys10_port_stats[5].tx_dropped, phys10_port_stats[6].tx_dropped, phys10_port_stats[7].tx_dropped
-						);
-			}
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 						  "<tr>"\
@@ -2840,16 +2687,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys10_port_stats[0].rx_crc_err, phys10_port_stats[1].rx_crc_err, phys10_port_stats[2].rx_crc_err, phys10_port_stats[3].rx_crc_err
 					);
-			if(total_ports > 4)
-			{
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys10_port_stats[4].rx_crc_err, phys10_port_stats[5].rx_crc_err, phys10_port_stats[6].rx_crc_err, phys10_port_stats[7].rx_crc_err
-						);
-			}
 			if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 						"</table>"\
@@ -2885,16 +2722,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys13_port_stats[0].rx_dropped, phys13_port_stats[1].rx_dropped, phys13_port_stats[2].rx_dropped, phys13_port_stats[3].rx_dropped
 					);
-			if(total_ports > 4)
-			{
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys13_port_stats[4].rx_dropped, phys13_port_stats[5].rx_dropped, phys13_port_stats[6].rx_dropped, phys13_port_stats[7].rx_dropped
-						);
-			}
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 						  "<tr>"\
@@ -2907,16 +2734,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys13_port_stats[0].tx_dropped, phys13_port_stats[1].tx_dropped, phys13_port_stats[2].tx_dropped, phys13_port_stats[3].tx_dropped
 					);
-			if(total_ports > 4)
-			{
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys13_port_stats[4].tx_dropped, phys13_port_stats[5].tx_dropped, phys13_port_stats[6].tx_dropped, phys13_port_stats[7].tx_dropped
-						);
-			}
 			snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 						  "<tr>"\
@@ -2929,16 +2746,6 @@ static uint8_t interfaceCreate_Display_Ports(uint8_t step)
 							"<td>%"PRIu64"</td>"\
 							, phys13_port_stats[0].rx_crc_err, phys13_port_stats[1].rx_crc_err, phys13_port_stats[2].rx_crc_err, phys13_port_stats[3].rx_crc_err
 					);
-			if(total_ports > 4)
-			{
-				snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							"<td>%"PRIu64"</td>"\
-							, phys13_port_stats[4].rx_dropped, phys13_port_stats[5].rx_crc_err, phys13_port_stats[6].rx_crc_err, phys13_port_stats[7].rx_crc_err
-						);
-			}
 			if( snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN,\
 						  "</tr>"\
 						"</table>"\

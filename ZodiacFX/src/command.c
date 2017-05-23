@@ -38,7 +38,6 @@
 #include "eeprom.h"
 #include "switch.h"
 #include "flash.h"
-#include "stacking.h"
 #include "openflow/openflow.h"
 #include "openflow/of_helper.h"
 #include "lwip/def.h"
@@ -62,17 +61,14 @@ extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_13];
 extern int iLastFlow;
-extern struct ofp10_port_stats phys10_port_stats[8];
-extern struct ofp13_port_stats phys13_port_stats[8];
+extern struct ofp10_port_stats phys10_port_stats[TOTAL_PORTS];
+extern struct ofp13_port_stats phys13_port_stats[TOTAL_PORTS];
 extern struct table_counter table_counters[MAX_TABLES];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
-extern bool masterselect;
-extern bool stackenabled = false;
 extern bool trace = false;
 extern struct tcp_pcb *tcp_pcb;
-extern uint8_t port_status[8];
-extern uint8_t total_ports;
+extern uint8_t port_status[TOTAL_PORTS];
 extern int totaltime;
 extern int32_t ul_temp;
 extern int OF_Version;
@@ -84,9 +80,6 @@ bool showintro = true;
 uint8_t uCLIContext = 0;
 struct arp_header arp_test;
 uint8_t esc_char = 0;
-
-// ####### SPI debug output #######
-extern struct spi_debug_stats spi_debug;
 
 // Internal Functions
 void saveConfig(void);
@@ -332,7 +325,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 	{
 		int i;
 		printf("\r\n-------------------------------------------------------------------------\r\n");
-		for (i=0;i<total_ports;i++)
+		for (i=0;i<TOTAL_PORTS;i++)
 		{
 
 			printf("\r\nPort %d\r\n",i+1);
@@ -562,8 +555,6 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		} else {
 			printf(" Force OpenFlow version: Disabled\r\n");
 		}
-		if (stackenabled == true) printf(" Stacking Status: Enabled\r\n");
-		if (stackenabled == false) printf(" Stacking Status: Disabled\r\n");
 		if (Zodiac_Config.ethtype_filter == 1) printf(" EtherType Filtering: Enabled\r\n");
 		if (Zodiac_Config.ethtype_filter != 1) printf(" EtherType Filtering: Disabled\r\n");
 		printf("\r\n-------------------------------------------------------------------------\r\n\n");
@@ -1642,12 +1633,6 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
-	if (strcmp(command, "spi")==0)
-	{
-		//stack_write(atoi(param1));
-		return;
-	}
-
 	if (strcmp(command, "mem")==0)
 	{
 		printf("mem total: %d\r\n", membag_get_total());
@@ -1663,32 +1648,6 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		printf("Starting trace...\r\n");
 		return;
 	}	
-	
-	if (strcmp(command, "spi_stats")==0)
-	{
-		printf("master tx packets: %d\r\nmaster rx packets: %d\r\nmaster rx bad size: %d\r\nmaster rx bad preamble: %d\r\nmaster rx bad crc: %d\r\n",\
-				spi_debug.master_tx_count,\
-				spi_debug.master_rx_count,\
-				spi_debug.master_rx_error_bad_size,\
-				spi_debug.master_rx_error_bad_preamble,\
-				spi_debug.master_rx_error_bad_crc
-			);
-		return;
-	}
-		
-	if (strcmp(command, "spi_stats_slave")==0)
-	{
-		printf("slave tx packets: %d\r\nslave rx packets: %d\r\nslave tx timeout errors: %d\r\nslave rx timeout errors: %d\r\nslave rx bad size: %d\r\nslave rx bad preamble: %d\r\nslave rx bad crc: %d\r\n",\
-		spi_debug.slave_tx_count,\
-		spi_debug.slave_rx_count,\
-		spi_debug.slave_tx_error_timeout,\
-		spi_debug.slave_rx_error_timeout,\
-		spi_debug.slave_rx_error_bad_size,\
-		spi_debug.slave_rx_error_bad_preamble,\
-		spi_debug.slave_rx_error_bad_crc
-		);
-		return;
-	}
 	
 	// Unknown Command response
 	printf("Unknown command\r\n");

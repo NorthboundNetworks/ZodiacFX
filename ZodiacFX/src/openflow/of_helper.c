@@ -52,8 +52,8 @@ extern int iLastFlow;
 extern int iLastMeter;
 extern int OF_Version;
 extern int totaltime;
-extern uint8_t last_port_status[8];
-extern uint8_t port_status[8];
+extern uint8_t last_port_status[TOTAL_PORTS];
+extern uint8_t port_status[TOTAL_PORTS];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct table_counter table_counters[MAX_TABLES];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
@@ -64,7 +64,6 @@ extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
-extern uint8_t total_ports;
 
 // Local Variables
 uint8_t timer_alt;
@@ -141,7 +140,7 @@ void nnOF_timer(void)
 	} else if (timer_alt == 1){
 		update_port_status();
 		// If port status has changed send a port status message
-		for (int x=0;x<total_ports;x++)
+		for (int x=0;x<TOTAL_PORTS;x++)
 		{
 			if (last_port_status[x] != port_status[x] && OF_Version == 1 && Zodiac_Config.of_port[x] == 1) port_status_message10(x);
 			if (last_port_status[x] != port_status[x] && OF_Version == 4 && Zodiac_Config.of_port[x] == 1) port_status_message13(x);
@@ -1228,12 +1227,8 @@ int flow_stats_msg10(char *buffer, int first, int last)
 int flow_stats_msg13(char *buffer, int first, int last)
 {
 	struct ofp13_flow_stats flow_stats;
-	int stats_size = 0;
 	char *buffer_ptr = buffer;
-	int inst_size;
-	int stats_len;
 	int len;
-	int pad = 0;
 
 	for(int k = first; k<last;k++)
 	{
@@ -1265,7 +1260,6 @@ int flow_stats_msg13(char *buffer, int first, int last)
 		buffer_ptr += ntohs(flow_stats.length);
 	}
 	return (buffer_ptr - buffer);
-
 }
 
 /*

@@ -52,13 +52,11 @@ extern struct table_counter table_counters[MAX_TABLES];
 extern int OF_Version;
 extern bool rcv_freq;
 extern uint8_t NativePortMatrix;
-extern struct ofp10_port_stats phys10_port_stats[8];
-extern uint8_t port_status[8];
+extern struct ofp10_port_stats phys10_port_stats[TOTAL_PORTS];
+extern uint8_t port_status[TOTAL_PORTS];
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern struct zodiac_config Zodiac_Config;
 extern struct ofp_switch_config Switch_config;
-extern uint8_t total_ports;
-extern bool stackenabled;
 
 //Internal Functions
 void packet_in(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason);
@@ -103,7 +101,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	uint16_t packet_size;
 	struct packet_fields fields = {0};
 	packet_fields_parser(p_uc_data, &fields);
-		
+
 	memcpy(&packet_size, ul_size, 2);
 	uint16_t eth_prot;
 	memcpy(&eth_prot, p_uc_data + 12, 2);
@@ -174,13 +172,30 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					{
 						case OFPAT10_OUTPUT:
 						action_out = act_hdr;
+						if (ntohs(action_out->port) <= 255 && ntohs(action_out->port) != port) // physical port
+						{
+							outport = (1<< (ntohs(action_out->port)-1));
+							gmac_write(p_uc_data, packet_size, outport);
+						}
+
+						if (ntohs(action_out->port) == OFPP_IN_PORT)
+						{
+							outport = (1<< (port-1));
+							gmac_write(p_uc_data, packet_size, outport);
+						}
+
+						if (ntohs(action_out->port) == OFPP_ALL || ntohs(action_out->port) == OFPP_FLOOD)
+						{
+							outport = (15 - NativePortMatrix) - (1<<(port-1));
+							gmac_write(p_uc_data, packet_size, outport);
+						}
+
 						if (ntohs(action_out->port) == OFPP_CONTROLLER)
 						{
 							int pisize = ntohs(action_out->max_len);
 							if (pisize > packet_size) pisize = packet_size;
 							packet_in(p_uc_data, pisize, port, OFPR_ACTION);
 						}
-						gmac_write(p_uc_data, packet_size, ntohs(action_out->port), port);
 						break;
 
 						case OFPAT10_SET_DL_SRC:
@@ -411,10 +426,6 @@ void features_reply10(uint32_t xid)
 	{
 		if(Zodiac_Config.of_port[n]==1)numofports++;
 	}
-	if(stackenabled == true)
-	{
-		numofports += 4;	// Add the slave ports	
-	}
 	struct ofp10_switch_features features;
 	struct ofp10_phy_port phys_port[numofports];
 	uint8_t buf[256];
@@ -438,9 +449,9 @@ void features_reply10(uint32_t xid)
 	memcpy(&buf, &features, sizeof(struct ofp10_switch_features));
 	update_port_status();		//update port status
 
-	for(l = 0; l< total_ports; l++)
+	for(l = 0; l<TOTAL_PORTS; l++)
 	{
-		if(Zodiac_Config.of_port[l] == 1 || l > 3)	// If l > 3 then stacking is enabled so include the 4 port from the slave
+		if(Zodiac_Config.of_port[l] == 1)
 		{
 			phys_port[j].port_no = HTONS(l+1);
 			for(k = 0; k<6; k++)            // Generate random MAC address
@@ -640,7 +651,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 	{
 		// Find number of OpenFlow ports present
 		uint8_t ofports = 0;
-		for(uint8_t k=0; k<total_ports; k++)
+		for(uint8_t k=0; k<TOTAL_PORTS; k++)
 		{
 			// Check if port is NOT native
 			if(!(NativePortMatrix & (1<<(k))))
@@ -665,7 +676,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 		buffer += sizeof(struct ofp10_stats_reply);
 
 		// Write port stats to reply message
-		for(uint8_t k=0; k<total_ports; k++)
+		for(uint8_t k=0; k<TOTAL_PORTS; k++)
 		{
 			// Check if port is NOT native
 			if(!(NativePortMatrix & (1<<(k))))
@@ -698,7 +709,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 			}
 		}
 	}
-	else if (port > 0 && port <= total_ports)	// Respond to request for ports 1-4 or 1-8 (stacking)
+	else if (port > 0 && port <= TOTAL_PORTS)	// Respond to request for ports
 	{
 		// Check if port is NOT native
 		if(!(NativePortMatrix & (1<<(port-1))))
@@ -762,14 +773,23 @@ void packet_out(struct ofp_header *msg)
 	int size = NTOHS(po->header.length) - ((sizeof(struct ofp_packet_out) + NTOHS(po->actions_len)));
 	uint16_t *eport;
 	eport = ptr - 4;
-	TRACE("openflow_10.c: Packet out port 0x%X (%d bytes)", NTOHS(*eport), size);
-	
-	if (NTOHS(*eport) == OFPP_TABLE)
+	int outPort = NTOHS(*eport);
+	int inPort = NTOHS(*iport);
+
+	if (outPort == OFPP_TABLE)
 	{
-		nnOF_tablelookup(ptr, &size, NTOHS(*iport));
+		nnOF_tablelookup(ptr, &size, inPort);
 		return;
 	}
-	gmac_write(ptr, size, NTOHS(*eport), NTOHS(*iport));
+
+	if (outPort == OFPP_FLOOD || outPort == OFPP13_ALL)
+	{
+		outPort = (15 - NativePortMatrix) - (1<<(inPort-1));
+	} else
+	{
+		outPort = 1 << (outPort-1);
+	}
+	gmac_write(ptr, size, outPort);
 	return;
 }
 

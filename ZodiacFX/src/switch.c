@@ -33,7 +33,6 @@
 #include "trace.h"
 #include "openflow/openflow.h"
 #include "switch.h"
-#include "stacking.h"
 #include "conf_eth.h"
 #include "command.h"
 #include "timers.h"
@@ -46,25 +45,18 @@ extern struct tcp_conn tcp_conn;
 extern struct zodiac_config Zodiac_Config;
 extern int OF_Version;
 extern uint8_t NativePortMatrix;
-extern bool masterselect;
-extern bool stackenabled;
 extern uint8_t pending_spi_command;
 extern struct spi_packet *spi_packet;
-extern bool slave_ready;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
-extern uint16_t spi_slave_send_size;
-extern uint16_t spi_slave_send_count;
 
 // Local variables
 gmac_device_t gs_gmac_dev;
 uint8_t gmacbuffer[GMAC_FRAME_LENTGH_MAX];
-struct ofp10_port_stats phys10_port_stats[8];
-struct ofp13_port_stats phys13_port_stats[8];
-uint8_t port_status[8];
-uint8_t last_port_status[8];
-uint8_t total_ports = 4;
-int slave_timer = 0;
-uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
+struct ofp10_port_stats phys10_port_stats[TOTAL_PORTS];
+struct ofp13_port_stats phys13_port_stats[TOTAL_PORTS];
+uint8_t port_status[TOTAL_PORTS];
+uint8_t last_port_status[TOTAL_PORTS];
+static volatile uint8_t gs_uc_eth_buffer[GMAC_FRAME_LENTGH_MAX];
 uint8_t stats_rr = 0;
 
 /* GMAC HW configurations */
@@ -318,52 +310,14 @@ void update_port_status(void)
 *	@param port - the port to send the data out from.
 *
 */
-void gmac_write(uint8_t *p_buffer, uint16_t ul_size, int port, int inport)
+void gmac_write(uint8_t *p_buffer, uint16_t ul_size, uint8_t port)
 {
-	TRACE("switch.c: gmac_write to port 0x%X (%d bytes)", port, ul_size);
-	// Convert OpenFlow port to physical port number
-	if (port == OFPP_FLOOD || port == OFPP_ALL || port == OFPP13_FLOOD || port == OFPP13_ALL)	// Send packet out all ports except the port it arrived on
-	{
-		TRACE("switch.c: Packet out FLOOD (%d bytes)", ul_size);
-		if(masterselect == false)
-		{
-			MasterStackSend(p_buffer, ul_size, port); // Send it slave
-			if (inport < 5) 
-			{
-				port = (15 - NativePortMatrix) - (1<<(inport-1)); 
-			} else {
-				port = 15 - NativePortMatrix;
-			}
-		} else {
-			inport -= 4;
-			port = (15 - (1<<(inport-1)));
-		}
-	} else if (port == OFPP13_IN_PORT)	// Send it back out the port it arrived on
-	{
-		port = inport;
-		TRACE("switch.c: Output to in_port %d (%d bytes)", port, ul_size);
-	} else if (port < 5)	// Send it out the specified port
-	{
-		port = 1 << (port-1);
-	} else if (port > 4 && port < 128)	
-	{
-		if(masterselect == false)	// If we are the master then send to the slave
-		{
-			TRACE("switch13.c: Sending packet to slave to send out port %d (%d bytes)", port, ul_size);
-			MasterStackSend(p_buffer, ul_size, port);	// Send it slave
-			return;
-		}
-		// If slave then write to port
-		port -= 4;
-		port = 1 << (port-1);
-	}
-	
-	TRACE("switch.c: Writing data to switch port matrix %d (%d bytes)", port, ul_size);
 	if (ul_size > GMAC_FRAME_LENTGH_MAX)
 	{
 		return;
 	}
-
+	
+	// Update port stats
 	if (port & 1) phys10_port_stats[0].tx_packets++;
 	if (port & 2) phys10_port_stats[1].tx_packets++;
 	if (port & 4) phys10_port_stats[2].tx_packets++;
@@ -372,6 +326,7 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, int port, int inport)
 	if (port & 2) phys13_port_stats[1].tx_packets++;
 	if (port & 4) phys13_port_stats[2].tx_packets++;
 	if (port & 8) phys13_port_stats[3].tx_packets++;
+	
 	// Add padding
 	if (ul_size < 60)
 	{
@@ -381,7 +336,9 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, int port, int inport)
 		last_byte = gmacbuffer + 60;
 		*last_byte = port;
 		gmac_dev_write(&gs_gmac_dev, &gmacbuffer, 61, NULL);
-	} else {
+	}
+	else
+	{
 		memcpy(&gmacbuffer,p_buffer, ul_size);
 		uint8_t *last_byte;
 		last_byte = gmacbuffer + ul_size;
@@ -389,6 +346,7 @@ void gmac_write(uint8_t *p_buffer, uint16_t ul_size, int port, int inport)
 		ul_size++; // Increase packet size by 1 to allow for the tail tag.
 		uint32_t write_size = gmac_dev_write(&gs_gmac_dev, &gmacbuffer, ul_size, NULL);
 	}
+	
 	return;
 }
 
@@ -505,35 +463,7 @@ void switch_init(void)
 void task_switch(struct netif *netif)
 {
 	uint32_t ul_rcv_size = 0;
-	uint8_t tag = 0;
-	int8_t in_port = 0;
 
-	// Check if the slave device has a packet to send us
-	if(masterselect == false && ioport_get_pin_level(SPI_IRQ1) && stackenabled == true)
-	{
-		MasterStackRcv();
-	}
-						
-	// Check if the slave device is connected and enable stacking
-	if(masterselect == false && !ioport_get_pin_level(SPI_IRQ1) && stackenabled == false) 
-	{
-		MasterReady();	// Let the slave know the master is ready
-		stackenabled = true;
-		total_ports = 8;
-	}
-	
-	// Slave house keeping timer
-	if(masterselect == true) 
-	{
-		if((sys_get_ms() - slave_timer) > 500)	// every 500 ms (0.5 secs)
-		{
-			slave_timer = sys_get_ms();	
-			Slave_timer(); // Slave timer
-		}
-		
-	}
-
-	
 	/* Main packet processing loop */
 	uint32_t dev_read = gmac_dev_read(&gs_gmac_dev, (uint8_t *) gs_uc_eth_buffer, sizeof(gs_uc_eth_buffer), &ul_rcv_size);
 	if (dev_read == GMAC_OK)
@@ -551,55 +481,29 @@ void task_switch(struct netif *netif)
 			}
 		}
 		
-		if(masterselect == false)	// Only process packets if board is set to MASTER
+		// Process packet
+		if (ul_rcv_size > 0)
 		{
-			if (ul_rcv_size > 0)
+			uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
+			uint8_t tag = *tail_tag + 1;
+			if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[tag-1] == 1)
 			{
-				uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
-				uint8_t tag = *tail_tag + 1;
-				if (Zodiac_Config.OFEnabled == OF_ENABLED && Zodiac_Config.of_port[tag-1] == 1)
-				{
-					phys10_port_stats[tag-1].rx_packets++;
-					phys13_port_stats[tag-1].rx_packets++;
-					ul_rcv_size--; // remove the tail first
-					nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
-					return;
-				} else {
-					TRACE("switch.c: %d byte received from controller", ul_rcv_size);
-					struct pbuf *p;
-					p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);
-					memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));
-					p->len = ul_rcv_size-1;
-					p->tot_len = ul_rcv_size-1;
-					netif->input(p, netif);
-					pbuf_free(p);
-					return;
-				}
-			}
-		} else
-		{
-			if (slave_ready == true && pending_spi_command == SPI_SEND_READY)
-			{
-				uint8_t* tail_tag = (uint8_t*)(gs_uc_eth_buffer + (int)(ul_rcv_size)-1);
-				uint8_t tag = *tail_tag + 1;
 				phys10_port_stats[tag-1].rx_packets++;
 				phys13_port_stats[tag-1].rx_packets++;
 				ul_rcv_size--; // remove the tail first
-				spi_packet = &shared_buffer;
-				spi_packet->preamble = SPI_PACKET_PREAMBLE;
-				spi_packet->ul_rcv_size = ul_rcv_size;
-				spi_packet->spi_crc = 0;
-				for(int x = 0;x<ul_rcv_size;x++)
-				{
-					spi_packet->spi_crc += gs_uc_eth_buffer[x];
-				}
-				spi_packet->tag = tag + 4;
-				spi_packet->spi_size = SPI_HEADER_SIZE + ul_rcv_size;
-				memcpy(&spi_packet->pkt_buffer, &gs_uc_eth_buffer, ul_rcv_size);
-				pending_spi_command = SPI_SEND_PKT;	// We are waiting to forward the packet
-				spi_slave_send_size = spi_packet->spi_size;
-				spi_slave_send_count = spi_slave_send_size;
-				ioport_set_pin_level(SPI_IRQ1, true);	// Set the IRQ to signal the slave wants to send something
+				nnOF_tablelookup((uint8_t *) gs_uc_eth_buffer, &ul_rcv_size, tag);
+				return;
+			}
+			else
+			{
+				TRACE("switch.c: %d byte received from controller", ul_rcv_size);
+				struct pbuf *p;
+				p = pbuf_alloc(PBUF_RAW, ul_rcv_size+1, PBUF_POOL);
+				memcpy(p->payload, &gs_uc_eth_buffer,(ul_rcv_size-1));
+				p->len = ul_rcv_size-1;
+				p->tot_len = ul_rcv_size-1;
+				netif->input(p, netif);
+				pbuf_free(p);
 				return;
 			}
 		}
