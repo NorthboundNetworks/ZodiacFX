@@ -810,6 +810,13 @@ int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 */
 void multi_flow_more_reply13(void)
 {
+	uint16_t sndbuf = tcp_sndbuf(tcp_pcb);
+	if(sndbuf < 2048)
+	{
+		TRACE("openflow_13.c: waiting to reply with more flows, sndbuf @ %d", sndbuf);
+		return;
+	}
+	
 	// Clear shared_buffer
 	memset(&shared_buffer, 0, SHARED_BUFFER_LEN);
 	
