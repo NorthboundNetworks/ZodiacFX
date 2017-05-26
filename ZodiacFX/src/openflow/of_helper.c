@@ -1015,7 +1015,7 @@ void remove_flow13(int flow_id)
 }
 
 /*
-*	Remove a flow entry from the flow table (OF 1.0)
+*	Remove a flow entry from the flow table (OF 1.3)
 *
 *	@param flow_id - the index number of the flow to remove
 *
