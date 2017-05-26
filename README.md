@@ -14,17 +14,17 @@ This repository contains the entire open-source firmware for the Zodiac FX inclu
 
 The latest firmware is available in the [Northbound Networks Forums](http://forums.northboundnetworks.com/index.php?topic=52.0).
 
-Starting from version 0.80, Zodiac FX supports firmware updates via the CLI and web interface. In order to make this possible, major changes were made to the firmware flashing process. Follow the update process below, based on your current firmware version.
+Starting from version 0.81, Zodiac FX supports firmware updates via the CLI and web interface. In order to make this possible, major changes were made to the firmware flashing process. Follow the update process below, based on your current firmware version.
 
-#### For firmware versions BEFORE version 0.80
+#### For firmware versions BEFORE version 0.81
 
-To update to version 0.80 or later, a **full upgrade firmware** needs to be flashed.
+To update to version 0.81 or later, a **full upgrade firmware** needs to be flashed.
 
 Download the latest **full upgrade firmware** from the [Northbound Networks Forums](http://forums.northboundnetworks.com/index.php?topic=52.0) - 'Full Upgrade Firmware (v0.XX) - ZodiacFX_vXX_full_install.bin'
 
 Follow the firmware update process detailed in **Section 2. Updating Firmware** in the [Zodiac FX User Guide](http://forums.northboundnetworks.com/downloads/zodiac_fx/guides/ZodiacFX_UserGuide_0317.pdf).
 
-#### For firmware versions AFTER version 0.80
+#### For firmware versions AFTER version 0.81
 
 The update process has been simplified for the newer releases.
 
@@ -83,7 +83,7 @@ The Zodiac FX uses a simple additive checksum to verify the integrity of the upl
 To sign your own modified firmware, follow the steps below:
 * Build a 'Release' binary of the modified firmware
 * Update the Zodiac FX with the modified firmware
-	* Follow the instructions outlined in Flashing/Updating the Firmware - For firmware versions AFTER version 0.80
+	* Follow the instructions outlined in Flashing/Updating the Firmware - For firmware versions AFTER version 0.81
 * The firmware will fail the verification check, but will still be stored inside the Zodiac FX flash memory
 * In the root context of the CLI, type in the hidden command 'get crc'
 * Open the ZodiacFX.bin file in a hex editor, and append the 8 bytes to the end of the firmware file
@@ -98,6 +98,12 @@ Any bugs and issues can be brought up in the [Northbound Networks Forums](http:/
 Issues can also be [raised](https://github.com/NorthboundNetworks/ZodiacFX/issues) in this repository.
 
 ## Release Notes
+
+**Version 0.81**
+* Firmware upload fixes (full upgrade required)
+* Metering bug-fixes & updates (initial DSCP remark support)
+* Port stat output bug-fixes
+* Web interface improvements
 
 **Version 0.80**
 * Firmware upload via CLI and web interface added
