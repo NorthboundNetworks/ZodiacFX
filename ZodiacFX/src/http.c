@@ -2909,6 +2909,12 @@ static uint8_t interfaceCreate_Display_Flows(void)
 		flowEnd = iLastFlow;
 	}
 	
+	// Re-base start of flows if flows have been cleared
+	if(flowBase > iLastFlow)
+	{
+		flowBase = 0;
+	}
+	
 	sprintf(shared_buffer, http_header);
 
 	snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),\
