@@ -833,6 +833,7 @@ void packet_in(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason)
 */
 void flow_mod(struct ofp_header *msg)
 {
+	///**/TRACE("____________________ FLOWMOD ENTRY");
 	struct ofp_flow_mod * ptr_fm;
 	ptr_fm = (struct ofp_flow_mod *) msg;
 
@@ -841,6 +842,7 @@ void flow_mod(struct ofp_header *msg)
 	{
 
 		case OFPFC_ADD:
+		///**/TRACE("____________________ ADD");
 		flow_add(msg);
 		break;
 
