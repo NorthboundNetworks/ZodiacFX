@@ -897,7 +897,7 @@ void flow_add(struct ofp_header *msg)
 		of10_error(msg, OFPET10_FLOW_MOD_FAILED, OFPFMFC10_ALL_TABLES_FULL);
 		return;
 	}
-	TRACE("Allocating %d bytes at %p for flow %d\r\n", sizeof(struct ofp_flow_mod), iLastFlow+1);
+	TRACE("Allocating %d bytes at %p for flow %d", sizeof(struct ofp_flow_mod), flow_match10[iLastFlow], iLastFlow+1);
 	
 	memcpy(flow_match10[iLastFlow], ptr_fm, sizeof(struct ofp_flow_mod));
 
