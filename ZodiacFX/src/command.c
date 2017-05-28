@@ -24,6 +24,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Author: Paul Zanna <paul@northboundnetworks.com>
+ *		 & Kristopher Chen <Kristopher@northboundnetworks.com>
  *
  */
 
@@ -60,16 +61,14 @@ extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_13];
 extern int iLastFlow;
-extern struct ofp10_port_stats phys10_port_stats[4];
-extern struct ofp13_port_stats phys13_port_stats[4];
+extern struct ofp10_port_stats phys10_port_stats[TOTAL_PORTS];
+extern struct ofp13_port_stats phys13_port_stats[TOTAL_PORTS];
 extern struct table_counter table_counters[MAX_TABLES];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
-extern bool masterselect;
-extern bool stackenabled = false;
 extern bool trace = false;
 extern struct tcp_pcb *tcp_pcb;
-extern uint8_t port_status[4];
+extern uint8_t port_status[TOTAL_PORTS];
 extern int totaltime;
 extern int32_t ul_temp;
 extern int OF_Version;
@@ -81,7 +80,6 @@ bool showintro = true;
 uint8_t uCLIContext = 0;
 struct arp_header arp_test;
 uint8_t esc_char = 0;
-
 
 // Internal Functions
 void saveConfig(void);
@@ -125,6 +123,18 @@ void saveConfig(void)
 }
 
 /*
+*	Restart Zodiac FX
+*
+*/
+void software_reset(void)
+{
+	for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
+	udc_detach();	// Detach the USB device before restart
+	rstc_start_software_reset(RSTC);	// Software reset
+	while (1);
+}
+
+/*
 *	Main command line loop
 *
 *	@param str - pointer to the current command string
@@ -142,10 +152,7 @@ void task_command(char *str, char *str_last)
 	if(restart_required_outer == true)
 	{
 		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
-		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-		udc_detach();	// Detach the USB device before restart
-		rstc_start_software_reset(RSTC);	// Software reset
-		while (1);		
+		software_reset();
 	}
 
 	while(udi_cdc_is_rx_ready()){
@@ -318,28 +325,35 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 	{
 		int i;
 		printf("\r\n-------------------------------------------------------------------------\r\n");
-		for (i=0;i<4;i++)
+		for (i=0;i<TOTAL_PORTS;i++)
 		{
 
 			printf("\r\nPort %d\r\n",i+1);
 			if (port_status[i] == 1) printf(" Status: UP\r\n");
 			if (port_status[i] == 0) printf(" Status: DOWN\r\n");
-			for (int x=0;x<MAX_VLANS;x++)
+			if (i > 3)
 			{
-				if (Zodiac_Config.vlan_list[x].portmap[i] == 1)
+				printf(" VLAN type: OpenFlow\r\n");
+				printf(" VLAN ID: n/a\r\n");
+			} else
+			{
+				for (int x=0;x<MAX_VLANS;x++)
 				{
-					if (Zodiac_Config.vlan_list[x].uVlanType == 0) printf(" VLAN type: Unassigned\r\n");
-					if (Zodiac_Config.vlan_list[x].uVlanType == 1) printf(" VLAN type: OpenFlow\r\n");
-					if (Zodiac_Config.vlan_list[x].uVlanType == 2) printf(" VLAN type: Native\r\n");
-					printf(" VLAN ID: %d\r\n", Zodiac_Config.vlan_list[x].uVlanID);
+					if (Zodiac_Config.vlan_list[x].portmap[i] == 1)
+					{
+						if (Zodiac_Config.vlan_list[x].uVlanType == 0) printf(" VLAN type: Unassigned\r\n");
+						if (Zodiac_Config.vlan_list[x].uVlanType == 1) printf(" VLAN type: OpenFlow\r\n");
+						if (Zodiac_Config.vlan_list[x].uVlanType == 2) printf(" VLAN type: Native\r\n");
+						printf(" VLAN ID: %d\r\n", Zodiac_Config.vlan_list[x].uVlanID);
+					}
 				}
 			}
 			if( OF_Version == 1)
 			{
 				printf(" RX Bytes: %" PRIu64 "\r\n", phys10_port_stats[i].rx_bytes);
 				printf(" TX Bytes: %" PRIu64 "\r\n", phys10_port_stats[i].tx_bytes);
-				if (Zodiac_Config.of_port[i] == 1) printf(" RX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].rx_packets);
-				if (Zodiac_Config.of_port[i] == 1) printf(" TX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].tx_packets);
+				if (Zodiac_Config.of_port[i] == 1 || i > 3) printf(" RX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].rx_packets);
+				if (Zodiac_Config.of_port[i] == 1 || i > 3) printf(" TX Packets: %" PRIu64 "\r\n", phys10_port_stats[i].tx_packets);
 				printf(" RX Dropped Packets: %" PRIu64 "\r\n", phys10_port_stats[i].rx_dropped);
 				printf(" TX Dropped Packets: %" PRIu64 "\r\n", phys10_port_stats[i].tx_dropped);
 				printf(" RX CRC Errors: %" PRIu64 "\r\n", phys10_port_stats[i].rx_crc_err);
@@ -348,8 +362,8 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 			{
 				printf(" RX Bytes: %" PRIu64 "\r\n", phys13_port_stats[i].rx_bytes);
 				printf(" TX Bytes: %" PRIu64 "\r\n", phys13_port_stats[i].tx_bytes);
-				if (Zodiac_Config.of_port[i] == 1) printf(" RX Packets: %" PRIu64 "\r\n", phys13_port_stats[i].rx_packets);
-				if (Zodiac_Config.of_port[i] == 1) printf(" TX Packets: %" PRIu64 "\r\n", phys13_port_stats[i].tx_packets);
+				if (Zodiac_Config.of_port[i] == 1 || i > 3) printf(" RX Packets: %" PRIu64 "\r\n", phys13_port_stats[i].rx_packets);
+				if (Zodiac_Config.of_port[i] == 1 || i > 3) printf(" TX Packets: %" PRIu64 "\r\n", phys13_port_stats[i].tx_packets);
 				printf(" RX Dropped Packets: %" PRIu64 "\r\n", phys13_port_stats[i].rx_dropped);
 				printf(" TX Dropped Packets: %" PRIu64 "\r\n", phys13_port_stats[i].tx_dropped);
 				printf(" RX CRC Errors: %" PRIu64 "\r\n", phys13_port_stats[i].rx_crc_err);
@@ -447,10 +461,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 	if (strcmp(command, "restart")==0)
 	{
 		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
-		for(int x = 0;x<100000;x++);	// Let the above message get sent to the terminal before detaching
-		udc_detach();	// Detach the USB device before restart
-		rstc_start_software_reset(RSTC);	// Software reset
-		while (1);
+		software_reset();
 	}
 
 	// Get CRC
@@ -459,6 +470,19 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		verification_check();
 		printf("Calculated verification: %08x\r\n", verify.calculated);
 		printf("Append [%08x 00000000] to the binary\r\n", ntohl(verify.calculated));
+		return;
+	}
+	
+	if (strcmp(command, "dump")==0 && strcmp(param1, "flash")==0)
+	{
+		uint8_t* buffer_pmem = FLASH_BUFFER;
+		while(buffer_pmem < FLASH_BUFFER_END)
+		{
+			printf("%02x", *buffer_pmem);
+			buffer_pmem++;
+		}
+		printf("\n");
+		
 		return;
 	}
 
@@ -506,10 +530,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	if (strcmp(command, "restart")==0)
 	{
 		printf("Restarting the Zodiac FX, please reopen your terminal application.\r\n");
-		for(int x = 0;x<100000;x++);	// Let the above message get send to the terminal before detaching
-		udc_detach();	// Detach the USB device before restart
-		rstc_start_software_reset(RSTC);	// Software reset
-		while (1);
+		software_reset();
 	}
 	
 	// Display Config
@@ -534,10 +555,6 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		} else {
 			printf(" Force OpenFlow version: Disabled\r\n");
 		}
-		if (masterselect == true) printf(" Stacking Select: SLAVE\r\n");
-		if (masterselect == false) printf(" Stacking Select: MASTER\r\n");
-		if (stackenabled == true) printf(" Stacking Status: Enabled\r\n");
-		if (stackenabled == false) printf(" Stacking Select: Disabled\r\n");
 		if (Zodiac_Config.ethtype_filter == 1) printf(" EtherType Filtering: Enabled\r\n");
 		if (Zodiac_Config.ethtype_filter != 1) printf(" EtherType Filtering: Disabled\r\n");
 		printf("\r\n-------------------------------------------------------------------------\r\n\n");
@@ -1540,7 +1557,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						}
 						else if(ptr_band->type == OFPMBT13_DSCP_REMARK)
 						{
-							printf("DSCP REMARK (unsupported)\r\n");
+							printf("DSCP REMARK\r\n");
 						}
 						else
 						{
@@ -1548,6 +1565,11 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 						}
 						printf("\t\t  Rate:\t\t%d\t\r\n", ptr_band->rate);
 						printf("\t\t  Burst Size:\t%d\t\r\n", ptr_band->burst_size);
+						
+						if(ptr_band->type == OFPMBT13_DSCP_REMARK)
+						{
+							printf("\t\t  Precedence:\t+%d\t\r\n", ((struct ofp13_meter_band_dscp_remark*)ptr_band)->prec_level);
+						}
 						
 						// Find band index
 						int band_index = ((uint8_t*)ptr_band - (uint8_t*)&(meter_entry[meter_index]->bands)) / sizeof(struct ofp13_meter_band_drop);
@@ -1611,12 +1633,6 @@ void command_debug(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
-	if (strcmp(command, "spi")==0)
-	{
-		//stack_write(atoi(param1));
-		return;
-	}
-
 	if (strcmp(command, "mem")==0)
 	{
 		printf("mem total: %d\r\n", membag_get_total());
@@ -1670,10 +1686,12 @@ void printhelp(void)
 	printf(" config\r\n");
 	printf(" openflow\r\n");
 	printf(" debug\r\n");
-	printf(" show ports\r\n");
+	printf(" update\r\n");
 	printf(" show status\r\n");
 	printf(" show version\r\n");
+	printf(" show ports\r\n");
 	printf(" restart\r\n");
+	printf(" help\r\n");
 	printf("\r\n");
 	printf("Config:\r\n");
 	printf(" save\r\n");
@@ -1693,13 +1711,14 @@ void printhelp(void)
 	printf(" set vlan-type <vlan id> <openflow|native>\r\n");
 	printf(" add vlan-port <vlan id> <port>\r\n");
 	printf(" delete vlan-port <port>\r\n");
-	printf(" factory reset\r\n");
 	printf(" set of-version <version(0|1|4)>\r\n");
 	printf(" set ethertype-filter <enable|disable>\r\n");
+	printf(" factory reset\r\n");
 	printf(" exit\r\n");
 	printf("\r\n");
 	printf("OpenFlow:\r\n");
 	printf(" show status\r\n");
+	printf(" show tables\r\n");
 	printf(" show flows\r\n");
 	printf(" show meters\r\n");
 	printf(" enable\r\n");

@@ -58,9 +58,9 @@ extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
 extern struct flows_counter flow_counters[MAX_FLOWS_13];
-extern struct ofp13_port_stats phys13_port_stats[4];
+extern struct ofp13_port_stats phys13_port_stats[TOTAL_PORTS];
 extern struct table_counter table_counters[MAX_TABLES];
-extern uint8_t port_status[4];
+extern uint8_t port_status[TOTAL_PORTS];
 extern struct ofp_switch_config Switch_config;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
 extern int multi_pos;
@@ -146,10 +146,62 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 		if(insts[OFPIT13_METER] != NULL)
 		{
 			struct ofp13_instruction_meter *inst_meter = insts[OFPIT13_METER];
-			if(meter_handler(ntohl(inst_meter->meter_id), packet_size) == FAILURE)	// Process meter id (provide byte count for counters)
+			int meter_ret = meter_handler(ntohl(inst_meter->meter_id), packet_size);
+			if(meter_ret == METER_DROP)	// Process meter id (provide byte count for counters)
 			{
 				// Packet must be dropped
+				TRACE("openflow_13.c: dropping packet");
 				return;
+			}
+			else if(meter_ret == METER_NOACT)
+			{
+				TRACE("openflow_13.c: no action taken");
+			}
+			else
+			{
+				if(meter_ret > 0)
+				{
+					int prec_increase = meter_ret;
+					
+					if (fields.eth_prot == htons(0x0800))
+					{
+						TRACE("openflow_13.c: increasing encoded drop precedence by %d", prec_increase);
+
+						// Retrieve TOS field
+						struct ip_hdr *hdr = fields.payload;
+						uint8_t prec_level = IPH_TOS(hdr);
+						TRACE("openflow_13.c: header current TOS field - %d", (int)prec_level);
+						// Isolate the drop precedence value (3 bits)
+						prec_level = (prec_level & 0x1C) >> 2;
+						// Check that value is valid ( 2 || 4 || 6 )
+						if( prec_level == 2 || prec_level == 4 || prec_level == 6)
+						{
+							// Increase drop precedence level by specified value
+							TRACE("openflow_13.c: increasing drop precedence level by %d", prec_increase);
+							prec_level = 2*(prec_level/2 + prec_increase);
+							// Ensure drop precedence value is valid
+							if(prec_level > 6)
+							{
+								prec_level = 6;
+							}
+							// Write new precedence to TOS field
+							TRACE("openflow_13.c: header new TOS field - %d", (prec_level<<2)|(IPH_TOS(hdr)&0xE3))
+							IPH_TOS_SET(hdr, (prec_level<<2)|(IPH_TOS(hdr)&0xE3));
+													
+							// Recalculate IP checksum
+							set_ip_checksum(p_uc_data, packet_size, fields.payload + 14);
+						}
+						else
+						{
+							TRACE("openflow_13.c: invalid drop precedence value - no adjustments made");
+						}
+
+					}
+				}
+				else
+				{
+					TRACE("openflow_13.c: ERROR - unhandled meter_handler return value");
+				}
 			}
 		}
 			
@@ -617,11 +669,6 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 void features_reply13(uint32_t xid)
 {
 	uint64_t datapathid = 0;
-	int numofports = 0;
-	for(int n=0;n<4;n++)
-	{
-		if(Zodiac_Config.of_port[n]==1)numofports++;
-	}
 	struct ofp13_switch_features features;
 	uint8_t buf[256];
 	int bufsize = sizeof(struct ofp13_switch_features);
@@ -763,6 +810,13 @@ int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 */
 void multi_flow_more_reply13(void)
 {
+	uint16_t sndbuf = tcp_sndbuf(tcp_pcb);
+	if(sndbuf < 2048)
+	{
+		TRACE("openflow_13.c: waiting to reply with more flows, sndbuf @ %d", sndbuf);
+		return;
+	}
+	
 	// Clear shared_buffer
 	memset(&shared_buffer, 0, SHARED_BUFFER_LEN);
 	
@@ -851,7 +905,7 @@ int multi_aggregate_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
 	int numofports = 0;
-	for(int n=0;n<4;n++)
+	for(int n=0;n<TOTAL_PORTS;n++)
 	{
 		if(Zodiac_Config.of_port[n]==1) numofports++;
 	}
@@ -871,7 +925,7 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 	uint8_t mac[] = {0x00,0x00,0x00,0x00,0x00,0x00};
 	update_port_status();		//update port status
 
-	for(int l = 0; l< 4; l++)
+	for(int l = 0; l<TOTAL_PORTS; l++)
 	{
 		if(Zodiac_Config.of_port[l] == 1)
 		{
@@ -1059,8 +1113,8 @@ int multi_tablefeat_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 */
 int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
-	struct ofp13_port_stats zodiac_port_stats[3];
 	struct ofp13_multipart_reply reply;
+	struct ofp13_port_stats zodiac_port_stats;
 	struct ofp13_port_stats_request *port_req = msg->body;
 	int stats_size = 0;
 	int len = 0;
@@ -1068,62 +1122,110 @@ int multi_portstats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg
 
 	if (port == OFPP13_ANY)
 	{
-		stats_size = (sizeof(struct ofp13_port_stats) * 3);	// Assumes 3 ports
-		len = sizeof(struct ofp13_multipart_reply) + stats_size;
-
-		reply.header.version = OF_Version;
-		reply.header.type = OFPT13_MULTIPART_REPLY;
-		reply.header.length = htons(len);
-		reply.header.xid = msg->header.xid;
-		reply.type = htons(OFPMP13_PORT_STATS);
-		reply.flags = 0;
-
-		for(int k=0; k<3;k++)
+		// Find number of OpenFlow ports present
+		uint8_t ofports = 0;
+		for(uint8_t k=0; k<TOTAL_PORTS; k++)
 		{
-			zodiac_port_stats[k].port_no = htonl(k+1);
-			zodiac_port_stats[k].rx_packets = htonll(phys13_port_stats[k].rx_packets);
-			zodiac_port_stats[k].tx_packets = htonll(phys13_port_stats[k].tx_packets);
-			zodiac_port_stats[k].rx_bytes = htonll(phys13_port_stats[k].rx_bytes);
-			zodiac_port_stats[k].tx_bytes = htonll(phys13_port_stats[k].tx_bytes);
-			zodiac_port_stats[k].rx_crc_err = htonll(phys13_port_stats[k].rx_crc_err);
-			zodiac_port_stats[k].rx_dropped = htonll(phys13_port_stats[k].rx_dropped);
-			zodiac_port_stats[k].tx_dropped = htonll(phys13_port_stats[k].tx_dropped);
-			zodiac_port_stats[k].rx_frame_err = 0;
-			zodiac_port_stats[k].rx_over_err = 0;
-			zodiac_port_stats[k].tx_errors = 0;
-			zodiac_port_stats[k].rx_errors = 0;
-			zodiac_port_stats[k].collisions = 0;
-
+			// Check if port is NOT native
+			if(!(NativePortMatrix & (1<<(k))))
+			{
+				ofports++;
+			}
 		}
-		memcpy(buffer, &reply, sizeof(struct ofp13_multipart_reply));
-		memcpy(buffer+sizeof(struct ofp13_multipart_reply), &zodiac_port_stats[0], stats_size);
-	} else if (port <= OFPP13_MAX) {
-		stats_size = sizeof(struct ofp13_port_stats);
-		len = sizeof(struct ofp13_multipart_reply) + stats_size;
-
+		
+		stats_size = (sizeof(struct ofp13_port_stats) * ofports);	// Calculate length of stats
+		len = sizeof(struct ofp13_multipart_reply) + stats_size;	// Calculate total reply length
+		
+		// Format reply header
 		reply.header.version = OF_Version;
 		reply.header.type = OFPT13_MULTIPART_REPLY;
 		reply.header.length = htons(len);
 		reply.header.xid = msg->header.xid;
 		reply.type = htons(OFPMP13_PORT_STATS);
 		reply.flags = 0;
-
-		zodiac_port_stats[port].port_no = htonl(port);
-		zodiac_port_stats[port].rx_packets = htonll(phys13_port_stats[port-1].rx_packets);
-		zodiac_port_stats[port].tx_packets = htonll(phys13_port_stats[port-1].tx_packets);
-		zodiac_port_stats[port].rx_bytes = htonll(phys13_port_stats[port-1].rx_bytes);
-		zodiac_port_stats[port].tx_bytes = htonll(phys13_port_stats[port-1].tx_bytes);
-		zodiac_port_stats[port].rx_crc_err = htonll(phys13_port_stats[port-1].rx_crc_err);
-		zodiac_port_stats[port].rx_dropped = htonll(phys13_port_stats[port-1].rx_dropped);
-		zodiac_port_stats[port].tx_dropped = htonll(phys13_port_stats[port-1].tx_dropped);
-		zodiac_port_stats[port].rx_frame_err = 0;
-		zodiac_port_stats[port].rx_over_err = 0;
-		zodiac_port_stats[port].tx_errors = 0;
-		zodiac_port_stats[port].rx_errors = 0;
-		zodiac_port_stats[port].collisions = 0;
-
+		
+		// Write reply header to buffer
 		memcpy(buffer, &reply, sizeof(struct ofp13_multipart_reply));
-		memcpy(buffer+sizeof(struct ofp13_multipart_reply), &zodiac_port_stats[port], stats_size);
+		// Increment buffer pointer
+		buffer += sizeof(struct ofp13_multipart_reply);
+		
+		// Write port stats to reply message
+		for(uint8_t k=0; k<TOTAL_PORTS; k++)
+		{
+			// Check if port is NOT native
+			if(!(NativePortMatrix & (1<<(k))))
+			{
+				// Format port stats reply for this port
+				zodiac_port_stats.port_no = htonl(k+1);
+				zodiac_port_stats.rx_packets = htonll(phys13_port_stats[k].rx_packets);
+				zodiac_port_stats.tx_packets = htonll(phys13_port_stats[k].tx_packets);
+				zodiac_port_stats.rx_bytes = htonll(phys13_port_stats[k].rx_bytes);
+				zodiac_port_stats.tx_bytes = htonll(phys13_port_stats[k].tx_bytes);
+				zodiac_port_stats.rx_crc_err = htonll(phys13_port_stats[k].rx_crc_err);
+				zodiac_port_stats.rx_dropped = htonll(phys13_port_stats[k].rx_dropped);
+				zodiac_port_stats.tx_dropped = htonll(phys13_port_stats[k].tx_dropped);
+				zodiac_port_stats.rx_frame_err = 0;
+				zodiac_port_stats.rx_over_err = 0;
+				zodiac_port_stats.tx_errors = 0;
+				zodiac_port_stats.rx_errors = 0;
+				zodiac_port_stats.collisions = 0;
+
+				if((buffer + sizeof(struct ofp13_port_stats)) < (shared_buffer + SHARED_BUFFER_LEN))
+				{
+					// Write port stats to buffer
+					memcpy(buffer, &zodiac_port_stats, sizeof(struct ofp13_port_stats));
+					// Increment buffer pointer
+					buffer += sizeof(struct ofp13_port_stats);
+				}
+				else
+				{
+					TRACE("openflow_13.c: unable to write port stats to shared buffer");
+				}
+			}
+		}
+	}
+	else if (port > 0 && port <= TOTAL_PORTS)	// Respond to request for ports
+	{
+		// Check if port is NOT native
+		if(!(NativePortMatrix & (1<<(port-1))))
+		{
+			stats_size = sizeof(struct ofp13_port_stats);
+			len = sizeof(struct ofp13_multipart_reply) + stats_size;
+
+			reply.header.version = OF_Version;
+			reply.header.type = OFPT13_MULTIPART_REPLY;
+			reply.header.length = htons(len);
+			reply.header.xid = msg->header.xid;
+			reply.type = htons(OFPMP13_PORT_STATS);
+			reply.flags = 0;
+
+			zodiac_port_stats.port_no = htonl(port);
+			zodiac_port_stats.rx_packets = htonll(phys13_port_stats[port-1].rx_packets);
+			zodiac_port_stats.tx_packets = htonll(phys13_port_stats[port-1].tx_packets);
+			zodiac_port_stats.rx_bytes = htonll(phys13_port_stats[port-1].rx_bytes);
+			zodiac_port_stats.tx_bytes = htonll(phys13_port_stats[port-1].tx_bytes);
+			zodiac_port_stats.rx_crc_err = htonll(phys13_port_stats[port-1].rx_crc_err);
+			zodiac_port_stats.rx_dropped = htonll(phys13_port_stats[port-1].rx_dropped);
+			zodiac_port_stats.tx_dropped = htonll(phys13_port_stats[port-1].tx_dropped);
+			zodiac_port_stats.rx_frame_err = 0;
+			zodiac_port_stats.rx_over_err = 0;
+			zodiac_port_stats.tx_errors = 0;
+			zodiac_port_stats.rx_errors = 0;
+			zodiac_port_stats.collisions = 0;
+
+			memcpy(buffer, &reply, sizeof(struct ofp13_multipart_reply));
+			memcpy(buffer+sizeof(struct ofp13_multipart_reply), &zodiac_port_stats, stats_size);
+		}
+		else
+		{
+			TRACE("openflow_13.c: requested port is out of range");
+			of_error13(buffer, OFPET13_BAD_REQUEST, OFPBRC13_BAD_PORT);
+		}
+	}
+	else
+	{
+		TRACE("openflow_13.c: requested port is out of range");
+		of_error13(buffer, OFPET13_BAD_REQUEST, OFPBRC13_BAD_PORT);
 	}
 	return len;
 }
@@ -1487,7 +1589,7 @@ int multi_meter_features_reply13(uint8_t *buffer, struct ofp13_multipart_request
 	
 	// Format reply with meter features
 	meter_features.max_meter	= htonl(MAX_METER_13);
-	meter_features.band_types	= htonl(2);		// Only OFPMBT_DROP supported
+	meter_features.band_types	= htonl(1<<OFPMBT13_DSCP_REMARK | 1<<OFPMBT13_DROP);		// Only OFPMBT_DROP supported
 	meter_features.capabilities	= htonl(OFPMF13_KBPS | OFPMF13_PKTPS);
 	meter_features.max_bands	= MAX_METER_BANDS_13;
 	meter_features.max_color	= 0;
@@ -2093,6 +2195,12 @@ void meter_add13(struct ofp_header *msg)
 			ptr_band->rate			= ntohl(ptr_rxband->rate);
 			ptr_band->burst_size	= ntohl(ptr_rxband->burst_size);
 			
+			// Copy DSCP precedence level
+			if(ptr_band->type == OFPMBT13_DSCP_REMARK)
+			{
+				((struct ofp13_meter_band_dscp_remark*)ptr_band)->prec_level = ((struct ofp13_meter_band_dscp_remark*)ptr_rxband)->prec_level;
+			}
+			
 			ptr_band++;		// Move to next band storage location
 			ptr_rxband++;	// Move to next received band
 			bands_processed++;
@@ -2209,6 +2317,12 @@ void meter_modify13(struct ofp_header *msg)
 			ptr_band->len			= ntohs(ptr_rxband->len);
 			ptr_band->rate			= ntohl(ptr_rxband->rate);
 			ptr_band->burst_size	= ntohl(ptr_rxband->burst_size);
+			
+			// Copy DSCP precedence level
+			if(ptr_band->type == OFPMBT13_DSCP_REMARK)
+			{
+				((struct ofp13_meter_band_dscp_remark*)ptr_band)->prec_level = ((struct ofp13_meter_band_dscp_remark*)ptr_rxband)->prec_level;
+			}
 			
 			// ***** TODO : add error checking for band processing
 			TRACE("openflow_13.c: %d of %d bands processed", bands_processed, bands_received);

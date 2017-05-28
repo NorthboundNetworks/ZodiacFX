@@ -840,7 +840,7 @@ struct ofp13_meter_band_drop {
 };
 
 /* OFPMBT_DSCP_REMARK band - Remark DSCP in the IP header */
-struct ofp_meter_band_dscp_remark {
+struct ofp13_meter_band_dscp_remark {
     uint16_t        type;    /* OFPMBT_DSCP_REMARK. */
     uint16_t        len;     /* Length in bytes of this band. */
     uint32_t        rate;    /* Rate for remarking packets. */

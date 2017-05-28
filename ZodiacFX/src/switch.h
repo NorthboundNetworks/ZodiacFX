@@ -32,6 +32,7 @@
 
 #define SPI_Handler     SPI_Handler
 #define SPI_IRQn        SPI_IRQn
+#define SHARED_BUFFER_LEN 2048
 
 void spi_init(void);
 void switch_init(void);
@@ -43,8 +44,10 @@ void update_port_stats(void);
 void update_port_status(void);
 void disableOF(void);
 void enableOF(void);
-void stacking_init(bool master);
-void MasterStackSend(uint8_t *p_uc_data, uint16_t ul_size);
-void MasterStackRcv(void);
 
+int readtxbytes(int port);
+int readrxbytes(int port);
+int readtxdrop(int port);
+int readrxdrop(int port);
+int readrxcrcerr(int port);
 #endif /* SWITCH_H_ */

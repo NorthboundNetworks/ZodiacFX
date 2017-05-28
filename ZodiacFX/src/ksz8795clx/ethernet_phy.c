@@ -290,7 +290,6 @@ err_t ethernetif_init(struct netif *netif)
 static err_t gmac_low_level_output(struct netif *netif, struct pbuf *p)
 {
 	gmac_write(p->payload, p->len, 128);
-	//gmac_write(p->payload, p->len, NativePortMatrix);
 }
 
 
