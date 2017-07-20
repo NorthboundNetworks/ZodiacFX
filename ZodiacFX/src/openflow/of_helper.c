@@ -1311,7 +1311,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	}
 	
 	// Find time delta
-	uint64_t time_delta = sys_get_ms() - meter_entry[meter_index]->last_packet_in;
+	uint32_t time_delta = (uint32_t)(sys_get_ms() - meter_entry[meter_index]->last_packet_in);
 	
 	// Update timer
 	meter_entry[meter_index]->last_packet_in = sys_get_ms();
