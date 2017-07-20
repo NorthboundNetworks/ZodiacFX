@@ -208,7 +208,10 @@ int flowmatch10(uint8_t *pBuffer, int port, struct packet_fields *fields)
 		}
 
 		// If this flow is of a lower priority then one that is already match then there is no point going through a check.
-		if(ntohs(flow_match10[i]->priority) <= ntohs(flow_match10[matched_flow]->priority)) continue;
+		if (matched_flow > -1)
+		{
+			if(ntohs(flow_match10[i]->priority) <= ntohs(flow_match10[matched_flow]->priority)) continue;
+		}
 
 		port_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_IN_PORT) || ntohs(flow_match10[i]->match.in_port) == port || flow_match10[i]->match.in_port == 0;
 		eth_src_match = (ntohl(flow_match10[i]->match.wildcards) & OFPFW_DL_SRC) || memcmp(eth_src, flow_match10[i]->match.dl_src, 6) == 0 || memcmp(flow_match10[i]->match.dl_src, zero_field, 6) == 0;
@@ -249,7 +252,9 @@ int flowmatch10(uint8_t *pBuffer, int port, struct packet_fields *fields)
 			if (matched_flow > -1)
 			{
 				if(ntohs(flow_match10[i]->priority) > ntohs(flow_match10[matched_flow]->priority)) matched_flow = i;
-			} else {
+			}
+			else
+			{
 				matched_flow = i;
 			}
 		}
