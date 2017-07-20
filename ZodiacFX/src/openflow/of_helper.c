@@ -1313,15 +1313,12 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	// Find time delta
 	uint32_t time_delta = (uint32_t)(sys_get_ms() - meter_entry[meter_index]->last_packet_in);
 	
-	// Update timer
-	meter_entry[meter_index]->last_packet_in = sys_get_ms();
-	
 	// Check configuration flags
 	uint32_t calculated_rate = 0;
 	if(((meter_entry[meter_index]->flags) & OFPMF13_KBPS) == OFPMF13_KBPS)
 	{
 		calculated_rate = ((bytes*8)/time_delta);	// bit/ms == kbit/s
-		TRACE("of_helper.c: calculated rate - %d kbps", calculated_rate);
+		TRACE("of_helper.c: calculated rate - %d kbps (%d bytes over %d ms)", calculated_rate, bytes, time_delta);
 	}
 	else if(((meter_entry[meter_index]->flags) & OFPMF13_PKTPS) == OFPMF13_PKTPS)
 	{
@@ -1359,6 +1356,10 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	if(highest_rate == 0 || ptr_highest_band == NULL)
 	{
 		TRACE("of_helper.c: no bands triggered - packet not dropped");
+		
+		// Update timer
+		meter_entry[meter_index]->last_packet_in = sys_get_ms();
+		
 		return METER_NOACT;
 	}
 	
