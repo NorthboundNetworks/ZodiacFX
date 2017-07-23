@@ -52,5 +52,6 @@
 
 #define MAX_METER_13	8		// Maximum number of meter entries in meter table
 #define MAX_METER_BANDS_13	3	// Maximum number of meter bands per meter
+#define POLICING_SAMPLES	12	// Sample for rate limiter
 
 #endif /* CONFIG_ZODIAC_H_ */

@@ -1279,7 +1279,11 @@ int flow_stats_msg13(char *buffer, int first, int last)
 *
 */
 int	meter_handler(uint32_t id, uint16_t bytes)
-{		
+{
+	// Initialise 8x 12-element packet samples
+	static struct meter_sample_array meter_samples[MAX_METER_13];
+	static uint8_t sample_index = 0;
+	
 	TRACE("of_helper.c: meter id %d needs processing", id);
 	
 	// Get associated meter entry
@@ -1304,30 +1308,77 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	// Update meter counters
 	meter_entry[meter_index]->byte_in_count += bytes;
 	(meter_entry[meter_index]->packet_in_count)++;
+	meter_entry[meter_index]->last_packet_in = sys_get_ms();
 	
-	// Check if meter has been used before
-	if(meter_entry[meter_index]->last_packet_in == 0)
+	//// Check if meter has been used before
+	//if(meter_entry[meter_index]->last_packet_in == 0)
+	//{
+		//// Update timer
+		//meter_entry[meter_index]->last_packet_in = sys_get_ms();
+		//
+		//TRACE("of_helper.c: first hit of meter - packet not dropped");
+		//return METER_NOACT;
+	//}
+	
+	// Get current time
+	uint32_t current_time = (uint32_t)(sys_get_ms());
+	
+	// Check if last packet was within 1 ms of this one
+	if(meter_samples[meter_index].sample[sample_index].packet_time == current_time)
 	{
-		// Update timer
-		meter_entry[meter_index]->last_packet_in = sys_get_ms();
-		
-		TRACE("of_helper.c: first hit of meter - packet not dropped");
-		return METER_NOACT;
+		meter_samples[meter_index].sample[sample_index].byte_count += bytes;
+		meter_samples[meter_index].sample[sample_index].packet_count++;
 	}
-	
-	// Find time delta
-	uint32_t time_delta = (uint32_t)(sys_get_ms() - meter_entry[meter_index]->last_packet_in);
+	else
+	{
+		// Increment sample index
+		if(sample_index >= 11)
+		{
+			// Wrap sample_index around
+			sample_index = 0;
+		}
+		else
+		{
+			// Increment index
+			sample_index++;
+		}
+		
+		// Populate (overwrite) next element
+		meter_samples[meter_index].sample[sample_index].packet_time = current_time;
+		meter_samples[meter_index].sample[sample_index].byte_count += bytes;
+		meter_samples[meter_index].sample[sample_index].packet_count++;
+	}
 	
 	// Check configuration flags
 	uint32_t calculated_rate = 0;
 	if(((meter_entry[meter_index]->flags) & OFPMF13_KBPS) == OFPMF13_KBPS)
 	{
-		calculated_rate = ((bytes*8)/time_delta);	// bit/ms == kbit/s
-		TRACE("of_helper.c: calculated rate - %d kbps (%d bytes over %d ms)", calculated_rate, bytes, time_delta);
+		// Calculate kbit/s from samples taken over last 10 ms
+		uint32_t sampled_bytes = 0;
+		for(uint8_t i; i<POLICING_SAMPLES; i++)
+		{
+			if(meter_samples[meter_index].sample[i].packet_time >= (current_time-10))
+			{
+				sampled_bytes += meter_samples[meter_index].sample[i].byte_count;
+			}
+		}
+		
+		calculated_rate = ((sampled_bytes*8)/10);	// bit/ms == kbit/s
+		TRACE("of_helper.c: calculated rate - %d kbps", calculated_rate);
 	}
 	else if(((meter_entry[meter_index]->flags) & OFPMF13_PKTPS) == OFPMF13_PKTPS)
 	{
-		calculated_rate = 1000/time_delta;
+		// Calculate pkt/s from samples taken over last 10 ms
+		uint16_t sampled_packets = 0;
+		for(uint8_t i; i<POLICING_SAMPLES; i++)
+		{
+			if(meter_samples[meter_index].sample[i].packet_time >= (current_time-10))
+			{
+				sampled_packets += meter_samples[meter_index].sample[i].packet_count;
+			}
+		}
+		
+		calculated_rate = 100*sampled_packets;		// packets / 10 ms == 100 * packets over 10 ms
 		TRACE("of_helper.c: calculated rate - %d pktps", calculated_rate);
 	}
 	else
@@ -1361,9 +1412,6 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	if(highest_rate == 0 || ptr_highest_band == NULL)
 	{
 		TRACE("of_helper.c: no bands triggered - packet not dropped");
-		
-		// Update timer
-		meter_entry[meter_index]->last_packet_in = sys_get_ms();
 		
 		return METER_NOACT;
 	}
