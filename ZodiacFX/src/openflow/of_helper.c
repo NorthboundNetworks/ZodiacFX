@@ -1323,62 +1323,56 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	// Get current time
 	uint32_t current_time = (uint32_t)(sys_get_ms());
 	
-	// Check if last packet was within 1 ms of this one
-	if(meter_samples[meter_index].sample[sample_index].packet_time == current_time)
-	{
-		meter_samples[meter_index].sample[sample_index].byte_count += bytes;
-		meter_samples[meter_index].sample[sample_index].packet_count++;
-	}
-	else
-	{
-		// Increment sample index
-		if(sample_index >= 11)
-		{
-			// Wrap sample_index around
-			sample_index = 0;
-		}
-		else
-		{
-			// Increment index
-			sample_index++;
-		}
-		
-		// Populate (overwrite) next element
-		meter_samples[meter_index].sample[sample_index].packet_time = current_time;
-		meter_samples[meter_index].sample[sample_index].byte_count += bytes;
-		meter_samples[meter_index].sample[sample_index].packet_count++;
-	}
-	
 	// Check configuration flags
 	uint32_t calculated_rate = 0;
 	if(((meter_entry[meter_index]->flags) & OFPMF13_KBPS) == OFPMF13_KBPS)
 	{
-		// Calculate kbit/s from samples taken over last 10 ms
+		// Sum sampled bytes
 		uint32_t sampled_bytes = 0;
-		for(uint8_t i; i<POLICING_SAMPLES; i++)
+		for(uint16_t i; i<POLICING_SAMPLES; i++)
 		{
-			if(meter_samples[meter_index].sample[i].packet_time >= (current_time-10))
-			{
-				sampled_bytes += meter_samples[meter_index].sample[i].byte_count;
-			}
+			sampled_bytes += meter_samples[meter_index].sample[i].byte_count;
 		}
 		
-		calculated_rate = ((sampled_bytes*8)/10);	// bit/ms == kbit/s
-		TRACE("of_helper.c: calculated rate - %d kbps", calculated_rate);
+		// Find time delta
+		uint32_t sample_time = 0;
+		if(sample_index == POLICING_SAMPLES-1)
+		{
+			//sample_time = meter_samples[meter_index].sample[sample_index].packet_time - meter_samples[meter_index].sample[0].packet_time;
+			sample_time = current_time - meter_samples[meter_index].sample[0].packet_time;
+		}
+		else
+		{
+			//sample_time = meter_samples[meter_index].sample[sample_index].packet_time - meter_samples[meter_index].sample[sample_index+1].packet_time;
+			sample_time = current_time - meter_samples[meter_index].sample[sample_index+1].packet_time;
+		}
+		
+		calculated_rate = ((sampled_bytes*8)/sample_time);	// bit/ms == kbit/s
+		TRACE("of_helper.c: calculated rate - %d kbps (%d bytes over %d ms)", calculated_rate, sampled_bytes, sample_time);
 	}
 	else if(((meter_entry[meter_index]->flags) & OFPMF13_PKTPS) == OFPMF13_PKTPS)
 	{
-		// Calculate pkt/s from samples taken over last 10 ms
+		// Sum sampled packets
 		uint16_t sampled_packets = 0;
-		for(uint8_t i; i<POLICING_SAMPLES; i++)
+		for(uint16_t i; i<POLICING_SAMPLES; i++)
 		{
-			if(meter_samples[meter_index].sample[i].packet_time >= (current_time-10))
-			{
-				sampled_packets += meter_samples[meter_index].sample[i].packet_count;
-			}
+			sampled_packets += meter_samples[meter_index].sample[i].packet_count;
 		}
 		
-		calculated_rate = 100*sampled_packets;		// packets / 10 ms == 100 * packets over 10 ms
+		// Find time delta
+		uint32_t sample_time = 0;
+		if(sample_index == POLICING_SAMPLES-1)
+		{
+			//sample_time = meter_samples[meter_index].sample[sample_index].packet_time - meter_samples[meter_index].sample[0].packet_time;
+			sample_time = current_time - meter_samples[meter_index].sample[0].packet_time;
+		}
+		else
+		{
+			//sample_time = meter_samples[meter_index].sample[sample_index].packet_time - meter_samples[meter_index].sample[sample_index+1].packet_time;
+			sample_time = current_time - meter_samples[meter_index].sample[sample_index+1].packet_time;
+		}
+		
+		calculated_rate = 1000*sampled_packets;		// 1000*pkt/ms == pkt/s
 		TRACE("of_helper.c: calculated rate - %d pktps", calculated_rate);
 	}
 	else
@@ -1412,6 +1406,32 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	if(highest_rate == 0 || ptr_highest_band == NULL)
 	{
 		TRACE("of_helper.c: no bands triggered - packet not dropped");
+		
+		// Check if last packet was within 1 ms of this one
+		if(meter_samples[meter_index].sample[sample_index].packet_time == current_time)
+		{
+			meter_samples[meter_index].sample[sample_index].byte_count += bytes;
+			meter_samples[meter_index].sample[sample_index].packet_count++;
+		}
+		else
+		{
+			// Increment sample index
+			if(sample_index >= POLICING_SAMPLES-1)
+			{
+				// Wrap sample_index around
+				sample_index = 0;
+			}
+			else
+			{
+				// Increment index
+				sample_index++;
+			}
+		
+			// Populate (overwrite) next element
+			meter_samples[meter_index].sample[sample_index].packet_time = current_time;
+			meter_samples[meter_index].sample[sample_index].byte_count = bytes;
+			meter_samples[meter_index].sample[sample_index].packet_count++;
+		}
 		
 		return METER_NOACT;
 	}
