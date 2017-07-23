@@ -1407,8 +1407,8 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 	{
 		TRACE("of_helper.c: no bands triggered - packet not dropped");
 		
-		// Check if last packet was within 1 ms of this one
-		if(meter_samples[meter_index].sample[sample_index].packet_time == current_time)
+		// Check if last packet was within 1 slice of this one
+		if(meter_samples[meter_index].sample[sample_index].packet_time >= (current_time-POLICING_SLICE-1))
 		{
 			meter_samples[meter_index].sample[sample_index].byte_count += bytes;
 			meter_samples[meter_index].sample[sample_index].packet_count++;
@@ -1430,7 +1430,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 			// Populate (overwrite) next element
 			meter_samples[meter_index].sample[sample_index].packet_time = current_time;
 			meter_samples[meter_index].sample[sample_index].byte_count = bytes;
-			meter_samples[meter_index].sample[sample_index].packet_count++;
+			meter_samples[meter_index].sample[sample_index].packet_count = 0;
 		}
 		
 		return METER_NOACT;
