@@ -1372,8 +1372,8 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 			sample_time = current_time - meter_samples[meter_index].sample[sample_index+1].packet_time;
 		}
 		
-		calculated_rate = 1000*sampled_packets;		// 1000*pkt/ms == pkt/s
-		TRACE("of_helper.c: calculated rate - %d pktps", calculated_rate);
+		calculated_rate = 1000*sampled_packets/sample_time;		// 1000*pkt/ms == pkt/s
+		TRACE("of_helper.c: calculated rate - %d pktps (%d packets over %d ms)", calculated_rate, sampled_packets, sample_time);
 	}
 	else
 	{
