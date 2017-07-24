@@ -109,7 +109,8 @@ struct policing_sample
 
 struct meter_sample_array
 {
-	struct policing_sample sample[POLICING_SAMPLES];
+	uint16_t	sample_index;
+	struct		policing_sample sample[POLICING_SAMPLES];
 };
 
 void task_openflow(void);

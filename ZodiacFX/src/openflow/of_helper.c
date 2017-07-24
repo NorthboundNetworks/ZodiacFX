@@ -1282,7 +1282,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 {
 	// Initialise 8x 12-element packet samples
 	static struct meter_sample_array meter_samples[MAX_METER_13];
-	static uint8_t sample_index = 0;
+	//static uint16_t sample_index = 0;
 	
 	TRACE("of_helper.c: meter id %d needs processing", id);
 	
@@ -1336,7 +1336,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 		
 		// Find time delta
 		uint32_t sample_time = 0;
-		if(sample_index == POLICING_SAMPLES-1)
+		if(meter_samples[meter_index].sample_index == POLICING_SAMPLES-1)
 		{
 			//sample_time = meter_samples[meter_index].sample[sample_index].packet_time - meter_samples[meter_index].sample[0].packet_time;
 			sample_time = current_time - meter_samples[meter_index].sample[0].packet_time;
@@ -1344,7 +1344,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 		else
 		{
 			//sample_time = meter_samples[meter_index].sample[sample_index].packet_time - meter_samples[meter_index].sample[sample_index+1].packet_time;
-			sample_time = current_time - meter_samples[meter_index].sample[sample_index+1].packet_time;
+			sample_time = current_time - meter_samples[meter_index].sample[meter_samples[meter_index].sample_index+1].packet_time;
 		}
 		
 		calculated_rate = ((sampled_bytes*8)/sample_time);	// bit/ms == kbit/s
@@ -1361,7 +1361,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 		
 		// Find time delta
 		uint32_t sample_time = 0;
-		if(sample_index == POLICING_SAMPLES-1)
+		if(meter_samples[meter_index].sample_index == POLICING_SAMPLES-1)
 		{
 			//sample_time = meter_samples[meter_index].sample[sample_index].packet_time - meter_samples[meter_index].sample[0].packet_time;
 			sample_time = current_time - meter_samples[meter_index].sample[0].packet_time;
@@ -1369,7 +1369,7 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 		else
 		{
 			//sample_time = meter_samples[meter_index].sample[sample_index].packet_time - meter_samples[meter_index].sample[sample_index+1].packet_time;
-			sample_time = current_time - meter_samples[meter_index].sample[sample_index+1].packet_time;
+			sample_time = current_time - meter_samples[meter_index].sample[meter_samples[meter_index].sample_index+1].packet_time;
 		}
 		
 		calculated_rate = 1000*sampled_packets/sample_time;		// 1000*pkt/ms == pkt/s
@@ -1408,29 +1408,29 @@ int	meter_handler(uint32_t id, uint16_t bytes)
 		TRACE("of_helper.c: no bands triggered - packet not dropped");
 		
 		// Check if last packet was within 1 slice of this one
-		if(meter_samples[meter_index].sample[sample_index].packet_time >= (current_time-POLICING_SLICE-1))
+		if(meter_samples[meter_index].sample[meter_samples[meter_index].sample_index].packet_time >= (current_time-POLICING_SLICE-1))
 		{
-			meter_samples[meter_index].sample[sample_index].byte_count += bytes;
-			meter_samples[meter_index].sample[sample_index].packet_count++;
+			meter_samples[meter_index].sample[meter_samples[meter_index].sample_index].byte_count += bytes;
+			meter_samples[meter_index].sample[meter_samples[meter_index].sample_index].packet_count++;
 		}
 		else
 		{
 			// Increment sample index
-			if(sample_index >= POLICING_SAMPLES-1)
+			if(meter_samples[meter_index].sample_index >= POLICING_SAMPLES-1)
 			{
 				// Wrap sample_index around
-				sample_index = 0;
+				meter_samples[meter_index].sample_index = 0;
 			}
 			else
 			{
 				// Increment index
-				sample_index++;
+				meter_samples[meter_index].sample_index++;
 			}
 		
 			// Populate (overwrite) next element
-			meter_samples[meter_index].sample[sample_index].packet_time = current_time;
-			meter_samples[meter_index].sample[sample_index].byte_count = bytes;
-			meter_samples[meter_index].sample[sample_index].packet_count = 0;
+			meter_samples[meter_index].sample[meter_samples[meter_index].sample_index].packet_time = current_time;
+			meter_samples[meter_index].sample[meter_samples[meter_index].sample_index].byte_count = bytes;
+			meter_samples[meter_index].sample[meter_samples[meter_index].sample_index].packet_count = 0;
 		}
 		
 		return METER_NOACT;
