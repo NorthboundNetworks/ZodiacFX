@@ -45,8 +45,8 @@ Download the latest **update firmware** from the [Northbound Networks Forums](ht
 	* Click 'Restart' in the web interface header to complete the update
 
 * **[Advanced] To update via cURL**:
-	* Run the following command: **curl --verbose -0 --form "file=@ZodiacFX_vXX_update.bin"**
-	* If the firmware upload fails, you may need to use the multipart/related content type like so: **curl -H "Content-Type: multipart/related" --verbose -0 --form "file=@ZodiacFX_vXX_update.bin"**
+	* Run the following command: **curl --verbose -0 --form "file=@ZodiacFX_vXX_update.bin" *ip_address***
+	* If the firmware upload fails, you may need to use the multipart/related content type like so: **curl -H "Content-Type: multipart/related" --verbose -0 --form "file=@ZodiacFX_vXX_update.bin" *ip_address***
 		* Note: a restart is required after the update to load the new firmware.
 
 ## Building the Project
