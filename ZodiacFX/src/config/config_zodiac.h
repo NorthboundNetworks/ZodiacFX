@@ -31,7 +31,7 @@
 #define CONFIG_ZODIAC_H_
 
 
-#define VERSION "0.81"		// Firmware version number
+#define VERSION "0.82"		// Firmware version number
 
 #define TOTAL_PORTS 4		// Total number of physical ports on the Zodiac FX
 
@@ -52,5 +52,7 @@
 
 #define MAX_METER_13	8		// Maximum number of meter entries in meter table
 #define MAX_METER_BANDS_13	3	// Maximum number of meter bands per meter
+#define POLICING_SAMPLES	20	// Sample for rate limiter
+#define	POLICING_SLICE		2	// time (ms) slice for each sample
 
 #endif /* CONFIG_ZODIAC_H_ */

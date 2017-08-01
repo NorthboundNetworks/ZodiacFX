@@ -100,6 +100,19 @@ struct meter_band_stats_array
 	struct ofp13_meter_band_stats band_stats[MAX_METER_BANDS_13];
 };
 
+struct policing_sample
+{
+	uint32_t	packet_time;	// sys_get_ms() when sampled
+	uint16_t	byte_count;		// Number of bytes during this sample
+	uint16_t	packet_count;	// Number of packets during this sample
+};
+
+struct meter_sample_array
+{
+	uint16_t	sample_index;
+	struct		policing_sample sample[POLICING_SAMPLES];
+};
+
 void task_openflow(void);
 void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
 void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
