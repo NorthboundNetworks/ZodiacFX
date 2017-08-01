@@ -94,6 +94,7 @@ LD = $(ARMGCC)ld
 OBJCOPY = $(ARMGCC)objcopy
 OBJDUMP = $(ARMGCC)objdump
 SIZE = $(ARMGCC)size
+PERL = perl
 
 PROJECT=ZodiacFX
 
@@ -268,8 +269,19 @@ CPPASINC += -I./src/ASF/sam/drivers/afec
 # ARM/GNU Archiver
 ARFLAGS += -r
 
+# Use perl for the checksum as shells have difficulties with NUL bytes.
+checksum = $(PERL) -e '\
+open(my $$fh, "+<:raw", "$1");\
+my $$csum = do {\
+  local $$/;\
+  unpack("%32W*", readline($$fh));\
+};\
+print $$fh pack("V", $$csum) . "\x00\x00\x00\x00";\
+close($$fh)'
+
 %.bin: %.elf
 	$(OBJCOPY) --output-target binary $< $@
+	$(call checksum,$@)
 	$(SIZE) $<
 
 # This is I/O bound, so let's compress it to tradeoff CPU for I/O
