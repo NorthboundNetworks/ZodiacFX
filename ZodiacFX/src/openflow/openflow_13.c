@@ -2486,7 +2486,7 @@ void flowrem_notif13(int flowid, uint8_t reason)
 
 	ofr.header.type = OFPT13_FLOW_REMOVED;
 	ofr.header.version = OF_Version;
-	ofr.header.length = htons((sizeof(struct ofp13_flow_removed) + ntohs(flow_match13[flowid]->match.length)-4));
+	ofr.header.length = htons((sizeof(struct ofp13_flow_removed) + ntohs(flow_match13[flowid]->match.length)-4) + (ntohs(flow_match13[flowid]->match.length) % 8));
 	ofr.header.xid = 0;
 	ofr.cookie = flow_match13[flowid]->cookie;
 	ofr.reason = reason;
