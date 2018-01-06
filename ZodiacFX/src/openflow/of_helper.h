@@ -43,6 +43,9 @@ struct packet_fields
 	uint16_t vlanid;
 	uint32_t ip_src;
 	uint32_t ip_dst;
+	uint32_t mpls_label;
+	uint8_t mpls_tc;
+	uint8_t mpls_bos;
 	// transport layer
 	uint16_t tp_src;
 	uint16_t tp_dst;

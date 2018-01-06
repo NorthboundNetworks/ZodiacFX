@@ -271,19 +271,21 @@ int flowmatch10(uint8_t *pBuffer, int port, struct packet_fields *fields)
 *
 */
 void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
+	// VLAN EtherTypes
 	static const uint8_t vlan1[2] = { 0x81, 0x00 };
 	static const uint8_t vlan2[2] = { 0x88, 0xa8 };
 	static const uint8_t vlan3[2] = { 0x91, 0x00 };
 	static const uint8_t vlan4[2] = { 0x92, 0x00 };
 	static const uint8_t vlan5[2] = { 0x93, 0x00 };
+	// MPLS EtherTypes
+	static const uint8_t mpls1[2] = { 0x88, 0x47 };
+	static const uint8_t mpls2[2] = { 0x88, 0x48 };
 
 	fields->isVlanTag = false;
 	uint8_t *eth_type = pBuffer + 12;
-	while(memcmp(eth_type, vlan1, 2)==0
-			|| memcmp(eth_type, vlan2, 2)==0
-			|| memcmp(eth_type, vlan3, 2)==0
-			|| memcmp(eth_type, vlan4, 2)==0
-			|| memcmp(eth_type, vlan5, 2)==0){
+	// Get VLAN IDs
+	while(memcmp(eth_type, vlan1, 2)==0 || memcmp(eth_type, vlan2, 2)==0 || memcmp(eth_type, vlan3, 2)==0 || memcmp(eth_type, vlan4, 2)==0 || memcmp(eth_type, vlan5, 2)==0)
+	{
 		if(fields->isVlanTag == false){ // save outermost value
 			uint8_t tci[2] = { eth_type[2]&0x0f, eth_type[3] };
 			memcpy(&fields->vlanid, tci, 2);
@@ -291,6 +293,14 @@ void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
 		fields->isVlanTag = true;
 		eth_type += 4;
 	}
+	// Get MPLS values
+	if (memcmp(eth_type, mpls1, 2)==0 || memcmp(eth_type, mpls2, 2)==0)
+	{
+		uint32_t mpls;
+		memcpy(&mpls, eth_type, 4);
+		eth_type += 4;
+	}
+	
 	memcpy(&fields->eth_prot, eth_type, 2);
 	fields->payload = eth_type + 2; // payload points to ip_hdr, etc.
 	
