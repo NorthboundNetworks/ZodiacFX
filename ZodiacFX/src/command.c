@@ -457,6 +457,36 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		return;
 	}
 
+	// Build shortcut - c to show config is saved
+	if (strcmp(command, "c")==0)
+	{
+		printf("\r\n");
+		printf("Build Configuration Check\r\n");
+		printf("-------------------------\r\n");
+		printf(" Name: %s\r\n",Zodiac_Config.device_name);
+		printf(" MAC Address: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n",Zodiac_Config.MAC_address[0], Zodiac_Config.MAC_address[1], Zodiac_Config.MAC_address[2], Zodiac_Config.MAC_address[3], Zodiac_Config.MAC_address[4], Zodiac_Config.MAC_address[5]);
+		printf(" IP Address: %d.%d.%d.%d\r\n" , Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1], Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]);
+		printf(" Netmask: %d.%d.%d.%d\r\n" , Zodiac_Config.netmask[0], Zodiac_Config.netmask[1], Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);
+		printf(" Gateway: %d.%d.%d.%d\r\n" , Zodiac_Config.gateway_address[0], Zodiac_Config.gateway_address[1], Zodiac_Config.gateway_address[2], Zodiac_Config.gateway_address[3]);
+		printf(" OpenFlow Controller: %d.%d.%d.%d\r\n" , Zodiac_Config.OFIP_address[0], Zodiac_Config.OFIP_address[1], Zodiac_Config.OFIP_address[2], Zodiac_Config.OFIP_address[3]);
+		printf(" OpenFlow Port: %d\r\n" , Zodiac_Config.OFPort);
+		if (Zodiac_Config.OFEnabled == OF_ENABLED) printf(" Openflow Status: Enabled\r\n");
+		if (Zodiac_Config.OFEnabled == OF_DISABLED) printf(" Openflow Status: Disabled\r\n");
+		if (Zodiac_Config.failstate == 0) printf(" Failstate: Secure\r\n");
+		if (Zodiac_Config.failstate == 1) printf(" Failstate: Safe\r\n");
+		if (Zodiac_Config.of_version == 1) {
+			printf(" Force OpenFlow version: 1.0 (0x01)\r\n");
+		} else if (Zodiac_Config.of_version == 4){
+			printf(" Force OpenFlow version: 1.3 (0x04)\r\n");
+		} else {
+			printf(" Force OpenFlow version: Disabled\r\n");
+		}
+		if (Zodiac_Config.ethtype_filter == 1) printf(" EtherType Filtering: Enabled\r\n");
+		if (Zodiac_Config.ethtype_filter != 1) printf(" EtherType Filtering: Disabled\r\n");
+		printf("\r\n\n");
+		return;
+	}
+
 	// Restart switch	
 	if (strcmp(command, "restart")==0)
 	{
@@ -1104,6 +1134,12 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							if (ntohs(oxm_value16) == 0x0800)printf("  ETH Type: IPv4\r\n");
 							if (ntohs(oxm_value16) == 0x86dd)printf("  ETH Type: IPv6\r\n");
 							if (ntohs(oxm_value16) == 0x8100)printf("  ETH Type: VLAN\r\n");
+							if (ntohs(oxm_value16) == 0x888e)printf("  ETH Type: EAPOL\r\n");
+							if (ntohs(oxm_value16) == 0x88cc)printf("  ETH Type: LLDP\r\n");
+							if (ntohs(oxm_value16) == 0x8999)printf("  ETH Type: BDDP\r\n");
+							if (ntohs(oxm_value16) == 0x9100)printf("  ETH Type: VLAN(D)\r\n");
+							if (ntohs(oxm_value16) == 0x8847)printf("  ETH Type: MPLS (Unicast)\r\n");
+							if (ntohs(oxm_value16) == 0x8848)printf("  ETH Type: MPLS (Multicast)\r\n");
 							break;
 
 							case OFPXMT_OFB_IP_PROTO:
@@ -1169,6 +1205,61 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 							if (oxm_value16 != 0) printf("  VLAN ID: %d\r\n",(ntohs(oxm_value16) - OFPVID_PRESENT));
 							break;
+
+							case OFPXMT_OFB_MPLS_LABEL:
+							memcpy(&oxm_value32, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+							if (oxm_value32 != 0) printf("  MPLS Label: %d\r\n",(ntohl(oxm_value32)));
+							break;
+
+							case OFPXMT_OFB_MPLS_TC:
+							memcpy(&oxm_value8, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 1);
+							if (oxm_value8 != 0) printf("  MPLS TC: %d\r\n",(oxm_value8));
+							break;
+							
+							case OFPXMT_OFB_MPLS_BOS:
+							memcpy(&oxm_value8, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 1);
+							if (oxm_value8 != 0) printf("  MPLS BOS: %d\r\n",(oxm_value8));
+							break;
+										
+							case OFPXMT_OFB_ARP_OP:
+							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
+							if (oxm_value16 == 1) printf("  ARP OP Code: Request (%d)\r\n",ntohs(oxm_value16));
+							if (oxm_value16 == 2) printf("  ARP OP Code: Reply (%d)\r\n",ntohs(oxm_value16));
+							break;
+
+							case OFPXMT_OFB_ARP_SPA:
+							if (has_mask)
+							{
+								memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 8);
+								printf("  Source IP:  %d.%d.%d.%d / %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3], oxm_ipv4[4], oxm_ipv4[5], oxm_ipv4[6], oxm_ipv4[7]);
+								} else {
+								memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+								printf("  Source IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+							}
+							break;
+
+							case OFPXMT_OFB_ARP_TPA:
+							if (has_mask)
+							{
+								memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 8);
+								printf("  Target IP:  %d.%d.%d.%d / %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3], oxm_ipv4[4], oxm_ipv4[5], oxm_ipv4[6], oxm_ipv4[7]);
+								} else {
+								memcpy(&oxm_ipv4, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+								printf("  Target IP:  %d.%d.%d.%d\r\n", oxm_ipv4[0], oxm_ipv4[1], oxm_ipv4[2], oxm_ipv4[3]);
+							}
+							break;
+
+							case OFPXMT_OFB_ARP_SHA:
+							memcpy(&oxm_eth, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 6);
+							printf("  Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
+							break;
+
+							case OFPXMT_OFB_ARP_THA:
+							memcpy(&oxm_eth, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 6);
+							printf("  Target MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
+							break;
+
+
 
 						};
 						match_size += (oxm_header.oxm_len + sizeof(struct oxm_header13));
