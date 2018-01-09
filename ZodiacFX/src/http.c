@@ -3078,9 +3078,16 @@ if (iLastFlow > 0)
 					case OFPXMT_OFB_ETH_TYPE:
 					memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 					if (ntohs(oxm_value16) == 0x0806)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: ARP\r\n");
-					if (ntohs(oxm_value16) == 0x0800)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: IPv4\r\n");
-					if (ntohs(oxm_value16) == 0x86dd)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: IPv6\r\n");
-					if (ntohs(oxm_value16) == 0x8100)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: VLAN\r\n");
+					else if (ntohs(oxm_value16) == 0x0800)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: IPv4\r\n");
+					else if (ntohs(oxm_value16) == 0x86dd)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: IPv6\r\n");
+					else if (ntohs(oxm_value16) == 0x8100)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: VLAN\r\n");
+					else if (ntohs(oxm_value16) == 0x9100)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: VLAN(D)\r\n");
+					else if (ntohs(oxm_value16) == 0x888e)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: EAPOL\r\n");
+					else if (ntohs(oxm_value16) == 0x88cc)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: LLDP\r\n");
+					else if (ntohs(oxm_value16) == 0x8999)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: BDDP\r\n");			
+					else if (ntohs(oxm_value16) == 0x8847)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: MPLS (Unicast)\r\n");
+					else if (ntohs(oxm_value16) == 0x8848)snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: MPLS (Multicast)\r\n");
+					else snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  ETH Type: 0x%X\r\n", ntohs(oxm_value16));
 					break;
 
 					case OFPXMT_OFB_IP_PROTO:
@@ -3145,6 +3152,21 @@ if (iLastFlow > 0)
 					case OFPXMT_OFB_VLAN_VID:
 					memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 					if (oxm_value16 != 0) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  VLAN ID: %d\r\n",(ntohs(oxm_value16) - OFPVID_PRESENT));
+					break;
+					
+					case OFPXMT_OFB_MPLS_LABEL:
+					memcpy(&oxm_value32, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 4);
+					if (oxm_value32 != 0) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  MPLS Label: %d\r\n",(ntohl(oxm_value32)));
+					break;
+
+					case OFPXMT_OFB_MPLS_TC:
+					memcpy(&oxm_value8, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 1);
+					if (oxm_value8 != 0) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  MPLS TC: %d\r\n",(oxm_value8));
+					break;
+							
+					case OFPXMT_OFB_MPLS_BOS:
+					memcpy(&oxm_value8, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 1);
+					if (oxm_value8 != 0) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  MPLS BOS: %d\r\n",(oxm_value8));
 					break;
 
 				};

@@ -1131,15 +1131,16 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							case OFPXMT_OFB_ETH_TYPE:
 							memcpy(&oxm_value16, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 2);
 							if (ntohs(oxm_value16) == 0x0806)printf("  ETH Type: ARP\r\n");
-							if (ntohs(oxm_value16) == 0x0800)printf("  ETH Type: IPv4\r\n");
-							if (ntohs(oxm_value16) == 0x86dd)printf("  ETH Type: IPv6\r\n");
-							if (ntohs(oxm_value16) == 0x8100)printf("  ETH Type: VLAN\r\n");
-							if (ntohs(oxm_value16) == 0x888e)printf("  ETH Type: EAPOL\r\n");
-							if (ntohs(oxm_value16) == 0x88cc)printf("  ETH Type: LLDP\r\n");
-							if (ntohs(oxm_value16) == 0x8999)printf("  ETH Type: BDDP\r\n");
-							if (ntohs(oxm_value16) == 0x9100)printf("  ETH Type: VLAN(D)\r\n");
-							if (ntohs(oxm_value16) == 0x8847)printf("  ETH Type: MPLS (Unicast)\r\n");
-							if (ntohs(oxm_value16) == 0x8848)printf("  ETH Type: MPLS (Multicast)\r\n");
+							else if (ntohs(oxm_value16) == 0x0800)printf("  ETH Type: IPv4\r\n");
+							else if (ntohs(oxm_value16) == 0x86dd)printf("  ETH Type: IPv6\r\n");
+							else if (ntohs(oxm_value16) == 0x8100)printf("  ETH Type: VLAN\r\n");
+							else if (ntohs(oxm_value16) == 0x888e)printf("  ETH Type: EAPOL\r\n");
+							else if (ntohs(oxm_value16) == 0x88cc)printf("  ETH Type: LLDP\r\n");
+							else if (ntohs(oxm_value16) == 0x8999)printf("  ETH Type: BDDP\r\n");
+							else if (ntohs(oxm_value16) == 0x9100)printf("  ETH Type: VLAN(D)\r\n");
+							else if (ntohs(oxm_value16) == 0x8847)printf("  ETH Type: MPLS (Unicast)\r\n");
+							else if (ntohs(oxm_value16) == 0x8848)printf("  ETH Type: MPLS (Multicast)\r\n");
+							else printf("  ETH Type: 0x%X\r\n",ntohs(oxm_value16));
 							break;
 
 							case OFPXMT_OFB_IP_PROTO:

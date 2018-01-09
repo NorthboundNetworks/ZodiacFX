@@ -297,8 +297,10 @@ void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
 	if (memcmp(eth_type, mpls1, 2)==0 || memcmp(eth_type, mpls2, 2)==0)
 	{
 		uint32_t mpls;
-		memcpy(&mpls, eth_type, 4);
-		eth_type += 4;
+		memcpy(&mpls, eth_type+2, 4);
+		fields->mpls_label = ntohl(mpls)>>12;
+		fields->mpls_tc = (ntohl(mpls)>>9)&7;
+		fields->mpls_bos = (ntohl(mpls)>>8)&1;
 	}
 	
 	memcpy(&fields->eth_prot, eth_type, 2);
@@ -553,6 +555,32 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 					priority_match = -1;
 				}
 				break;
+				if (!(fields->isVlanTag && (pBuffer[14]>>5) == oxm_value[0]))
+				{
+					priority_match = -1;
+				}
+
+				case OXM_OF_MPLS_LABEL:
+				if (fields->mpls_label != ntohl(*(uint32_t*)oxm_value))
+				{
+					priority_match = -1;
+				}
+				break;
+							
+				case OXM_OF_MPLS_TC:
+				if (fields->mpls_tc != *oxm_value)
+				{
+					priority_match = -1;
+				}
+				break;
+				
+				case OXM_OF_MPLS_BOS:
+				if (fields->mpls_bos != *oxm_value)
+				{
+					priority_match = -1;
+				}
+				break;
+				
 			}
 
 			if (priority_match == -1)
