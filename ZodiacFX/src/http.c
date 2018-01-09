@@ -3166,7 +3166,7 @@ if (iLastFlow > 0)
 							
 					case OFPXMT_OFB_MPLS_BOS:
 					memcpy(&oxm_value8, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 1);
-					if (oxm_value8 != 0) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  MPLS BOS: %d\r\n",(oxm_value8));
+					if (oxm_value8 != 0) snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"  MPLS BoS: %d\r\n",(oxm_value8));
 					break;
 
 				};
@@ -3339,6 +3339,20 @@ if (iLastFlow > 0)
 								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set ARP Target HA: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
 								break;
 
+								case OFPXMT_OFB_MPLS_LABEL:
+								memcpy(&oxm_value32, act_set_field->field + sizeof(struct oxm_header13), 4);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set MPLS Label:  %d\r\n", ntohl(oxm_value32));
+
+								break;
+								case OFPXMT_OFB_MPLS_TC:
+								memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set MPLS TC:  %d\r\n", oxm_value8);
+								break;
+								
+								case OFPXMT_OFB_MPLS_BOS:
+								memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
+								snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Set MPLS BoS:  %d\r\n", oxm_value8);
+								break;
 							};
 						}
 
@@ -3353,6 +3367,17 @@ if (iLastFlow > 0)
 							snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Pop VLAN tag\r\n");
 						}
 
+						if (htons(act_hdr->type) == OFPAT13_PUSH_MPLS)
+						{
+							struct ofp13_action_push *act_push = act_hdr;
+							snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Push MPLS tag\r\n");
+						}
+
+						if (htons(act_hdr->type) == OFPAT13_POP_MPLS)
+						{
+							snprintf(shared_buffer+strlen(shared_buffer), SHARED_BUFFER_LEN-strlen(shared_buffer),"   Pop MPLS tag\r\n");
+						}
+						
 						act_size += htons(act_hdr->len);
 					}
 				}

@@ -327,8 +327,8 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					switch(oxm_header.oxm_field)
 					{
 						// Set VLAN ID
+						// The use of a set-field action assumes that the corresponding header field exists in the packet
 						case OFPXMT_OFB_VLAN_VID:
-						// SPEC: The use of a set-field action assumes that the corresponding header field exists in the packet
 						if(fields.isVlanTag){
 							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 2);
 							p_uc_data[14] = (p_uc_data[14] & 0xf0) | (oxm_value[0] & 0x0f);
@@ -343,6 +343,38 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 1);
 							p_uc_data[14] = (oxm_value[0]<<5) | (p_uc_data[14] & 0x0f);
 							TRACE("Set VLAN_PCP %u", oxm_value[0]);
+						}
+						break;
+						
+						// Set MPLS
+						// The use of a set-field action assumes that the corresponding header field exists in the packet
+						case OFPXMT_OFB_MPLS_LABEL:
+						if(fields.eth_prot == htons(0x8847) || fields.eth_prot == htons(0x8848)){
+							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 4);
+							p_uc_data[14] = oxm_value[1];
+							p_uc_data[15] = oxm_value[2];
+							p_uc_data[16] |= (oxm_value[3]<<4);
+							memcpy(&fields.mpls_label, oxm_value, 4);
+							TRACE("Set MPLS Label %u", ntohl(fields.mpls_label));
+						}
+						break;
+
+						case OFPXMT_OFB_MPLS_TC:
+						if(fields.eth_prot == htons(0x8847) || fields.eth_prot == htons(0x8848)){
+							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 1);
+							p_uc_data[16] |= (oxm_value[0]<<1);
+							memcpy(&fields.mpls_tc, oxm_value, 1);
+							TRACE("Set MPLS TC %d", fields.mpls_tc);
+						}
+						break;
+
+						case OFPXMT_OFB_MPLS_BOS:
+						if(fields.eth_prot == htons(0x8847) || fields.eth_prot == htons(0x8848)){
+							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 1);
+							if (oxm_value[0] == 1) p_uc_data[16] |= 1;
+							if (oxm_value[0] == 0) p_uc_data[16] &= 0;
+							memcpy(&fields.mpls_bos, oxm_value, 1);
+							TRACE("Set MPLS %u", fields.mpls_bos);
 						}
 						break;
 

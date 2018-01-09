@@ -1219,7 +1219,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 							
 							case OFPXMT_OFB_MPLS_BOS:
 							memcpy(&oxm_value8, ofp13_oxm_match[i] + sizeof(struct oxm_header13) + match_size, 1);
-							if (oxm_value8 != 0) printf("  MPLS BOS: %d\r\n",(oxm_value8));
+							if (oxm_value8 != 0) printf("  MPLS BoS: %d\r\n",(oxm_value8));
 							break;
 										
 							case OFPXMT_OFB_ARP_OP:
@@ -1355,9 +1355,16 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 										case OFPXMT_OFB_ETH_TYPE:
 										memcpy(&oxm_value16, act_set_field->field + sizeof(struct oxm_header13), 2);
 										if (ntohs(oxm_value16) == 0x0806 )printf("   Set ETH Type: ARP\r\n");
-										if (ntohs(oxm_value16) == 0x0800 )printf("   Set ETH Type: IPv4\r\n");
-										if (ntohs(oxm_value16) == 0x86dd )printf("   Set ETH Type: IPv6\r\n");
-										if (ntohs(oxm_value16) == 0x8100 )printf("   Set ETH Type: VLAN\r\n");
+										else if (ntohs(oxm_value16) == 0x0800)printf("   Set ETH Type: IPv4\r\n");
+										else if (ntohs(oxm_value16) == 0x86dd)printf("   Set ETH Type: IPv6\r\n");
+										else if (ntohs(oxm_value16) == 0x8100)printf("   Set ETH Type: VLAN\r\n");
+										else if (ntohs(oxm_value16) == 0x888e)printf("   Set ETH Type: EAPOL\r\n");
+										else if (ntohs(oxm_value16) == 0x88cc)printf("   Set ETH Type: LLDP\r\n");
+										else if (ntohs(oxm_value16) == 0x8999)printf("   Set ETH Type: BDDP\r\n");
+										else if (ntohs(oxm_value16) == 0x9100)printf("   Set ETH Type: VLAN(D)\r\n");
+										else if (ntohs(oxm_value16) == 0x8847)printf("   Set ETH Type: MPLS (Unicast)\r\n");
+										else if (ntohs(oxm_value16) == 0x8848)printf("   Set ETH Type: MPLS (Multicast)\r\n");
+										else printf("   Set ETH Type: VLAN\r\n",ntohs(oxm_value16));
 										break;
 
 										case OFPXMT_OFB_IPV4_SRC:
@@ -1431,6 +1438,21 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 										memcpy(&oxm_eth, act_set_field->field + sizeof(struct oxm_header13), 6);
 										printf("   Set ARP Target HA: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\r\n", oxm_eth[0], oxm_eth[1], oxm_eth[2], oxm_eth[3], oxm_eth[4], oxm_eth[5]);
 										break;
+										
+										case OFPXMT_OFB_MPLS_LABEL:
+										memcpy(&oxm_value32, act_set_field->field + sizeof(struct oxm_header13), 4);
+										printf("   Set MPLS Label: %d\r\n",ntohl(oxm_value32));
+										break;
+										
+										case OFPXMT_OFB_MPLS_TC:
+										memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
+										printf("   Set MPLS TC: %d\r\n",ntohs(oxm_value8));
+										break;
+										
+										case OFPXMT_OFB_MPLS_BOS:
+										memcpy(&oxm_value8, act_set_field->field + sizeof(struct oxm_header13), 1);
+										printf("   Set MPLS BoS: %d\r\n",ntohs(oxm_value8));
+										break;
 
 									};
 								}
@@ -1444,6 +1466,17 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 								if (htons(act_hdr->type) == OFPAT13_POP_VLAN)
 								{
 									printf("   Pop VLAN tag\r\n");
+								}
+								
+								if (htons(act_hdr->type) == OFPAT13_PUSH_MPLS)
+								{
+									struct ofp13_action_push *act_push = act_hdr;
+									printf("   Push MPLS tag\r\n");
+								}
+
+								if (htons(act_hdr->type) == OFPAT13_POP_MPLS)
+								{
+									printf("   Pop MPLS tag\r\n");
 								}
 
 								act_size += htons(act_hdr->len);
