@@ -31,7 +31,7 @@
 #define CONFIG_ZODIAC_H_
 
 
-#define VERSION "0.83"		// Firmware version number
+#define VERSION "0.83a2"		// Firmware version number
 
 #define TOTAL_PORTS 4		// Total number of physical ports on the Zodiac FX
 

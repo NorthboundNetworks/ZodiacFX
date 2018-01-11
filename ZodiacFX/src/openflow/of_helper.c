@@ -283,6 +283,17 @@ void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
 
 	fields->isVlanTag = false;
 	uint8_t *eth_type = pBuffer + 12;
+	
+	// Get MPLS values
+	if (memcmp(eth_type, mpls1, 2)==0 || memcmp(eth_type, mpls2, 2)==0)
+	{
+		uint32_t mpls;
+		memcpy(&mpls, eth_type+2, 4);
+		fields->mpls_label = ntohl(mpls)>>12;
+		fields->mpls_tc = (ntohl(mpls)>>9)&7;
+		fields->mpls_bos = (ntohl(mpls)>>8)&1;
+		eth_type += 4;
+	}
 	// Get VLAN IDs
 	while(memcmp(eth_type, vlan1, 2)==0 || memcmp(eth_type, vlan2, 2)==0 || memcmp(eth_type, vlan3, 2)==0 || memcmp(eth_type, vlan4, 2)==0 || memcmp(eth_type, vlan5, 2)==0)
 	{
@@ -292,15 +303,6 @@ void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
 		}
 		fields->isVlanTag = true;
 		eth_type += 4;
-	}
-	// Get MPLS values
-	if (memcmp(eth_type, mpls1, 2)==0 || memcmp(eth_type, mpls2, 2)==0)
-	{
-		uint32_t mpls;
-		memcpy(&mpls, eth_type+2, 4);
-		fields->mpls_label = ntohl(mpls)>>12;
-		fields->mpls_tc = (ntohl(mpls)>>9)&7;
-		fields->mpls_bos = (ntohl(mpls)>>8)&1;
 	}
 	
 	memcpy(&fields->eth_prot, eth_type, 2);

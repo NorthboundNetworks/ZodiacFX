@@ -351,10 +351,13 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						case OFPXMT_OFB_MPLS_LABEL:
 						if(fields.eth_prot == htons(0x8847) || fields.eth_prot == htons(0x8848)){
 							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 4);
+							memcpy(&fields.mpls_label, oxm_value, 4);
+							uint32_t label = ntohl(fields.mpls_label)<<4;
+							label = ntohl(label);
+							memcpy(oxm_value, &label, 4);
 							p_uc_data[14] = oxm_value[1];
 							p_uc_data[15] = oxm_value[2];
-							p_uc_data[16] |= (oxm_value[3]<<4);
-							memcpy(&fields.mpls_label, oxm_value, 4);
+							p_uc_data[16] |= oxm_value[3];
 							TRACE("Set MPLS Label %u", ntohl(fields.mpls_label));
 						}
 						break;
