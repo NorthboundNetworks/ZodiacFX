@@ -282,6 +282,7 @@ void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
 	static const uint8_t mpls2[2] = { 0x88, 0x48 };
 
 	fields->isVlanTag = false;
+	fields->isMPLSTag = false;
 	uint8_t *eth_type = pBuffer + 12;
 	
 	// Get MPLS values
@@ -292,6 +293,7 @@ void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
 		fields->mpls_label = ntohl(mpls)>>12;
 		fields->mpls_tc = (ntohl(mpls)>>9)&7;
 		fields->mpls_bos = (ntohl(mpls)>>8)&1;
+		fields->isMPLSTag = true;
 		eth_type += 4;
 	}
 	// Get VLAN IDs
@@ -355,7 +357,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 		eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5],
 		eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5],
 		ntohs(fields->eth_prot))
-
+	
 	for (int i=0;i<iLastFlow;i++)
 	{
 		// Make sure its an active flow
@@ -427,7 +429,15 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_ETH_TYPE:
 				if (fields->eth_prot != *(uint16_t*)oxm_value)
 				{
-					priority_match = -1;
+					if(*(uint16_t*)oxm_value != htons(0x8847) && *(uint16_t*)oxm_value != htons(0x8848))
+					{
+						priority_match = -1;
+					} else {
+						if (!fields->isMPLSTag)
+						{
+							priority_match = -1;
+						}
+					}
 				}
 				break;
 
@@ -563,21 +573,21 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				}
 
 				case OXM_OF_MPLS_LABEL:
-				if (fields->mpls_label != ntohl(*(uint32_t*)oxm_value))
+				if (fields->isMPLSTag && fields->mpls_label != ntohl(*(uint32_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 							
 				case OXM_OF_MPLS_TC:
-				if (fields->mpls_tc != *oxm_value)
+				if (fields->isMPLSTag && fields->mpls_tc != *oxm_value)
 				{
 					priority_match = -1;
 				}
 				break;
 				
 				case OXM_OF_MPLS_BOS:
-				if (fields->mpls_bos != *oxm_value)
+				if (fields->isMPLSTag && fields->mpls_bos != *oxm_value)
 				{
 					priority_match = -1;
 				}

@@ -305,14 +305,28 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 
 				// Pop an MPLS tag
 				case OFPAT13_POP_MPLS:
-				if(fields.eth_prot == htons(0x8847) || fields.eth_prot == htons(0x8848)){
+				if(fields.isMPLSTag){
 					struct ofp13_action_pop_mpls *pop = (struct ofp13_action_pop_mpls*)act_hdr;
 					uint16_t payload_offset = fields.payload - p_uc_data;
-					memmove(fields.payload, fields.payload + 4, packet_size - payload_offset - 4);
-					memcpy(fields.payload - 2, &pop->ethertype, 2);
+					memmove(p_uc_data+14, p_uc_data+18, packet_size-18);
+					fields.payload -= 4;
 					packet_size -= 4;
 					*ul_size -= 4;
+					memcpy(fields.payload - 2, &pop->ethertype, 2);
 					packet_fields_parser(p_uc_data, &fields);
+				}
+				break;
+
+				// Set MPLS TTL
+				case OFPAT13_SET_MPLS_TTL:
+				{
+					struct ofp13_action_mpls_ttl *act_mpls_ttl = act_hdr;
+					if(fields.isMPLSTag)
+					{
+						p_uc_data[17] = act_mpls_ttl->mpls_ttl;
+						fields.mpls_ttl = act_mpls_ttl->mpls_ttl;
+						TRACE("Set MPLS TTL %d", fields.mpls_ttl);
+					}
 				}
 				break;
 

@@ -37,6 +37,7 @@ struct packet_fields
 {
 	bool parsed;
 	bool isVlanTag;
+	bool isMPLSTag;
 	uint8_t *payload;
 	uint16_t eth_prot;
 	uint8_t ip_prot;
@@ -46,6 +47,7 @@ struct packet_fields
 	uint32_t mpls_label;
 	uint8_t mpls_tc;
 	uint8_t mpls_bos;
+	uint8_t mpls_ttl;
 	// transport layer
 	uint16_t tp_src;
 	uint16_t tp_dst;
