@@ -293,13 +293,14 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						mpls[2] &= 0xFE; // clear bottom stack bit
 					}
 					struct ofp13_action_push *push = (struct ofp13_action_push*)act_hdr;
-					uint16_t payload_offset = fields.payload - p_uc_data;
-					memmove(fields.payload + 4, fields.payload, packet_size - payload_offset);
+					memmove(fields.payload + 4, fields.payload-2, packet_size - 12);
 					memcpy(fields.payload - 2, &push->ethertype, 2);
 					memcpy(fields.payload, mpls, 4);
-					packet_size += 4;
-					*ul_size += 4;
+					fields.payload += 6;
+					packet_size += 6;
+					*ul_size += 6;
 					fields.eth_prot = push->ethertype;
+					fields.isMPLSTag = true;
 				}
 				break;
 
@@ -307,12 +308,10 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				case OFPAT13_POP_MPLS:
 				if(fields.isMPLSTag){
 					struct ofp13_action_pop_mpls *pop = (struct ofp13_action_pop_mpls*)act_hdr;
-					uint16_t payload_offset = fields.payload - p_uc_data;
-					memmove(p_uc_data+14, p_uc_data+18, packet_size-18);
-					fields.payload -= 4;
-					packet_size -= 4;
-					*ul_size -= 4;
-					memcpy(fields.payload - 2, &pop->ethertype, 2);
+					memmove(p_uc_data+12, p_uc_data+18, packet_size-18);
+					fields.payload -= 6;
+					packet_size -= 6;
+					*ul_size -= 6;
 					packet_fields_parser(p_uc_data, &fields);
 				}
 				break;
