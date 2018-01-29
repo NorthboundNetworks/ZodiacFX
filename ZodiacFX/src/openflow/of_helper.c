@@ -103,6 +103,7 @@ void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
 		(ip_addr_t*)&(iphdr->dest),
 		IP_PROTO_TCP,
 		packet_size - payload_offset);
+		TRACE("of_helper.c: TCP header modified, recalculating Checksum. 0x%X", htons(tcphdr->chksum));
 	}
 	if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
 		udphdr = (struct udp_hdr*)(p_uc_data + payload_offset);
@@ -112,11 +113,13 @@ void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
 		(ip_addr_t*)&(iphdr->dest),
 		IP_PROTO_UDP,
 		packet_size - payload_offset);
+		TRACE("of_helper.c: UDP header modified, recalculating Checksum. 0x%X", htons(udphdr->chksum));
 	}
 	if (IPH_PROTO(iphdr) == IP_PROTO_ICMP) {
 		icmphdr = (struct icmp_echo_hdr*)(p_uc_data + payload_offset);
 		icmphdr->chksum = 0;
 		icmphdr->chksum = inet_chksum(icmphdr, packet_size - payload_offset);
+		TRACE("of_helper.c: ICMP header modified, recalculating Checksum. 0x%X", htons(icmphdr->chksum));
 	}
 	pbuf_free(p);
 
