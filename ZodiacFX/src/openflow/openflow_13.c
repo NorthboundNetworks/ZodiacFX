@@ -578,7 +578,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			}
 
 			if (recalculate_ip_checksum) {
-				set_ip_checksum(p_uc_data, packet_size, fields.payload + 14);
+				set_ip_checksum(p_uc_data, packet_size, fields.payload - p_uc_data);
 			}
 		}
 			
