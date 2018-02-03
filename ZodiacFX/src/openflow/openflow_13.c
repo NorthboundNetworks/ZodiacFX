@@ -293,26 +293,39 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						mpls[2] &= 0xFE; // clear bottom stack bit
 					}
 					struct ofp13_action_push *push = (struct ofp13_action_push*)act_hdr;
-					uint16_t payload_offset = fields.payload - p_uc_data;
-					memmove(fields.payload + 4, fields.payload, packet_size - payload_offset);
+					memmove(fields.payload + 4, fields.payload-2, packet_size - 12);
 					memcpy(fields.payload - 2, &push->ethertype, 2);
 					memcpy(fields.payload, mpls, 4);
-					packet_size += 4;
-					*ul_size += 4;
+					fields.payload += 6;
+					packet_size += 6;
+					*ul_size += 6;
 					fields.eth_prot = push->ethertype;
+					fields.isMPLSTag = true;
 				}
 				break;
 
 				// Pop an MPLS tag
 				case OFPAT13_POP_MPLS:
-				if(fields.eth_prot == htons(0x8847) || fields.eth_prot == htons(0x8848)){
+				if(fields.isMPLSTag){
 					struct ofp13_action_pop_mpls *pop = (struct ofp13_action_pop_mpls*)act_hdr;
-					uint16_t payload_offset = fields.payload - p_uc_data;
-					memmove(fields.payload, fields.payload + 4, packet_size - payload_offset - 4);
-					memcpy(fields.payload - 2, &pop->ethertype, 2);
-					packet_size -= 4;
-					*ul_size -= 4;
+					memmove(p_uc_data+12, p_uc_data+18, packet_size-18);
+					fields.payload -= 6;
+					packet_size -= 6;
+					*ul_size -= 6;
 					packet_fields_parser(p_uc_data, &fields);
+				}
+				break;
+
+				// Set MPLS TTL
+				case OFPAT13_SET_MPLS_TTL:
+				{
+					struct ofp13_action_mpls_ttl *act_mpls_ttl = act_hdr;
+					if(fields.isMPLSTag)
+					{
+						p_uc_data[17] = act_mpls_ttl->mpls_ttl;
+						fields.mpls_ttl = act_mpls_ttl->mpls_ttl;
+						TRACE("Set MPLS TTL %d", fields.mpls_ttl);
+					}
 				}
 				break;
 
@@ -327,8 +340,8 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 					switch(oxm_header.oxm_field)
 					{
 						// Set VLAN ID
+						// The use of a set-field action assumes that the corresponding header field exists in the packet
 						case OFPXMT_OFB_VLAN_VID:
-						// SPEC: The use of a set-field action assumes that the corresponding header field exists in the packet
 						if(fields.isVlanTag){
 							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 2);
 							p_uc_data[14] = (p_uc_data[14] & 0xf0) | (oxm_value[0] & 0x0f);
@@ -343,6 +356,41 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 1);
 							p_uc_data[14] = (oxm_value[0]<<5) | (p_uc_data[14] & 0x0f);
 							TRACE("Set VLAN_PCP %u", oxm_value[0]);
+						}
+						break;
+						
+						// Set MPLS
+						// The use of a set-field action assumes that the corresponding header field exists in the packet
+						case OFPXMT_OFB_MPLS_LABEL:
+						if(fields.eth_prot == htons(0x8847) || fields.eth_prot == htons(0x8848)){
+							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 4);
+							memcpy(&fields.mpls_label, oxm_value, 4);
+							uint32_t label = ntohl(fields.mpls_label)<<4;
+							label = ntohl(label);
+							memcpy(oxm_value, &label, 4);
+							p_uc_data[14] = oxm_value[1];
+							p_uc_data[15] = oxm_value[2];
+							p_uc_data[16] |= oxm_value[3];
+							TRACE("Set MPLS Label %u", ntohl(fields.mpls_label));
+						}
+						break;
+
+						case OFPXMT_OFB_MPLS_TC:
+						if(fields.eth_prot == htons(0x8847) || fields.eth_prot == htons(0x8848)){
+							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 1);
+							p_uc_data[16] |= (oxm_value[0]<<1);
+							memcpy(&fields.mpls_tc, oxm_value, 1);
+							TRACE("Set MPLS TC %d", fields.mpls_tc);
+						}
+						break;
+
+						case OFPXMT_OFB_MPLS_BOS:
+						if(fields.eth_prot == htons(0x8847) || fields.eth_prot == htons(0x8848)){
+							memcpy(oxm_value, act_set_field->field + sizeof(struct oxm_header13), 1);
+							if (oxm_value[0] == 1) p_uc_data[16] |= 1;
+							if (oxm_value[0] == 0) p_uc_data[16] &= 0;
+							memcpy(&fields.mpls_bos, oxm_value, 1);
+							TRACE("Set MPLS %u", fields.mpls_bos);
 						}
 						break;
 
@@ -530,7 +578,7 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 			}
 
 			if (recalculate_ip_checksum) {
-				set_ip_checksum(p_uc_data, packet_size, fields.payload + 14);
+				set_ip_checksum(p_uc_data, packet_size, fields.payload - p_uc_data);
 			}
 		}
 			
@@ -2486,7 +2534,7 @@ void flowrem_notif13(int flowid, uint8_t reason)
 
 	ofr.header.type = OFPT13_FLOW_REMOVED;
 	ofr.header.version = OF_Version;
-	ofr.header.length = htons((sizeof(struct ofp13_flow_removed) + ntohs(flow_match13[flowid]->match.length)-4));
+	ofr.header.length = htons((sizeof(struct ofp13_flow_removed)-4) + ntohs(flow_match13[flowid]->match.length));
 	ofr.header.xid = 0;
 	ofr.cookie = flow_match13[flowid]->cookie;
 	ofr.reason = reason;
@@ -2505,7 +2553,7 @@ void flowrem_notif13(int flowid, uint8_t reason)
 	{
 		memcpy(flow_rem + (sizeof(struct ofp13_flow_removed)-4), ofp13_oxm_match[flowid], ntohs(flow_match13[flowid]->match.length)-4);
 	}
-	sendtcp(&flow_rem, htons(ofr.header.length));
+	sendtcp(&flow_rem, htons(ofr.header.length)-4);
 	TRACE("openflow_13.c: Flow removed notification sent");
 	return;
 }

@@ -103,6 +103,7 @@ void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
 		(ip_addr_t*)&(iphdr->dest),
 		IP_PROTO_TCP,
 		packet_size - payload_offset);
+		TRACE("of_helper.c: TCP header modified, recalculating Checksum. 0x%X", htons(tcphdr->chksum));
 	}
 	if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
 		udphdr = (struct udp_hdr*)(p_uc_data + payload_offset);
@@ -112,11 +113,13 @@ void set_ip_checksum(uint8_t *p_uc_data, int packet_size, int iphdr_offset)
 		(ip_addr_t*)&(iphdr->dest),
 		IP_PROTO_UDP,
 		packet_size - payload_offset);
+		TRACE("of_helper.c: UDP header modified, recalculating Checksum. 0x%X", htons(udphdr->chksum));
 	}
 	if (IPH_PROTO(iphdr) == IP_PROTO_ICMP) {
 		icmphdr = (struct icmp_echo_hdr*)(p_uc_data + payload_offset);
 		icmphdr->chksum = 0;
 		icmphdr->chksum = inet_chksum(icmphdr, packet_size - payload_offset);
+		TRACE("of_helper.c: ICMP header modified, recalculating Checksum. 0x%X", htons(icmphdr->chksum));
 	}
 	pbuf_free(p);
 
@@ -271,19 +274,34 @@ int flowmatch10(uint8_t *pBuffer, int port, struct packet_fields *fields)
 *
 */
 void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
+	// VLAN EtherTypes
 	static const uint8_t vlan1[2] = { 0x81, 0x00 };
 	static const uint8_t vlan2[2] = { 0x88, 0xa8 };
 	static const uint8_t vlan3[2] = { 0x91, 0x00 };
 	static const uint8_t vlan4[2] = { 0x92, 0x00 };
 	static const uint8_t vlan5[2] = { 0x93, 0x00 };
+	// MPLS EtherTypes
+	static const uint8_t mpls1[2] = { 0x88, 0x47 };
+	static const uint8_t mpls2[2] = { 0x88, 0x48 };
 
 	fields->isVlanTag = false;
+	fields->isMPLSTag = false;
 	uint8_t *eth_type = pBuffer + 12;
-	while(memcmp(eth_type, vlan1, 2)==0
-			|| memcmp(eth_type, vlan2, 2)==0
-			|| memcmp(eth_type, vlan3, 2)==0
-			|| memcmp(eth_type, vlan4, 2)==0
-			|| memcmp(eth_type, vlan5, 2)==0){
+	
+	// Get MPLS values
+	if (memcmp(eth_type, mpls1, 2)==0 || memcmp(eth_type, mpls2, 2)==0)
+	{
+		uint32_t mpls;
+		memcpy(&mpls, eth_type+2, 4);
+		fields->mpls_label = ntohl(mpls)>>12;
+		fields->mpls_tc = (ntohl(mpls)>>9)&7;
+		fields->mpls_bos = (ntohl(mpls)>>8)&1;
+		fields->isMPLSTag = true;
+		eth_type += 4;
+	}
+	// Get VLAN IDs
+	while(memcmp(eth_type, vlan1, 2)==0 || memcmp(eth_type, vlan2, 2)==0 || memcmp(eth_type, vlan3, 2)==0 || memcmp(eth_type, vlan4, 2)==0 || memcmp(eth_type, vlan5, 2)==0)
+	{
 		if(fields->isVlanTag == false){ // save outermost value
 			uint8_t tci[2] = { eth_type[2]&0x0f, eth_type[3] };
 			memcpy(&fields->vlanid, tci, 2);
@@ -291,6 +309,7 @@ void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
 		fields->isVlanTag = true;
 		eth_type += 4;
 	}
+	
 	memcpy(&fields->eth_prot, eth_type, 2);
 	fields->payload = eth_type + 2; // payload points to ip_hdr, etc.
 	
@@ -336,12 +355,12 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 	}
 
 	TRACE("of_helper.c: Looking for match in table %d from port %d : "
-		"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X eth type %4.4X",
+		"%.2X:%.2X:%.2X:%.2X:%.2X:%.2X -> %.2X:%.2X:%.2X:%.2X:%.2X:%.2X - eth type %4.4X - VLAN ID %d",
 		table_id, port,
 		eth_src[0], eth_src[1], eth_src[2], eth_src[3], eth_src[4], eth_src[5],
 		eth_dst[0], eth_dst[1], eth_dst[2], eth_dst[3], eth_dst[4], eth_dst[5],
-		ntohs(fields->eth_prot))
-
+		ntohs(fields->eth_prot), ntohs(fields->vlanid))
+	
 	for (int i=0;i<iLastFlow;i++)
 	{
 		// Make sure its an active flow
@@ -413,7 +432,15 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_ETH_TYPE:
 				if (fields->eth_prot != *(uint16_t*)oxm_value)
 				{
-					priority_match = -1;
+					if(*(uint16_t*)oxm_value != htons(0x8847) && *(uint16_t*)oxm_value != htons(0x8848))
+					{
+						priority_match = -1;
+					} else {
+						if (!fields->isMPLSTag)
+						{
+							priority_match = -1;
+						}
+					}
 				}
 				break;
 
@@ -543,6 +570,32 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 					priority_match = -1;
 				}
 				break;
+				if (!(fields->isVlanTag && (pBuffer[14]>>5) == oxm_value[0]))
+				{
+					priority_match = -1;
+				}
+
+				case OXM_OF_MPLS_LABEL:
+				if (fields->isMPLSTag && fields->mpls_label != ntohl(*(uint32_t*)oxm_value))
+				{
+					priority_match = -1;
+				}
+				break;
+							
+				case OXM_OF_MPLS_TC:
+				if (fields->isMPLSTag && fields->mpls_tc != *oxm_value)
+				{
+					priority_match = -1;
+				}
+				break;
+				
+				case OXM_OF_MPLS_BOS:
+				if (fields->isMPLSTag && fields->mpls_bos != *oxm_value)
+				{
+					priority_match = -1;
+				}
+				break;
+				
 			}
 
 			if (priority_match == -1)
