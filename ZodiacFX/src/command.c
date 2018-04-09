@@ -594,19 +594,21 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	// Display VLANs
 	if (strcmp(command, "show")==0 && strcmp(param1, "vlans")==0){
 		int x;
-		printf("\r\n\tVLAN ID\t\tName\t\t\tType\r\n");
-		printf("-------------------------------------------------------------------------\r\n");
+		printf("\r\n\tVLAN ID\t\tName\t\t\tType\t\tTag\r\n");
+		printf("-------------------------------------------------------------------------------\r\n");
 		for (x=0;x<MAX_VLANS;x++)
 		{
 			if (Zodiac_Config.vlan_list[x].uActive == 1)
 			{
 				printf("\t%d\t\t'%s'\t\t",Zodiac_Config.vlan_list[x].uVlanID, Zodiac_Config.vlan_list[x].cVlanName);
-				if (Zodiac_Config.vlan_list[x].uVlanType == 0) printf("Undefined\r\n");
-				if (Zodiac_Config.vlan_list[x].uVlanType == 1) printf("OpenFlow\r\n");
-				if (Zodiac_Config.vlan_list[x].uVlanType == 2) printf("Native\r\n");
+				if (Zodiac_Config.vlan_list[x].uVlanType == 0) printf("Undefined\t");
+				if (Zodiac_Config.vlan_list[x].uVlanType == 1) printf("OpenFlow\t");
+				if (Zodiac_Config.vlan_list[x].uVlanType == 2) printf("Native\t\t");
+				if (Zodiac_Config.vlan_list[x].uTagged == 0) printf("Untagged\r\n");
+				if (Zodiac_Config.vlan_list[x].uTagged == 1) printf("Tagged\r\n");
 			}
 		}
-		printf("\r\n-------------------------------------------------------------------------\r\n\n");
+		printf("\r\n-------------------------------------------------------------------------------\r\n\n");
 		return;
 	}
 
@@ -686,6 +688,33 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 			return;
 	}
 
+	// Set VLAN tagging
+	if (strcmp(command, "set")==0 && strcmp(param1, "vlan-tag")==0)
+	{
+		int vlanid;
+		sscanf(param2, "%d", &vlanid);
+		for (int x=0;x<MAX_VLANS;x++)
+		{
+			if(Zodiac_Config.vlan_list[x].uVlanID == vlanid)
+			{
+				if(strcmp(param3, "untagged")==0){
+					Zodiac_Config.vlan_list[x].uTagged = 0;
+					printf("VLAN %d set to untagged\r\n",vlanid);
+					return;
+				}
+				if(strcmp(param3, "tagged")==0){
+					Zodiac_Config.vlan_list[x].uTagged = 1;
+					printf("VLAN %d set to tagged\r\n",vlanid);
+					return;
+				}
+				printf("Unknown VLAN tag setting\r\n");
+				return;
+			}
+		}
+		printf("Unknown VLAN ID\r\n");
+		return;
+	}
+	
 	// Add port to VLAN
 	if (strcmp(command, "add")==0 && strcmp(param1, "vlan-port")==0)
 	{
