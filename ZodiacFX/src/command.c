@@ -1863,6 +1863,7 @@ void printhelp(void)
 	printf(" add vlan <vlan id> <vlan name>\r\n");
 	printf(" delete vlan <vlan id>\r\n");
 	printf(" set vlan-type <vlan id> <openflow|native>\r\n");
+	printf(" set vlan-tag <vlan id> <tagged|untagged>\r\n");
 	printf(" add vlan-port <vlan id> <port>\r\n");
 	printf(" delete vlan-port <port>\r\n");
 	printf(" set of-version <version(0|1|4)>\r\n");
