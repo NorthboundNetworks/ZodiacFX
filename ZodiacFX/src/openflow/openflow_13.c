@@ -2530,11 +2530,21 @@ void flowrem_notif13(int flowid, uint8_t reason)
 {
 	struct ofp13_flow_removed ofr;
 	double diff;
-	char flow_rem[128];
+	uint16_t match_length;
+	uint16_t match_padding;
+	char flow_rem[128] = {0};
 
 	ofr.header.type = OFPT13_FLOW_REMOVED;
 	ofr.header.version = OF_Version;
-	ofr.header.length = htons((sizeof(struct ofp13_flow_removed)-4) + ntohs(flow_match13[flowid]->match.length));
+	// calculate the padding such that ofp_match is 32-bit aligned
+	match_length = ntohs(flow_match13[flowid]->match.length);
+	match_padding = ((match_length + 7)/8*8 - match_length);
+	// match_length includes the total length of the ofp_match field (including header,
+	// excluding padding), but sizeof(struct ofp13_flow_removed) already counted the
+	// 8 bytes of sizeof(struct ofp_match)
+	// => subtract the duplicate 8 bytes + length of match field + padding of match field
+	ofr.header.length = htons((sizeof(struct ofp13_flow_removed) - 8) + match_length + match_padding);
+	
 	ofr.header.xid = 0;
 	ofr.cookie = flow_match13[flowid]->cookie;
 	ofr.reason = reason;
@@ -2553,7 +2563,7 @@ void flowrem_notif13(int flowid, uint8_t reason)
 	{
 		memcpy(flow_rem + (sizeof(struct ofp13_flow_removed)-4), ofp13_oxm_match[flowid], ntohs(flow_match13[flowid]->match.length)-4);
 	}
-	sendtcp(&flow_rem, htons(ofr.header.length)-4);
+	sendtcp(&flow_rem, htons(ofr.header.length));
 	TRACE("openflow_13.c: Flow removed notification sent");
 	return;
 }
