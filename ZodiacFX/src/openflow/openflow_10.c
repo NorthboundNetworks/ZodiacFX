@@ -59,7 +59,7 @@ extern struct zodiac_config Zodiac_Config;
 extern struct ofp_switch_config Switch_config;
 
 //Internal Functions
-void packet_in(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason);
+void packet_in(uint8_t *buffer, uint16_t ul_size, uint32_t port, uint8_t reason);
 void features_reply10(uint32_t xid);
 void set_config10(struct ofp_header * msg);
 void config_reply(uint32_t xid);
@@ -802,7 +802,7 @@ void packet_out(struct ofp_header *msg)
 *	@param reason - reason for the packet in.
 *
 */
-void packet_in(uint8_t *buffer, uint16_t ul_size, uint8_t port, uint8_t reason)
+void packet_in(uint8_t *buffer, uint16_t ul_size, uint32_t port, uint8_t reason)
 {
 	uint16_t send_size = ul_size;
 	if(tcp_sndbuf(tcp_pcb) < (send_size + 18)) return;
