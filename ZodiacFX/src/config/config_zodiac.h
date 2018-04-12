@@ -44,6 +44,9 @@
 
 #define MAX_TABLES	10	// Maximum number of tables for OpenFlow 1.3 and higher
 
+#define MAX_GROUPS 4	// Maximum number of groups for OpenFlow 1.3 and higher
+#define MAX_BUCKETS 4	// Maximum number of group action buckets for OpenFlow 1.3 and higher
+
 #define HB_INTERVAL	2	// Number of seconds between heartbeats
 
 #define HB_TIMEOUT	6	// Number of seconds to wait when there is no response from the controller

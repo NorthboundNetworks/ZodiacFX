@@ -113,6 +113,24 @@ struct meter_sample_array
 	struct		policing_sample sample[POLICING_SAMPLES];
 };
 
+struct group_entry13 {
+	int active;
+	uint8_t type;
+	uint8_t pad;
+	uint32_t group_id;
+	uint8_t bucket_id;
+	uint64_t packet_count;
+	uint64_t byte_count;
+	uint64_t time_added;
+};
+
+struct action_bucket {
+	int active;
+	uint64_t packet_count;
+	uint64_t byte_count;
+	uint8_t data[64];
+};
+
 void task_openflow(void);
 void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
 void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);

@@ -54,6 +54,8 @@ extern int totaltime;
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
+extern struct group_entry13 group_entry13[MAX_GROUPS];
+extern struct action_bucket action_bucket[MAX_BUCKETS];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
@@ -89,12 +91,21 @@ int multi_flow_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
 int multi_meter_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_meter_config_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
 int multi_meter_features_reply13(uint8_t *buffer, struct ofp13_multipart_request * req);
+int multi_group_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
+int multi_group_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
+int multi_group_features_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg);
 void packet_in13(uint8_t *buffer, uint16_t ul_size, uint32_t port, uint8_t reason, int flow);
 void packet_out13(struct ofp_header *msg);
 void meter_mod13(struct ofp_header *msg);
 void meter_add13(struct ofp_header *msg);
 void meter_modify13(struct ofp_header *msg);
 void meter_delete13(struct ofp_header *msg);
+void group_mod13(struct ofp_header *msg);
+void group_add13(struct ofp_header *msg);
+void group_modify13(struct ofp_header *msg);
+void group_delete13(struct ofp_header *msg);
+
+
 
 /*
 *	Converts a 64bit value from host to network format
@@ -628,7 +639,7 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 		break;
 
 		case OFPT13_GROUP_MOD:
-		of_error13(ofph, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
+		group_mod13(ofph);
 		break;
 
 
@@ -674,11 +685,26 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 			multi_pos += multi_meter_features_reply13(&shared_buffer[multi_pos], multi_req);
 		}
 		
+		if ( ntohs(multi_req->type) == OFPMP13_GROUP_FEATURES )
+		{
+			multi_pos += multi_group_features_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+
+		if ( ntohs(multi_req->type) == OFPMP13_GROUP_DESC )
+		{
+			multi_pos += multi_group_desc_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+
+		if ( ntohs(multi_req->type) == OFPMP13_GROUP )
+		{
+			multi_pos += multi_group_stats_reply13(&shared_buffer[multi_pos], multi_req);
+		}
+
 		if ( htons(multi_req->type) == OFPMP13_TABLE_FEATURES )
 		{
 			/**** Floodlight v1.2 crashes when it gets this reply, removed for the moment. *****/
-			//multi_pos += multi_tablefeat_reply13(&shared_buffer[multi_pos], multi_req);
-			of_error13(ofph, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
+			multi_pos += multi_tablefeat_reply13(&shared_buffer[multi_pos], multi_req);
+			//of_error13(ofph, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
 		}
 
 		if ( ntohs(multi_req->type) == OFPMP13_TABLE )
@@ -728,7 +754,7 @@ void features_reply13(uint32_t xid)
 	features.datapath_id = datapathid << 16;
 	features.n_buffers = htonl(0);		// Number of packets that can be buffered
 	features.n_tables = MAX_TABLES;		// Number of flow tables
-	features.capabilities = htonl(OFPC13_FLOW_STATS + OFPC13_TABLE_STATS + OFPC13_PORT_STATS);	// Switch Capabilities
+	features.capabilities = htonl(OFPC13_FLOW_STATS + OFPC13_TABLE_STATS + OFPC13_PORT_STATS + OFPC13_GROUP_STATS);	// Switch Capabilities
 	features.auxiliary_id = 0;	// Primary connection
 
 	memcpy(&buf, &features, sizeof(struct ofp13_switch_features));
@@ -1649,6 +1675,280 @@ int multi_meter_features_reply13(uint8_t *buffer, struct ofp13_multipart_request
 	
 	return (buffer_ptr - buffer);	// return length
 }
+
+/*
+ *	OpenFlow Multi-part GROUP Description reply message function
+ *
+ *	@param *msg - pointer to the OpenFlow message.
+ *
+ */
+int multi_group_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
+{
+    struct ofp13_multipart_reply *reply;
+    reply = (struct ofp13_multipart_reply *)buffer;
+    struct ofp13_group_desc group_desc;
+    uint8_t *buffer_ptr = buffer + sizeof(struct ofp13_multipart_reply);
+    int i;
+    uint16_t len = 0;
+
+    // Build group desc and add the reply
+    for(i=0;i<MAX_GROUPS;i++)
+    {
+        if (group_entry13[i].active == true)
+        {
+            group_desc.group_id = htonl(group_entry13[i].group_id);
+            group_desc.type= group_entry13[i].type;
+            if (group_entry13[i].bucket_id > 0)
+            {
+                struct ofp13_bucket *ptr_bucket;
+                ptr_bucket = (struct ofp13_bucket*)action_bucket[group_entry13[i].bucket_id-1].data;
+                group_desc.length = htons(sizeof(struct ofp13_group_desc) + ntohs(ptr_bucket->len));
+                memcpy(buffer_ptr, &group_desc, sizeof(struct ofp13_group_desc));
+                buffer_ptr += sizeof(struct ofp13_group_desc);
+                memcpy(buffer_ptr, ptr_bucket, ntohs(ptr_bucket->len));
+                len += sizeof(struct ofp13_group_desc) + ntohs(ptr_bucket->len);
+                buffer_ptr += ntohs(ptr_bucket->len);
+            } else {
+                memcpy(buffer_ptr, &group_desc, sizeof(struct ofp13_group_desc));
+                len += sizeof(struct ofp13_group_desc);
+                buffer_ptr += sizeof(struct ofp13_group_desc);
+            }
+        }
+    }
+    len += sizeof(struct ofp13_multipart_reply);
+    // Format header
+    reply->header.version	= OF_Version;
+    reply->header.type		= OFPT13_MULTIPART_REPLY;
+    reply->header.xid		= msg->header.xid;
+    reply->header.length = htons(len);
+    // Format reply
+    reply->type				= htons(OFPMP13_GROUP_DESC);
+    reply->flags			= 0;	// Single reply
+    memcpy(buffer, reply, sizeof(struct ofp13_multipart_reply));
+    return len;
+}
+
+/*
+ *	OpenFlow Multi-part GROUP Statistics reply message function
+ *
+ *	@param *msg - pointer to the OpenFlow message.
+ *
+ */
+int multi_group_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
+{
+    struct ofp13_group_stats group_stats;
+    struct ofp13_multipart_reply *reply;
+    struct ofp13_bucket_counter bucket_counters;
+    reply = (struct ofp13_multipart_reply *)buffer;
+    uint8_t *buffer_ptr = buffer + sizeof(struct ofp13_multipart_reply);
+    int i;
+    uint16_t len = 0;
+
+    
+    // Build group desc and add the reply
+    for(i=0;i<MAX_GROUPS;i++)
+    {
+        if (group_entry13[i].active == true)
+        {
+            group_stats.group_id = htonl(group_entry13[i].group_id);
+            if (group_entry13[i].bucket_id > 0)
+            {
+                group_stats.byte_count = htonll(group_entry13[i].byte_count);
+                group_stats.packet_count = htonll(group_entry13[i].packet_count);
+                group_stats.duration_sec = htonl(((totaltime/2)-group_entry13[i].time_added));
+                group_stats.ref_count = 0;
+                group_stats.length = htons(sizeof(struct ofp13_group_stats) + sizeof(struct ofp13_bucket_counter));
+                memcpy(buffer_ptr, &group_stats, sizeof(struct ofp13_group_stats));
+                buffer_ptr += sizeof(struct ofp13_group_stats);
+                bucket_counters.byte_count = htonll(action_bucket[group_entry13[i].bucket_id-1].byte_count);
+                bucket_counters.packet_count = htonll(action_bucket[group_entry13[i].bucket_id-1].packet_count);
+                memcpy(buffer_ptr, &bucket_counters, sizeof(struct ofp13_bucket_counter));
+                len += sizeof(struct ofp13_group_stats) + sizeof(struct ofp13_bucket_counter);
+                buffer_ptr += sizeof(struct ofp13_bucket_counter);
+            } else {
+                memcpy(buffer_ptr, &group_stats, sizeof(struct ofp13_group_stats));
+                len += sizeof(struct ofp13_group_stats);
+                buffer_ptr += sizeof(struct ofp13_group_stats);
+            }
+        }
+    }
+    len += sizeof(struct ofp13_multipart_reply);
+    // Format header
+    reply->header.version	= OF_Version;
+    reply->header.type		= OFPT13_MULTIPART_REPLY;
+    reply->header.xid		= msg->header.xid;
+    reply->header.length = htons(len);
+    // Format reply
+    reply->type				= htons(OFPMP13_GROUP);
+    reply->flags			= 0;	// Single reply
+    memcpy(buffer, reply, sizeof(struct ofp13_multipart_reply));
+    return len;
+}
+
+/*
+ *	OpenFlow Multi-part GROUP Features reply message function
+ *
+ *	@param *msg - pointer to the OpenFlow message.
+ *
+ */
+int multi_group_features_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
+{
+    struct ofp13_multipart_reply reply;
+    struct ofp13_group_features group_features;
+    uint8_t *buffer_ptr = buffer;
+    
+    // Format reply
+    reply.type				= htons(OFPMP13_GROUP_FEATURES);
+    reply.flags				= 0;	// Single reply
+    
+    // Format header
+    reply.header.version	= OF_Version;
+    reply.header.type		= OFPT13_MULTIPART_REPLY;
+    reply.header.length		= htons(sizeof(struct ofp13_group_features) + sizeof(struct ofp13_multipart_reply));
+    reply.header.xid		= msg->header.xid;
+    
+    group_features.types = htonl(1);     // Only support OFPGT_ALL for the moment
+    group_features.capabilities = 0;
+    group_features.max_groups[0] = htonl(MAX_GROUPS);
+    group_features.max_groups[1] = 0;
+    group_features.max_groups[1] = 0;
+    group_features.max_groups[1] = 0;
+    group_features.actions[0] = htonl((1 << OFPAT13_OUTPUT) + (1 << OFPAT13_PUSH_VLAN)+ (1 << OFPAT13_POP_VLAN));
+    group_features.actions[1] = 0;
+    group_features.actions[2] = 0;
+    group_features.actions[3] = 0;
+    
+    memcpy(buffer_ptr, &reply, sizeof(struct ofp13_multipart_reply));
+    buffer_ptr += sizeof(struct ofp13_multipart_reply);
+    memcpy(buffer_ptr, &group_features, sizeof(struct ofp13_group_features));
+
+    buffer_ptr += sizeof(struct ofp13_group_features);
+    return (buffer_ptr - buffer);	// return length
+}
+
+/*
+ *	Main OpenFlow GROUP_MOD message function
+ *
+ *	@param *msg - pointer to the OpenFlow message.
+ *
+ */
+void group_mod13(struct ofp_header *msg)
+{
+    struct ofp13_group_mod *ptr_fm;
+    ptr_fm = (struct ofp13_group_mod *) msg;
+    
+    switch(htons(ptr_fm->command))
+    {
+        case OFPGC13_ADD:
+            group_add13(msg);
+            break;
+            
+        case OFPGC13_DELETE:
+            group_delete13(msg);
+            break;
+            
+        case OFPGC13_MODIFY:
+            group_modify13(msg);
+            break;
+    }
+    return;
+}
+
+/*
+ *	OpenFlow GROUP_ADD function
+ *
+ *	@param *msg - pointer to the OpenFlow message.
+ *
+ */
+void group_add13(struct ofp_header *msg)
+{
+    int g, b;
+    int bucket_len;
+    uint8_t *ptr_bucket;
+    struct ofp13_group_mod *ptr_gm;
+    ptr_gm = (struct ofp13_group_mod *)msg;
+    
+    //check for existing group ID
+    for(g=0;g<MAX_GROUPS;g++)
+    {
+        if (group_entry13[g].active == true && group_entry13[g].group_id == ntohl(ptr_gm->group_id))
+        {
+            of_error13(msg, OFPET13_GROUP_MOD_FAILED, OFPGMFC_GROUP_EXISTS);
+            return;
+        }
+    }
+    
+    // Find first empty group entry
+    for(g=0;g<MAX_GROUPS;g++)
+    {
+        if (group_entry13[g].active == false)
+        {
+            group_entry13[g].active = true;
+            group_entry13[g].group_id = ntohl(ptr_gm->group_id);
+            group_entry13[g].type = ptr_gm->type;
+            group_entry13[g].time_added = (totaltime/2);
+            // Find empty bucket
+            for(b=0;b<MAX_BUCKETS;b++)
+            {
+                if (action_bucket[b].active == false)
+                {
+                    TRACE("openflow_13.c: New bucket added to group %d - position %d\n", g, b);
+                    bucket_len = ntohs(ptr_gm->header.length) - sizeof(struct ofp13_group_mod);
+                    ptr_bucket = (uint8_t*)ptr_gm + sizeof(struct ofp13_group_mod);
+                    if (bucket_len > 1099)
+                    {
+                        of_error13(msg, OFPET13_GROUP_MOD_FAILED, OFPGMFC_BAD_BUCKET);
+                        return;
+                    }
+                    memcpy(action_bucket[b].data, ptr_bucket, bucket_len);
+                    group_entry13[g].bucket_id = b + 1;
+                    action_bucket[b].active = true;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+    // TODO: add no groups and buckets available error
+    return;
+}
+
+/*
+ *	OpenFlow GROUP_DELETE function
+ *
+ *	@param *msg - pointer to the OpenFlow message.
+ *
+ */
+void group_delete13(struct ofp_header *msg)
+{
+    int g;
+    struct ofp13_group_mod *ptr_gm;
+    ptr_gm = (struct ofp13_group_mod *)msg;
+    
+    for(g=0;g<MAX_GROUPS;g++)
+    {
+        if (htonl(ptr_gm->group_id) == group_entry13[g].group_id || htonl(ptr_gm->group_id) == OFPG13_ALL)
+        {
+            group_entry13[g].active = false;
+            action_bucket[group_entry13[g].bucket_id-1].active = false;
+            // TODO: remove associated flow entries too.
+        }
+    }
+    return;
+}
+
+/*
+ *	OpenFlow GROUP_MODIFY function
+ *
+ *	@param *msg - pointer to the OpenFlow message.
+ *
+ */
+void group_modify13(struct ofp_header *msg)
+{
+    // TODO: add group modify
+    return;
+}
+
 
 /*
 *	Main OpenFlow FLOW_MOD message function

@@ -441,22 +441,26 @@ void switch_init(void)
 				{
 					vlanmaphigh += 4;
 					if (Zodiac_Config.vlan_list[x].uTagged == 1) switch_write(64,4);	// Set port as VLAN tagged
+					if (Zodiac_Config.vlan_list[x].uTagged == 0) switch_write(64,0);	// Set port as VLAN untagged
 				}
 				if (Zodiac_Config.vlan_list[x].portmap[2] == 1) // Port 3;
 				{
 					vlanmaphigh += 2;
 					if (Zodiac_Config.vlan_list[x].uTagged == 1) switch_write(48,4);	// Set port as VLAN tagged
+					if (Zodiac_Config.vlan_list[x].uTagged == 0) switch_write(48,0);	// Set port as VLAN untagged
 				}
 				if (Zodiac_Config.vlan_list[x].portmap[1] == 1) // Port 2;
 				{
 					vlanmaphigh += 1;
 					if (Zodiac_Config.vlan_list[x].uTagged == 1) switch_write(32,4);	// Set port as VLAN tagged
+					if (Zodiac_Config.vlan_list[x].uTagged == 0) switch_write(32,0);	// Set port as VLAN untagged
 				}
 				vlanmaplow = x+1;	// FID = VLAN index number
 				if (Zodiac_Config.vlan_list[x].portmap[0] == 1) // Port 1;
 				{
 					vlanmaplow += 128;
 					if (Zodiac_Config.vlan_list[x].uTagged == 1) switch_write(16,4);	// Set port as VLAN tagged
+					if (Zodiac_Config.vlan_list[x].uTagged == 0) switch_write(16,0);	// Set port as VLAN untagged
 				}
 				/* Write settings back to registers */
 				switch_write((119-(vlanindex*2)),vlanmaphigh);

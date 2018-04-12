@@ -55,6 +55,8 @@ extern bool debug_output;
 extern int charcount, charcount_last;
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
+extern struct group_entry13 group_entry13[MAX_GROUPS];
+extern struct action_bucket action_bucket[MAX_BUCKETS];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
@@ -1508,6 +1510,11 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 									printf("   Pop MPLS tag\r\n");
 								}
 
+								if (htons(act_hdr->type) == OFPAT13_GROUP)
+								{
+									struct ofp13_action_group *act_group = act_hdr;
+									printf("   Apply Group: %d\r\n", htonl(act_group->group_id));
+								}
 								act_size += htons(act_hdr->len);
 							}
 						}
@@ -1745,6 +1752,66 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		}
 		return;
 	}
+
+	// Show meter table entries
+	if (strcmp(command, "show") == 0 && strcmp(param1, "groups") == 0)
+	{
+		int g;
+		bool no_groups = true;
+	
+		// Find first empty group entry
+		for(g=0;g<MAX_GROUPS;g++)
+		{
+			if (group_entry13[g].active == true)
+			{
+				no_groups = false;
+				printf("\r\nGroup %d\r\n", g+1);
+				printf("  Group ID: %d\r\n", group_entry13[g].group_id);
+				if (group_entry13[g].type == OFPGT13_ALL) printf("  Type: ALL\r\n");
+				if (group_entry13[g].type == OFPGT13_SELECT) printf("  Type: SELECT\r\n");
+				if (group_entry13[g].type == OFPGT13_INDIRECT) printf("  Type: INDIRECT\r\n");
+				if (group_entry13[g].type == OFPGT13_FF) printf("  Type: FAST FAILOVER\r\n");
+				printf("  Actions:\r\n");
+			
+				struct ofp13_bucket *bucket_hdr;
+				bucket_hdr = (struct ofp13_bucket *)action_bucket[group_entry13[g].bucket_id-1].data;
+				struct ofp13_action_header *act_hdr;
+				uint8_t act_size = sizeof(struct ofp13_bucket);
+				if (htons(bucket_hdr->len == sizeof(struct ofp13_bucket))) printf("   DROP \r\n");	// No actions
+			
+				while (act_size < htons(bucket_hdr->len))
+				{
+					act_hdr = (struct ofp13_action_header*)((uintptr_t)bucket_hdr + act_size);
+					if (htons(act_hdr->type) == OFPAT13_OUTPUT)
+					{
+						struct ofp13_action_output *act_output = act_hdr;
+						if (htonl(act_output->port) < OFPP13_MAX)
+						{
+							printf("   Output Port: %d\r\n", htonl(act_output->port));
+						} else if (htonl(act_output->port) == OFPP13_IN_PORT)
+						{
+							printf("   Output: IN_PORT \r\n");
+						} else if (htonl(act_output->port) == OFPP13_FLOOD)
+						{
+							printf("   Output: FLOOD \r\n");
+						} else if (htonl(act_output->port) == OFPP13_ALL)
+						{
+							printf("   Output: ALL \r\n");
+						} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
+						{
+							printf("   Output: CONTROLLER \r\n");
+						} else if (htonl(act_output->port) == OFPP13_NORMAL)
+						{
+							printf("   Output: NORMAL \r\n");
+						}
+					}
+					act_size += htons(act_hdr->len);
+				}
+			}
+		}
+		if (no_groups == true) printf("No groups configured.\r\n");
+		return;
+	}
 	// Unknown Command
 	printf("Unknown command\r\n");
 	return;
@@ -1876,6 +1943,7 @@ void printhelp(void)
 	printf(" show tables\r\n");
 	printf(" show flows\r\n");
 	printf(" show meters\r\n");
+	printf(" show groups\r\n");
 	printf(" enable\r\n");
 	printf(" disable\r\n");
 	printf(" clear flows\r\n");

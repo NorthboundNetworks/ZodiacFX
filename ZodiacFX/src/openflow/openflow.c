@@ -50,6 +50,8 @@ extern struct ofp13_port_stats phys13_port_stats[TOTAL_PORTS];
 struct ofp_switch_config Switch_config;
 struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
+struct group_entry13 group_entry13[MAX_GROUPS];
+struct action_bucket action_bucket[MAX_BUCKETS];
 uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
