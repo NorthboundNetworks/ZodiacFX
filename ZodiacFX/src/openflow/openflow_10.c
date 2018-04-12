@@ -443,7 +443,7 @@ void features_reply10(uint32_t xid)
 	features.n_buffers = htonl(0);		// Number of packets that can be buffered
 	features.n_tables = 1;		// Number of flow tables
 	features.capabilities = htonl(OFPC10_FLOW_STATS + OFPC10_TABLE_STATS + OFPC10_PORT_STATS);	// Switch Capabilities
-	features.actions = htonl((1 << OFPAT10_OUTPUT) + (1 << OFPAT10_SET_VLAN_VID) + (1 << OFPAT10_SET_DL_SRC) + (1 << OFPAT10_SET_DL_DST) + (1 << OFPAT10_SET_NW_SRC) + (1 << OFPAT10_SET_NW_DST) + (1 << OFPAT10_SET_TP_SRC) + (1 << OFPAT10_SET_TP_DST));		// Action Capabilities
+	features.actions = htonl((1 << OFPAT10_OUTPUT) + (1 << OFPAT10_SET_VLAN_VID) + (1 << OFPAT10_SET_VLAN_PCP) + (1 << OFPAT10_STRIP_VLAN) + (1 << OFPAT10_SET_DL_SRC) + (1 << OFPAT10_SET_DL_DST) + (1 << OFPAT10_SET_NW_SRC) + (1 << OFPAT10_SET_NW_DST) + (1 << OFPAT10_SET_NW_TOS) + (1 << OFPAT10_SET_TP_SRC) + (1 << OFPAT10_SET_TP_DST));		// Action Capabilities
 	uint8_t mac[] = {0x00,0x00,0x00,0x00,0x00,0x00};
 
 	memcpy(&buf, &features, sizeof(struct ofp10_switch_features));
@@ -966,6 +966,7 @@ void flow_modify(struct ofp_header *msg)
 	int action_size = ntohs(msg->length) - sizeof(struct ofp_flow_mod);
 	int action_cnt_size = 0;
 	int action_count = 0;
+	int matched = 0;
 
 	for(int q=0;q<iLastFlow;q++)
 	{
@@ -973,6 +974,7 @@ void flow_modify(struct ofp_header *msg)
 		{
 			if (field_match10(&ptr_fm->match, &flow_match10[q]->match) == 1)
 			{
+				matched = 1;
 				// Update actions
 				action_hdr = &ptr_fm->actions;
 				if(action_size > 0)
@@ -1014,11 +1016,15 @@ void flow_modify(struct ofp_header *msg)
 						action_cnt_size += ntohs(action_hdr1->len);
 					}
 				}
-				} else {
-				flow_add(msg);	// If there is no existing flow that matches then it's just an ADD
 			}
 		}
 	}
+	// If there is no existing flow that matches then it's just an ADD
+	if (matched == 1)
+	{
+		flow_add(msg);
+	}
+
 	return;
 }
 
@@ -1037,6 +1043,7 @@ void flow_modify_strict(struct ofp_header *msg)
 	int action_size = ntohs(msg->length) - sizeof(struct ofp_flow_mod);
 	int action_cnt_size = 0;
 	int action_count = 0;
+	int matched = 0;
 
 	for(int q=0;q<iLastFlow;q++)
 	{
@@ -1044,6 +1051,7 @@ void flow_modify_strict(struct ofp_header *msg)
 		{
 			if((memcmp(&flow_match10[q]->match, &ptr_fm->match, sizeof(struct ofp_match)) == 0) && (flow_match10[q]->priority == ptr_fm->priority))
 			{
+				matched = 1;
 				// Update actions
 				action_hdr = &ptr_fm->actions;
 				if(action_size > 0)
@@ -1085,10 +1093,13 @@ void flow_modify_strict(struct ofp_header *msg)
 						action_cnt_size += ntohs(action_hdr1->len);
 					}
 				}
-				} else {
-				flow_add(msg);	// If there is no existing flow that matches then it's just an ADD
 			}
 		}
+	}
+	// If there is no existing flow that matches then it's just an ADD
+	if (matched == 1)
+	{
+		flow_add(msg);
 	}
 	return;
 }

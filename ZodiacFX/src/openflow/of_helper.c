@@ -407,7 +407,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_ETH_DST_W:
 				for (int j=0; j<6; j++ )
 				{
-					if (oxm_value[j] != eth_dst[j] & oxm_value[6+j]){
+					if ((oxm_value[j] & oxm_value[6+j]) != eth_dst[j] & oxm_value[6+j]){
 						priority_match = -1;
 					}
 				}
@@ -423,7 +423,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_ETH_SRC_W:
 				for (int j=0; j<6; j++ )
 				{
-					if (oxm_value[j] != eth_src[j] & oxm_value[6+j]){
+					if ((oxm_value[j] & oxm_value[6+j]) != eth_src[j] & oxm_value[6+j]){
 						priority_match = -1;
 					}
 				}
@@ -570,10 +570,6 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 					priority_match = -1;
 				}
 				break;
-				if (!(fields->isVlanTag && (pBuffer[14]>>5) == oxm_value[0]))
-				{
-					priority_match = -1;
-				}
 
 				case OXM_OF_MPLS_LABEL:
 				if (fields->isMPLSTag && fields->mpls_label != ntohl(*(uint32_t*)oxm_value))
@@ -596,6 +592,9 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				}
 				break;
 				
+				default:
+				priority_match = -1;
+				break;
 			}
 
 			if (priority_match == -1)

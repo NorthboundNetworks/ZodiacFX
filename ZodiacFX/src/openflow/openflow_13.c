@@ -1832,7 +1832,7 @@ void flow_delete13(struct ofp_header *msg)
 			continue;
 		}
 
-		if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q]->cookie & ptr_fm->cookie_mask)
+		if (ptr_fm->cookie_mask != 0 && (ptr_fm->cookie & ptr_fm->cookie_mask) != flow_match13[q]->cookie & ptr_fm->cookie_mask)
 		{
 			continue;
 		}
@@ -1940,7 +1940,7 @@ void flow_delete_strict13(struct ofp_header *msg)
 			continue;
 		}
 		// Check if the cookie values are the same
-		if (ptr_fm->cookie_mask != 0 && ptr_fm->cookie != flow_match13[q]->cookie & ptr_fm->cookie_mask)
+		if (ptr_fm->cookie_mask != 0 && (ptr_fm->cookie & ptr_fm->cookie_mask) != flow_match13[q]->cookie & ptr_fm->cookie_mask)
 		{
 			continue;
 		}
