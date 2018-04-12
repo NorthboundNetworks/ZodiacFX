@@ -703,7 +703,7 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 
 	if (size == len && multi_pos !=0)
 	{
-		sendtcp(&shared_buffer, multi_pos);
+		sendtcp(&shared_buffer, multi_pos, 0);
 	}
 	return;
 }
@@ -732,7 +732,7 @@ void features_reply13(uint32_t xid)
 	features.auxiliary_id = 0;	// Primary connection
 
 	memcpy(&buf, &features, sizeof(struct ofp13_switch_features));
-	sendtcp(&buf, bufsize);
+	sendtcp(&buf, bufsize, 1);
 	return;
 }
 
@@ -765,7 +765,7 @@ void config_reply13(uint32_t xid)
 	cfg_reply.header.length = HTONS(sizeof(cfg_reply));
 	cfg_reply.flags = OFPC13_FRAG_NORMAL;
 	cfg_reply.miss_send_len = htons(256);	// Only sending the first 256 bytes
-	sendtcp(&cfg_reply, sizeof(cfg_reply));
+	sendtcp(&cfg_reply, sizeof(cfg_reply), 1);
 	return;
 }
 
@@ -782,7 +782,7 @@ void role_reply13(struct ofp_header *msg)
 	role_request.header.type = OFPT13_ROLE_REPLY;
 	role_request.generation_id = 0;
 	role_request.role = htonl(OFPCR_ROLE_MASTER);
-	sendtcp(&role_request, sizeof(struct ofp13_role_request));
+	sendtcp(&role_request, sizeof(struct ofp13_role_request), 1);
 	return;
 }
 
@@ -903,7 +903,7 @@ void multi_flow_more_reply13(void)
 	if (len < 2048)
 	{
 		TRACE("openflow_13.c: sending flow stats");
-		sendtcp(&shared_buffer, len);
+		sendtcp(&shared_buffer, len, 0);
 	}
 	return;
 }
@@ -2070,8 +2070,7 @@ void packet_in13(uint8_t *buffer, uint16_t ul_size, uint32_t port, uint8_t reaso
 	pi->header.length = HTONS(size);
 	pi->total_len = HTONS(send_size);
 	memcpy(shared_buffer + (size-send_size), buffer, send_size);
-	sendtcp(&shared_buffer, size);
-	tcp_output(tcp_pcb);
+	sendtcp(&shared_buffer, size, 1);
 	return;
 }
 
@@ -2128,7 +2127,7 @@ void barrier13_reply(uint32_t xid)
 	of_barrier.length = htons(sizeof(of_barrier));
 	of_barrier.type   = OFPT13_BARRIER_REPLY;
 	of_barrier.xid = xid;
-	sendtcp(&of_barrier, sizeof(of_barrier));
+	sendtcp(&of_barrier, sizeof(of_barrier), 0);
 	return;
 }
 
@@ -2523,7 +2522,7 @@ void of_error13(struct ofp_header *msg, uint16_t type, uint16_t code)
 	error.code = htons(code);
 	memcpy(error_buf, &error, sizeof(struct ofp_error_msg));
 	memcpy(error_buf + sizeof(struct ofp_error_msg), msg, msglen);
-	sendtcp(&error_buf, (sizeof(struct ofp_error_msg) + msglen));
+	sendtcp(&error_buf, (sizeof(struct ofp_error_msg) + msglen), 1);
 	return;
 }
 
@@ -2571,7 +2570,7 @@ void flowrem_notif13(int flowid, uint8_t reason)
 	{
 		memcpy(flow_rem + (sizeof(struct ofp13_flow_removed)-4), ofp13_oxm_match[flowid], ntohs(flow_match13[flowid]->match.length)-4);
 	}
-	sendtcp(&flow_rem, htons(ofr.header.length));
+	sendtcp(&flow_rem, htons(ofr.header.length), 1);
 	TRACE("openflow_13.c: Flow removed notification sent");
 	return;
 }
@@ -2612,7 +2611,7 @@ void port_status_message13(uint8_t port)
 	ofps.desc.peer = 0;
 	ofps.desc.curr_speed = 0;
 	ofps.desc.max_speed = 0;
-	sendtcp(&ofps, htons(ofps.header.length));
+	sendtcp(&ofps, htons(ofps.header.length), 1);
 	TRACE("openflow_13.c: Port Status change notification sent");
 	return;
 }

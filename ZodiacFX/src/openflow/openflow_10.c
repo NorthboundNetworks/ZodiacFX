@@ -475,7 +475,7 @@ void features_reply10(uint32_t xid)
 		}
 	}
 	memcpy(&buf[sizeof(struct ofp10_switch_features)], phys_port, sizeof(phys_port));
-	sendtcp(&buf, bufsize);
+	sendtcp(&buf, bufsize, 0);
 	return;
 }
 
@@ -508,7 +508,7 @@ void config_reply(uint32_t xid)
 	cfg_reply.header.length = HTONS(sizeof(cfg_reply));
 	cfg_reply.flags = OFPC_FRAG_NORMAL;
 	cfg_reply.miss_send_len = 128;		// Send the first 128 bytes of the packet
-	sendtcp(&cfg_reply, sizeof(cfg_reply));
+	sendtcp(&cfg_reply, sizeof(cfg_reply), 1);
 	return;
 }
 
@@ -525,7 +525,7 @@ void barrier10_reply(uint32_t xid)
 	of_barrier.length = htons(sizeof(of_barrier));
 	of_barrier.type   = OFPT10_BARRIER_REPLY;
 	of_barrier.xid = xid;
-	sendtcp(&of_barrier, sizeof(of_barrier));
+	sendtcp(&of_barrier, sizeof(of_barrier), 0);
 	return;
 }
 
@@ -544,7 +544,7 @@ void vendor_reply(uint32_t xid)
 	err_msg.header.xid = xid;
 	err_msg.type = htons(OFPET10_BAD_REQUEST);
 	err_msg.code = htons(OFPBRC10_BAD_VENDOR);
-	sendtcp(&err_msg, sizeof(err_msg));
+	sendtcp(&err_msg, sizeof(err_msg), 1);
 	return;
 }
 
@@ -571,7 +571,7 @@ void stats10_desc_reply(struct ofp_stats_request *msg)
 	reply->header.length = HTONS(len);
 	reply->flags = 0;
 	memcpy(reply->body, &zodiac_desc, sizeof(zodiac_desc));
-	sendtcp(&shared_buffer, len);
+	sendtcp(&shared_buffer, len, 1);
 	return;
 }
 
@@ -593,7 +593,7 @@ void stats_flow_reply(struct ofp_stats_request *msg)
 	int len = flow_stats_msg10(&statsbuffer, 0, iLastFlow);
 	reply->header.length = htons(len);
 	reply->flags = 0;
-	sendtcp(&statsbuffer, len);
+	sendtcp(&statsbuffer, len, 0);
 	return;
 }
 
@@ -624,7 +624,7 @@ void stats_table_reply(struct ofp_stats_request *msg)
 	tbl_stats.matched_count = htonll(table_counters[0].matched_count);
 	memcpy(buf, &reply, sizeof(struct ofp10_stats_reply));
 	memcpy(buf + sizeof(struct ofp10_stats_reply), &tbl_stats, sizeof(struct ofp_table_stats));
-	sendtcp(&buf, len);
+	sendtcp(&buf, len, 0);
 	return;
 }
 
@@ -752,7 +752,7 @@ void stats_port_reply(struct ofp_stats_request *msg)
 		TRACE("openflow_10.c: requested port is out of range");
 		of10_error(buffer, OFPET10_BAD_REQUEST, OFPBRC10_BAD_STAT);
 	}
-	sendtcp(&shared_buffer, len);
+	sendtcp(&shared_buffer, len, 0);
 	return;
 }
 
@@ -821,7 +821,7 @@ void packet_in(uint8_t *buffer, uint16_t ul_size, uint32_t port, uint8_t reason)
 	pi->total_len = HTONS(ul_size);
 	pi->reason = reason;
 	memcpy(pi->data, buffer, send_size);
-	sendtcp(&shared_buffer, size);
+	sendtcp(&shared_buffer, size, 1);
 	return;
 }
 
@@ -1180,7 +1180,7 @@ void of10_error(struct ofp_header *msg, uint16_t type, uint16_t code)
 	error.code = htons(code);
 	memcpy(error_buf, &error, sizeof(struct ofp_error_msg));
 	memcpy(error_buf + sizeof(struct ofp_error_msg), msg, msglen);
-	sendtcp(&error_buf, (sizeof(struct ofp_error_msg) + msglen));
+	sendtcp(&error_buf, (sizeof(struct ofp_error_msg) + msglen), 1);
 	return;
 }
 
@@ -1209,7 +1209,7 @@ void flowrem_notif10(int flowid, uint8_t reason)
 	ofr.byte_count = flow_counters[flowid].bytes;
 	ofr.idle_timeout = flow_match10[flowid]->idle_timeout;
 	ofr.match = flow_match10[flowid]->match;
-	sendtcp(&ofr, sizeof(struct ofp_flow_removed));
+	sendtcp(&ofr, sizeof(struct ofp_flow_removed), 1);
 	return;
 }
 
@@ -1247,7 +1247,7 @@ void port_status_message10(uint8_t port)
 	ofps.desc.advertised = 0;
 	ofps.desc.supported = 0;
 	ofps.desc.peer = 0;
-	sendtcp(&ofps, htons(ofps.header.length));
+	sendtcp(&ofps, htons(ofps.header.length), 1);
 	TRACE("openflow_10.c: Port Status change notification sent");
 	return;
 }

@@ -122,7 +122,7 @@ void of13_message(struct ofp_header *ofph, int size, int len);
 void multi_flow_more_reply13(void);
 void barrier10_reply(uint32_t xid);
 void barrier13_reply(uint32_t xid);
-void sendtcp(const void *buffer, u16_t len);
+void sendtcp(const void *buffer, uint16_t len, uint8_t push);
 void flowrem_notif10(int flowid, uint8_t reason);
 void flowrem_notif13(int flowid, uint8_t reason);
 void port_status_message10(uint8_t port);
