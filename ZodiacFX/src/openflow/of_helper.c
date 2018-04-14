@@ -574,7 +574,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_MPLS_LABEL:
-				if (fields->isMPLSTag && fields->mpls_label != ntohl(*(uint32_t*)oxm_value))
+				if (fields->isMPLSTag && fields->mpls_label != *(uint32_t*)oxm_value)
 				{
 					priority_match = -1;
 				}
