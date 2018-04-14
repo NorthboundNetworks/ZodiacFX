@@ -117,7 +117,6 @@ struct group_entry13 {
 	int active;
 	uint8_t type;
 	uint8_t pad;
-	uint32_t group_id;
 	uint8_t bucket_id;
 	uint64_t packet_count;
 	uint64_t byte_count;

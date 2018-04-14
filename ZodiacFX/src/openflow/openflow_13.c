@@ -261,6 +261,58 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				}
 				break;
 
+				// Apply group
+				case OFPAT13_GROUP:
+				{
+					uint8_t act_size = sizeof(struct ofp13_bucket);
+					struct ofp13_action_group *act_group = (struct ofp13_action_group*)act_hdr;
+					struct ofp13_bucket *bucket_hdr;
+					struct ofp13_action_header *act_hdr;
+					TRACE("openflow_13.c: Group ID = %d", ntohl(act_group->group_id));
+					bucket_hdr = (struct ofp13_bucket *)action_bucket[group_entry13[ntohl(act_group->group_id)-1].bucket_id-1].data;
+					TRACE("openflow_13.c: Bucket ID = %d", group_entry13[ntohl(act_group->group_id)-1].bucket_id);
+					if (htons(bucket_hdr->len == sizeof(struct ofp13_bucket))) break;   // No actions
+					while (act_size < htons(bucket_hdr->len))
+					{
+						TRACE("openflow_13.c: act_size = %d - bucket length = %d", act_size, htons(bucket_hdr->len));
+						act_hdr = (struct ofp13_action_header*)((uintptr_t)bucket_hdr + act_size);
+						TRACE("openflow_13.c: Action type = %d", htons(act_hdr->type));
+						if (htons(act_hdr->type) == OFPAT13_OUTPUT)
+						{
+							if(recalculate_ip_checksum){
+								set_ip_checksum(p_uc_data, packet_size, fields.payload - p_uc_data);
+								recalculate_ip_checksum = false;
+							}
+							struct ofp13_action_output *act_output = act_hdr;
+			                if (htonl(act_output->port) < OFPP13_MAX && htonl(act_output->port) != port)
+			                {
+								int outport = (1<< (ntohl(act_output->port)-1));
+								TRACE("openflow_13.c: Output to port %d (%d bytes)", ntohl(act_output->port), packet_size);
+								gmac_write(p_uc_data, packet_size, outport);
+			                } else if (htonl(act_output->port) == OFPP13_IN_PORT)
+			                {
+								int outport = (1<< (port-1));
+								TRACE("openflow_13.c: Output to in_port %d (%d bytes)", port, packet_size);
+								gmac_write(p_uc_data, packet_size, outport);
+			                } else if (htonl(act_output->port) == OFPP13_FLOOD || htonl(act_output->port) == OFPP13_ALL)
+			                {
+								int outport = (15 - NativePortMatrix) - (1<<(port-1));
+								if (htonl(act_output->port) == OFPP13_FLOOD) TRACE("openflow_13.c: Output to FLOOD (%d bytes)", packet_size);
+								if (htonl(act_output->port) == OFPP13_ALL) TRACE("openflow_13.c: Output to ALL (%d bytes)", packet_size);
+								gmac_write(p_uc_data, packet_size, outport);
+			                } else if (htonl(act_output->port) == OFPP13_CONTROLLER)
+			                {
+								int pisize = ntohs(act_output->max_len);
+								if (pisize > packet_size) pisize = packet_size;
+								TRACE("openflow_13.c: Output to controller (%d bytes)", packet_size);
+								packet_in13(p_uc_data, pisize, port, OFPR_ACTION, i);
+			                }
+		                }
+		                act_size += htons(act_hdr->len);
+	                }
+                }
+                break;
+
 				// Push a VLAN tag
 				case OFPAT13_PUSH_VLAN:
 				{
@@ -1696,7 +1748,7 @@ int multi_group_desc_reply13(uint8_t *buffer, struct ofp13_multipart_request *ms
     {
         if (group_entry13[i].active == true)
         {
-            group_desc.group_id = htonl(group_entry13[i].group_id);
+            group_desc.group_id = htonl(i+1);
             group_desc.type= group_entry13[i].type;
             if (group_entry13[i].bucket_id > 0)
             {
@@ -1750,7 +1802,7 @@ int multi_group_stats_reply13(uint8_t *buffer, struct ofp13_multipart_request *m
     {
         if (group_entry13[i].active == true)
         {
-            group_stats.group_id = htonl(group_entry13[i].group_id);
+            group_stats.group_id = htonl(i+1);
             if (group_entry13[i].bucket_id > 0)
             {
                 group_stats.byte_count = htonll(group_entry13[i].byte_count);
@@ -1869,46 +1921,36 @@ void group_add13(struct ofp_header *msg)
     ptr_gm = (struct ofp13_group_mod *)msg;
     
     //check for existing group ID
-    for(g=0;g<MAX_GROUPS;g++)
+    if (group_entry13[ntohl(ptr_gm->group_id)-1].active == true || ntohl(ptr_gm->group_id) > MAX_GROUPS || ntohl(ptr_gm->group_id) < 1)
     {
-        if (group_entry13[g].active == true && group_entry13[g].group_id == ntohl(ptr_gm->group_id))
-        {
-            of_error13(msg, OFPET13_GROUP_MOD_FAILED, OFPGMFC_GROUP_EXISTS);
-            return;
-        }
+	    of_error13(msg, OFPET13_GROUP_MOD_FAILED, OFPGMFC_GROUP_EXISTS);
+	    return;
     }
-    
-    // Find first empty group entry
-    for(g=0;g<MAX_GROUPS;g++)
+
+    group_entry13[ntohl(ptr_gm->group_id)-1].active = true;
+    group_entry13[ntohl(ptr_gm->group_id)-1].type = ptr_gm->type;
+    group_entry13[ntohl(ptr_gm->group_id)-1].time_added = (totaltime/2);
+    // Find empty bucket
+    for(b=0;b<MAX_BUCKETS;b++)
     {
-        if (group_entry13[g].active == false)
+        if (action_bucket[b].active == false)
         {
-            group_entry13[g].active = true;
-            group_entry13[g].group_id = ntohl(ptr_gm->group_id);
-            group_entry13[g].type = ptr_gm->type;
-            group_entry13[g].time_added = (totaltime/2);
-            // Find empty bucket
-            for(b=0;b<MAX_BUCKETS;b++)
+            TRACE("openflow_13.c: New bucket added to group %d - position %d\n", g, b);
+            bucket_len = ntohs(ptr_gm->header.length) - sizeof(struct ofp13_group_mod);
+            ptr_bucket = (uint8_t*)ptr_gm + sizeof(struct ofp13_group_mod);
+            if (bucket_len > 64)
             {
-                if (action_bucket[b].active == false)
-                {
-                    TRACE("openflow_13.c: New bucket added to group %d - position %d\n", g, b);
-                    bucket_len = ntohs(ptr_gm->header.length) - sizeof(struct ofp13_group_mod);
-                    ptr_bucket = (uint8_t*)ptr_gm + sizeof(struct ofp13_group_mod);
-                    if (bucket_len > 1099)
-                    {
-                        of_error13(msg, OFPET13_GROUP_MOD_FAILED, OFPGMFC_BAD_BUCKET);
-                        return;
-                    }
-                    memcpy(action_bucket[b].data, ptr_bucket, bucket_len);
-                    group_entry13[g].bucket_id = b + 1;
-                    action_bucket[b].active = true;
-                    break;
-                }
+                of_error13(msg, OFPET13_GROUP_MOD_FAILED, OFPGMFC_BAD_BUCKET);
+                return;
             }
+            memcpy(action_bucket[b].data, ptr_bucket, bucket_len);
+            group_entry13[ntohl(ptr_gm->group_id)-1].bucket_id = b + 1;
+            action_bucket[b].active = true;
             break;
         }
     }
+
+
     // TODO: add no groups and buckets available error
     return;
 }
@@ -1924,16 +1966,10 @@ void group_delete13(struct ofp_header *msg)
     int g;
     struct ofp13_group_mod *ptr_gm;
     ptr_gm = (struct ofp13_group_mod *)msg;
-    
-    for(g=0;g<MAX_GROUPS;g++)
-    {
-        if (htonl(ptr_gm->group_id) == group_entry13[g].group_id || htonl(ptr_gm->group_id) == OFPG13_ALL)
-        {
-            group_entry13[g].active = false;
-            action_bucket[group_entry13[g].bucket_id-1].active = false;
-            // TODO: remove associated flow entries too.
-        }
-    }
+
+	group_entry13[htonl(ptr_gm->group_id)-1].active = false;
+	action_bucket[group_entry13[htonl(ptr_gm->group_id)-1].bucket_id-1].active = false;
+	// TODO: add group delete ALL
     return;
 }
 

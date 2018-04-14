@@ -1765,8 +1765,7 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 			if (group_entry13[g].active == true)
 			{
 				no_groups = false;
-				printf("\r\nGroup %d\r\n", g+1);
-				printf("  Group ID: %d\r\n", group_entry13[g].group_id);
+				printf("\r\nGroup ID %d\r\n", g+1);
 				if (group_entry13[g].type == OFPGT13_ALL) printf("  Type: ALL\r\n");
 				if (group_entry13[g].type == OFPGT13_SELECT) printf("  Type: SELECT\r\n");
 				if (group_entry13[g].type == OFPGT13_INDIRECT) printf("  Type: INDIRECT\r\n");
