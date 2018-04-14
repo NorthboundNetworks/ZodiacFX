@@ -58,6 +58,8 @@ extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct table_counter table_counters[MAX_TABLES];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
+extern struct group_entry13 group_entry13[MAX_GROUPS];
+extern struct action_bucket action_bucket[MAX_BUCKETS];
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
@@ -407,7 +409,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_ETH_DST_W:
 				for (int j=0; j<6; j++ )
 				{
-					if (oxm_value[j] != eth_dst[j] & oxm_value[6+j]){
+					if ((oxm_value[j] & oxm_value[6+j]) != eth_dst[j] & oxm_value[6+j]){
 						priority_match = -1;
 					}
 				}
@@ -423,7 +425,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_ETH_SRC_W:
 				for (int j=0; j<6; j++ )
 				{
-					if (oxm_value[j] != eth_src[j] & oxm_value[6+j]){
+					if ((oxm_value[j] & oxm_value[6+j]) != eth_src[j] & oxm_value[6+j]){
 						priority_match = -1;
 					}
 				}
@@ -570,13 +572,9 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 					priority_match = -1;
 				}
 				break;
-				if (!(fields->isVlanTag && (pBuffer[14]>>5) == oxm_value[0]))
-				{
-					priority_match = -1;
-				}
 
 				case OXM_OF_MPLS_LABEL:
-				if (fields->isMPLSTag && fields->mpls_label != ntohl(*(uint32_t*)oxm_value))
+				if (fields->isMPLSTag && fields->mpls_label != *(uint32_t*)oxm_value)
 				{
 					priority_match = -1;
 				}
@@ -596,6 +594,9 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				}
 				break;
 				
+				default:
+				priority_match = -1;
+				break;
 			}
 
 			if (priority_match == -1)
@@ -1197,6 +1198,13 @@ void clear_flows(void)
 		{
 			meter_entry[x] = NULL;
 		}
+	}
+	
+	/* Clear Groups*/
+	for(int x=0; x<MAX_GROUPS;x++)
+	{
+		group_entry13[x].active = false;
+		action_bucket[group_entry13[x].bucket_id-1].active = false;
 	}
 }
 

@@ -55,6 +55,8 @@ extern bool debug_output;
 extern int charcount, charcount_last;
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
+extern struct group_entry13 group_entry13[MAX_GROUPS];
+extern struct action_bucket action_bucket[MAX_BUCKETS];
 extern uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
@@ -594,19 +596,21 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 	// Display VLANs
 	if (strcmp(command, "show")==0 && strcmp(param1, "vlans")==0){
 		int x;
-		printf("\r\n\tVLAN ID\t\tName\t\t\tType\r\n");
-		printf("-------------------------------------------------------------------------\r\n");
+		printf("\r\n\tVLAN ID\t\tName\t\t\tType\t\tTag\r\n");
+		printf("-------------------------------------------------------------------------------\r\n");
 		for (x=0;x<MAX_VLANS;x++)
 		{
 			if (Zodiac_Config.vlan_list[x].uActive == 1)
 			{
 				printf("\t%d\t\t'%s'\t\t",Zodiac_Config.vlan_list[x].uVlanID, Zodiac_Config.vlan_list[x].cVlanName);
-				if (Zodiac_Config.vlan_list[x].uVlanType == 0) printf("Undefined\r\n");
-				if (Zodiac_Config.vlan_list[x].uVlanType == 1) printf("OpenFlow\r\n");
-				if (Zodiac_Config.vlan_list[x].uVlanType == 2) printf("Native\r\n");
+				if (Zodiac_Config.vlan_list[x].uVlanType == 0) printf("Undefined\t");
+				if (Zodiac_Config.vlan_list[x].uVlanType == 1) printf("OpenFlow\t");
+				if (Zodiac_Config.vlan_list[x].uVlanType == 2) printf("Native\t\t");
+				if (Zodiac_Config.vlan_list[x].uTagged == 0) printf("Untagged\r\n");
+				if (Zodiac_Config.vlan_list[x].uTagged == 1) printf("Tagged\r\n");
 			}
 		}
-		printf("\r\n-------------------------------------------------------------------------\r\n\n");
+		printf("\r\n-------------------------------------------------------------------------------\r\n\n");
 		return;
 	}
 
@@ -686,6 +690,33 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 			return;
 	}
 
+	// Set VLAN tagging
+	if (strcmp(command, "set")==0 && strcmp(param1, "vlan-tag")==0)
+	{
+		int vlanid;
+		sscanf(param2, "%d", &vlanid);
+		for (int x=0;x<MAX_VLANS;x++)
+		{
+			if(Zodiac_Config.vlan_list[x].uVlanID == vlanid)
+			{
+				if(strcmp(param3, "untagged")==0){
+					Zodiac_Config.vlan_list[x].uTagged = 0;
+					printf("VLAN %d set to untagged\r\n",vlanid);
+					return;
+				}
+				if(strcmp(param3, "tagged")==0){
+					Zodiac_Config.vlan_list[x].uTagged = 1;
+					printf("VLAN %d set to tagged\r\n",vlanid);
+					return;
+				}
+				printf("Unknown VLAN tag setting\r\n");
+				return;
+			}
+		}
+		printf("Unknown VLAN ID\r\n");
+		return;
+	}
+	
 	// Add port to VLAN
 	if (strcmp(command, "add")==0 && strcmp(param1, "vlan-port")==0)
 	{
@@ -1479,6 +1510,11 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 									printf("   Pop MPLS tag\r\n");
 								}
 
+								if (htons(act_hdr->type) == OFPAT13_GROUP)
+								{
+									struct ofp13_action_group *act_group = act_hdr;
+									printf("   Apply Group: %d\r\n", htonl(act_group->group_id));
+								}
 								act_size += htons(act_hdr->len);
 							}
 						}
@@ -1716,6 +1752,65 @@ void command_openflow(char *command, char *param1, char *param2, char *param3)
 		}
 		return;
 	}
+
+	// Show meter table entries
+	if (strcmp(command, "show") == 0 && strcmp(param1, "groups") == 0)
+	{
+		int g;
+		bool no_groups = true;
+	
+		// Find first empty group entry
+		for(g=0;g<MAX_GROUPS;g++)
+		{
+			if (group_entry13[g].active == true)
+			{
+				no_groups = false;
+				printf("\r\nGroup ID %d\r\n", g+1);
+				if (group_entry13[g].type == OFPGT13_ALL) printf("  Type: ALL\r\n");
+				if (group_entry13[g].type == OFPGT13_SELECT) printf("  Type: SELECT\r\n");
+				if (group_entry13[g].type == OFPGT13_INDIRECT) printf("  Type: INDIRECT\r\n");
+				if (group_entry13[g].type == OFPGT13_FF) printf("  Type: FAST FAILOVER\r\n");
+				printf("  Actions:\r\n");
+			
+				struct ofp13_bucket *bucket_hdr;
+				bucket_hdr = (struct ofp13_bucket *)action_bucket[group_entry13[g].bucket_id-1].data;
+				struct ofp13_action_header *act_hdr;
+				uint8_t act_size = sizeof(struct ofp13_bucket);
+				if (htons(bucket_hdr->len == sizeof(struct ofp13_bucket))) printf("   DROP \r\n");	// No actions
+			
+				while (act_size < htons(bucket_hdr->len))
+				{
+					act_hdr = (struct ofp13_action_header*)((uintptr_t)bucket_hdr + act_size);
+					if (htons(act_hdr->type) == OFPAT13_OUTPUT)
+					{
+						struct ofp13_action_output *act_output = act_hdr;
+						if (htonl(act_output->port) < OFPP13_MAX)
+						{
+							printf("   Output Port: %d\r\n", htonl(act_output->port));
+						} else if (htonl(act_output->port) == OFPP13_IN_PORT)
+						{
+							printf("   Output: IN_PORT \r\n");
+						} else if (htonl(act_output->port) == OFPP13_FLOOD)
+						{
+							printf("   Output: FLOOD \r\n");
+						} else if (htonl(act_output->port) == OFPP13_ALL)
+						{
+							printf("   Output: ALL \r\n");
+						} else if (htonl(act_output->port) == OFPP13_CONTROLLER)
+						{
+							printf("   Output: CONTROLLER \r\n");
+						} else if (htonl(act_output->port) == OFPP13_NORMAL)
+						{
+							printf("   Output: NORMAL \r\n");
+						}
+					}
+					act_size += htons(act_hdr->len);
+				}
+			}
+		}
+		if (no_groups == true) printf("No groups configured.\r\n");
+		return;
+	}
 	// Unknown Command
 	printf("Unknown command\r\n");
 	return;
@@ -1834,6 +1929,7 @@ void printhelp(void)
 	printf(" add vlan <vlan id> <vlan name>\r\n");
 	printf(" delete vlan <vlan id>\r\n");
 	printf(" set vlan-type <vlan id> <openflow|native>\r\n");
+	printf(" set vlan-tag <vlan id> <tagged|untagged>\r\n");
 	printf(" add vlan-port <vlan id> <port>\r\n");
 	printf(" delete vlan-port <port>\r\n");
 	printf(" set of-version <version(0|1|4)>\r\n");
@@ -1846,6 +1942,7 @@ void printhelp(void)
 	printf(" show tables\r\n");
 	printf(" show flows\r\n");
 	printf(" show meters\r\n");
+	printf(" show groups\r\n");
 	printf(" enable\r\n");
 	printf(" disable\r\n");
 	printf(" clear flows\r\n");

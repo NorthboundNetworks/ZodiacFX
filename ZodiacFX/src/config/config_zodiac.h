@@ -31,7 +31,7 @@
 #define CONFIG_ZODIAC_H_
 
 
-#define VERSION "0.83"		// Firmware version number
+#define VERSION "0.84"		// Firmware version number
 
 #define TOTAL_PORTS 4		// Total number of physical ports on the Zodiac FX
 
@@ -43,6 +43,9 @@
 #define MAX_VLANS	4	// Maximum number of VLANS, default is 1 per port (4)
 
 #define MAX_TABLES	10	// Maximum number of tables for OpenFlow 1.3 and higher
+
+#define MAX_GROUPS 4	// Maximum number of groups for OpenFlow 1.3 and higher
+#define MAX_BUCKETS 4	// Maximum number of group action buckets for OpenFlow 1.3 and higher
 
 #define HB_INTERVAL	2	// Number of seconds between heartbeats
 

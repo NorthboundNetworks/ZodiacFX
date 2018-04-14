@@ -472,6 +472,145 @@ enum ofp13_meter_mod_failed_code {
                                  * for a meter has been exceeded. */
 };
 
+/* ofp_error_msg 'code' values for OFPET_GROUP_MOD_FAILED.  'data' contains
+ * at least the first 64 bytes of the failed request. */
+enum ofp_group_mod_failed_code {
+    OFPGMFC_GROUP_EXISTS         = 0,  /* Group not added because a group ADD
+                                        attempted to replace an
+                                        already-present group. */
+    OFPGMFC_INVALID_GROUP        = 1,  /* Group not added because Group
+                                        specified is invalid. */
+    OFPGMFC_WEIGHT_UNSUPPORTED   = 2,  /* Switch does not support unequal load
+                                        sharing with select groups. */
+    OFPGMFC_OUT_OF_GROUPS        = 3,  /* The group table is full. */
+    OFPGMFC_OUT_OF_BUCKETS       = 4,  /* The maximum number of action buckets
+                                        for a group has been exceeded. */
+    OFPGMFC_CHAINING_UNSUPPORTED = 5,  /* Switch does not support groups that
+                                        forward to groups. */
+    OFPGMFC_WATCH_UNSUPPORTED    = 6,  /* This group cannot watch the watch_port
+                                        or watch_group specified. */
+    OFPGMFC_LOOP                 = 7,  /* Group entry would cause a loop. */
+    OFPGMFC_UNKNOWN_GROUP        = 8,  /* Group not modified because a group
+                                        MODIFY attempted to modify a
+                                        non-existent group. */
+    OFPGMFC_CHAINED_GROUP        = 9,  /* Group not deleted because another
+                                        group is forwarding to it. */
+    OFPGMFC_BAD_TYPE             = 10, /* Unsupported or unknown group type. */
+    OFPGMFC_BAD_COMMAND          = 11, /* Unsupported or unknown command. */
+    OFPGMFC_BAD_BUCKET           = 12, /* Error in bucket. */
+    OFPGMFC_BAD_WATCH            = 13, /* Error in watch port/group. */
+    OFPGMFC_EPERM                = 14, /* Permissions error. */
+};
+
+/* Bucket for use in groups. */
+struct ofp13_bucket {
+    uint16_t len;                   /* Length of the bucket in bytes, including
+                                     this header and any padding to make it
+                                     64-bit aligned. */
+    uint16_t weight;                /* Relative weight of bucket.  Only
+                                     defined for select groups. */
+    uint32_t watch_port;            /* Port whose state affects whether this
+                                     bucket is live.  Only required for fast
+                                     failover groups. */
+    uint32_t watch_group;           /* Group whose state affects whether this
+                                     bucket is live.  Only required for fast
+                                     failover groups. */
+    uint8_t pad[4];
+    struct ofp_action_header actions[0]; /* 0 or more actions associated with
+                                          the bucket - The action list length
+                                          is inferred from the length
+                                          of the bucket. */
+};
+
+/* Body of OFPMP_GROUP request. */
+struct ofp13_group_stats_request {
+    uint32_t group_id;       /* All groups if OFPG_ALL. */
+    uint8_t pad[4];          /* Align to 64 bits. */
+};
+
+/* Used in group stats replies. */
+struct ofp13_bucket_counter {
+    uint64_t packet_count;   /* Number of packets processed by bucket. */
+    uint64_t byte_count;     /* Number of bytes processed by bucket. */
+};
+
+/* Body of reply to OFPMP_GROUP request. */
+struct ofp13_group_stats {
+    uint16_t length;         /* Length of this entry. */
+    uint8_t pad[2];          /* Align to 64 bits. */
+    uint32_t group_id;       /* Group identifier. */
+    uint32_t ref_count;      /* Number of flows or groups that directly forward
+                              to this group. */
+    uint8_t pad2[4];         /* Align to 64 bits. */
+    uint64_t packet_count;   /* Number of packets processed by group. */
+    uint64_t byte_count;     /* Number of bytes processed by group. */
+    uint32_t duration_sec;   /* Time group has been alive in seconds. */
+    uint32_t duration_nsec;  /* Time group has been alive in nanoseconds beyond
+                              duration_sec. */
+    struct ofp13_bucket_counter bucket_stats[0]; /* One counter set per bucket. */
+};
+
+/* Body of reply to OFPMP_GROUP_DESC request. */
+struct ofp13_group_desc {
+    uint16_t length;              /* Length of this entry. */
+    uint8_t type;                 /* One of OFPGT_*. */
+    uint8_t pad;                  /* Pad to 64 bits. */
+    uint32_t group_id;            /* Group identifier. */
+    struct ofp13_bucket buckets[0];   /* List of buckets - 0 or more. */
+};
+
+/* Body of reply to OFPMP_GROUP_FEATURES request. Group features. */
+struct ofp13_group_features {
+    uint32_t  types;           /* Bitmap of (1 << OFPGT_*) values supported. */
+    uint32_t  capabilities;    /* Bitmap of OFPGFC_* capability supported. */
+    uint32_t  max_groups[4];   /* Maximum number of groups for each type. */
+    uint32_t  actions[4];      /* Bitmaps of (1 << OFPAT_*) values supported. */
+};
+
+/* Group setup and teardown (controller -> datapath). */
+struct ofp13_group_mod {
+    struct ofp_header header;
+    uint16_t command;             /* One of OFPGC_*. */
+    uint8_t type;                 /* One of OFPGT_*. */
+    uint8_t pad;                  /* Pad to 64 bits. */
+    uint32_t group_id;            /* Group identifier. */
+    struct ofp13_bucket buckets[0]; /* The length of the bucket array is inferred
+                                   from the length field in the header. */
+};
+
+/* Group numbering. Groups can use any number up to OFPG_MAX. */
+enum ofp_group {
+    /* Last usable group number. */
+    OFPG13_MAX        = 0xffffff00,
+    /* Fake groups. */
+    OFPG13_ALL        = 0xfffffffc,  /* Represents all groups for group deletecommands. */
+    OFPG13_ANY        = 0xffffffff   /* Special wildcard: no group specified. */
+};
+
+/* Group commands */
+enum ofp13_group_mod_command {
+    OFPGC13_ADD    = 0,       /* New group. */
+    OFPGC13_MODIFY = 1,       /* Modify all matching groups. */
+    OFPGC13_DELETE = 2,       /* Delete all matching groups. */
+};
+
+/* Group configuration flags */
+enum ofp_group_capabilities {
+    OFPGFC13_SELECT_WEIGHT   = 1 << 0,  /* Support weight for select groups */
+    OFPGFC13_SELECT_LIVENESS = 1 << 1,  /* Support liveness for select groups */
+    OFPGFC13_CHAINING        = 1 << 2,  /* Support chaining groups */
+    OFPGFC13_CHAINING_CHECKS = 1 << 3,  /* Check chaining for loops and delete */
+};
+
+/* Group types.  Values in the range [128, 255] are reserved for experimental
+ * use. */
+enum ofp13_group_type {
+    OFPGT13_ALL      = 0, /* All (multicast/broadcast) group.  */
+    OFPGT13_SELECT   = 1, /* Select group. */
+    OFPGT13_INDIRECT = 2, /* Indirect group. */
+    OFPGT13_FF       = 3, /* Fast failover group. */
+};
+
 /* ## ----------------- ## */
 /* ## OpenFlow Actions. ## */
 /* ## ----------------- ## */
@@ -1579,14 +1718,6 @@ struct ofp13_flow_mod {
     uint8_t pad[2];
     struct ofp13_match match;       /* Fields to match. Variable size. */
     //struct ofp_instruction instructions[0]; /* Instruction set */
-};
-
-enum ofp_group {
-		/* Last usable group number. */
-		OFPG13_MAX = 0xffffff00,
-		/* Fake groups. */
-		OFPG13_ALL = 0xfffffffc, /* Represents all groups for group delete commands. */
-		OFPG13_ANY = 0xffffffff  /* Special wildcard: no group specified. */
 };
 
 /* Send packet (controller -> datapath). */
