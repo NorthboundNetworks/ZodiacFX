@@ -31,7 +31,7 @@
 #define CONFIG_ZODIAC_H_
 
 
-#define VERSION "0.84"		// Firmware version number
+#define VERSION "0.85_A"		// Firmware version number
 
 #define TOTAL_PORTS 4		// Total number of physical ports on the Zodiac FX
 
@@ -48,7 +48,6 @@
 #define MAX_BUCKETS 4	// Maximum number of group action buckets for OpenFlow 1.3 and higher
 
 #define HB_INTERVAL	2	// Number of seconds between heartbeats
-
 #define HB_TIMEOUT	6	// Number of seconds to wait when there is no response from the controller
 
 #define MAX_OF_STATS	15		// Maximum number of flows to send to controller

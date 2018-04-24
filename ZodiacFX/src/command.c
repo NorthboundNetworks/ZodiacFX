@@ -451,6 +451,9 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 
 		// Force OpenFlow version
 		reset_config.of_version = 0;			// Force version disabled
+		
+		//How often to retrieve stats from switch
+		reset_config.stats_interval = 1;		// Default 1 second
 
 		memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existing MAC address so it is not reset
 		memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
@@ -485,6 +488,7 @@ void command_root(char *command, char *param1, char *param2, char *param3)
 		}
 		if (Zodiac_Config.ethtype_filter == 1) printf(" EtherType Filtering: Enabled\r\n");
 		if (Zodiac_Config.ethtype_filter != 1) printf(" EtherType Filtering: Disabled\r\n");
+		printf(" Port Stats Interval: %d\r\n" , Zodiac_Config.stats_interval);
 		printf("\r\n\n");
 		return;
 	}
@@ -589,6 +593,7 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		}
 		if (Zodiac_Config.ethtype_filter == 1) printf(" EtherType Filtering: Enabled\r\n");
 		if (Zodiac_Config.ethtype_filter != 1) printf(" EtherType Filtering: Disabled\r\n");
+		printf(" Port Stats Interval: %d\r\n" , Zodiac_Config.stats_interval);
 		printf("\r\n-------------------------------------------------------------------------\r\n\n");
 		return;
 	}
@@ -942,6 +947,9 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		// Force OpenFlow version
 		reset_config.of_version = 0;			// Force version disabled
 
+		//How often to retrieve stats from switch
+		reset_config.stats_interval = 1;		// Default 1 second
+		
 		memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existng MAC address so it is not reset
 		memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
 		saveConfig();
@@ -998,7 +1006,23 @@ void command_config(char *command, char *param1, char *param2, char *param3)
 		}
 		return;
 	}
+
+	// Set port stats update interval
+	if (strcmp(command, "set")==0 && strcmp(param1, "stats-interval")==0)
+	{
+		int interval;
+		sscanf(param2, "%d", &interval);
+		if (interval < 31 && interval > -1) 
+		{
+			Zodiac_Config.stats_interval = interval;
+			printf("Port stats interval set to %d\r\n" , Zodiac_Config.stats_interval);
+		} else {
+			printf("Invalid value\r\n");
+		}
+		return;
+	}
 	
+		
 	// Unknown Command
 	printf("Unknown command\r\n");
 	return;

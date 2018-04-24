@@ -72,6 +72,7 @@ struct zodiac_config {
 	uint8_t failstate;
 	uint8_t of_version;
 	uint8_t ethtype_filter;
+	uint8_t stats_interval;
 } PACK_STRUCT_STRUCT;
 PACK_STRUCT_END
 
