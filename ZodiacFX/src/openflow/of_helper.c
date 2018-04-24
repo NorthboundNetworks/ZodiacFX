@@ -68,7 +68,8 @@ extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
 
 // Local Variables
-uint8_t timer_alt;
+uint8_t timer_alt = 0;
+uint8_t update_interval = 0;
 static uint16_t VLAN_VID_MASK = 0x0fff;
 
 static inline uint64_t (htonll)(uint64_t n)
@@ -139,21 +140,24 @@ void nnOF_timer(void)
 {
 	totaltime ++; // Because this is called every 500ms totaltime is actually 2 x the real time
 	// Round robin the timer events so they don't have such a big impact on switching
-	if (timer_alt == 0){
-		update_port_stats();
-		timer_alt = 1;
-	} else if (timer_alt == 1){
-		update_port_status();
-		// If port status has changed send a port status message
-		for (int x=0;x<TOTAL_PORTS;x++)
-		{
-			if (last_port_status[x] != port_status[x] && OF_Version == 1 && Zodiac_Config.of_port[x] == 1) port_status_message10(x);
-			if (last_port_status[x] != port_status[x] && OF_Version == 4 && Zodiac_Config.of_port[x] == 1) port_status_message13(x);
+	update_interval ++;
+	if ((update_interval/2) > Zodiac_Config.stats_interval)
+	{
+		if (timer_alt == 0){
+			if (Zodiac_Config.stats_interval > 0) update_port_stats();
+			timer_alt = 1;
+		} else if (timer_alt == 1){
+			flow_timeouts();
+			if (Zodiac_Config.stats_interval > 0) update_port_status();
+			// If port status has changed send a port status message
+			for (int x=0;x<TOTAL_PORTS;x++)
+			{
+				if (last_port_status[x] != port_status[x] && OF_Version == 1 && Zodiac_Config.of_port[x] == 1) port_status_message10(x);
+				if (last_port_status[x] != port_status[x] && OF_Version == 4 && Zodiac_Config.of_port[x] == 1) port_status_message13(x);
+			}
+			timer_alt = 0;
 		}
-		timer_alt = 2;
-	} else if (timer_alt == 2){
-		flow_timeouts();
-		timer_alt = 0;
+		update_interval = 2;
 	}
 	return;
 }
