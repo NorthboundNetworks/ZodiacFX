@@ -113,6 +113,23 @@ struct meter_sample_array
 	struct		policing_sample sample[POLICING_SAMPLES];
 };
 
+struct group_entry13 {
+	int active;
+	uint8_t type;
+	uint8_t pad;
+	uint8_t bucket_id;
+	uint64_t packet_count;
+	uint64_t byte_count;
+	uint64_t time_added;
+};
+
+struct action_bucket {
+	int active;
+	uint64_t packet_count;
+	uint64_t byte_count;
+	uint8_t data[64];
+};
+
 void task_openflow(void);
 void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
 void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port);
@@ -122,7 +139,7 @@ void of13_message(struct ofp_header *ofph, int size, int len);
 void multi_flow_more_reply13(void);
 void barrier10_reply(uint32_t xid);
 void barrier13_reply(uint32_t xid);
-void sendtcp(const void *buffer, u16_t len);
+void sendtcp(const void *buffer, uint16_t len, uint8_t push);
 void flowrem_notif10(int flowid, uint8_t reason);
 void flowrem_notif13(int flowid, uint8_t reason);
 void port_status_message10(uint8_t port);

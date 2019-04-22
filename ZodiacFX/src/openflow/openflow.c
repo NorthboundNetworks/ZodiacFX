@@ -50,6 +50,8 @@ extern struct ofp13_port_stats phys13_port_stats[TOTAL_PORTS];
 struct ofp_switch_config Switch_config;
 struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
+struct group_entry13 group_entry13[MAX_GROUPS];
+struct action_bucket action_bucket[MAX_BUCKETS];
 uint8_t *ofp13_oxm_match[MAX_FLOWS_13];
 uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
@@ -247,7 +249,7 @@ void OF_hello(void)
 	ofph.length = HTONS(sizeof(ofph));
 	ofph.xid = HTONL(1);
 	TRACE("openflow.c: Sending HELLO, version 0x%d", ofph.version);
-	sendtcp(&ofph, sizeof(ofph));
+	sendtcp(&ofph, sizeof(ofph), 1);
 	return;
 }
 
@@ -265,7 +267,7 @@ void echo_reply(uint32_t xid)
 	echo.type   = OFPT10_ECHO_REPLY;
 	echo.xid = xid;
 	TRACE("openflow.c: Sent ECHO reply");
-	sendtcp(&echo, sizeof(echo));
+	sendtcp(&echo, sizeof(echo), 1);
 	return;
 }
 
@@ -281,7 +283,7 @@ void echo_request(void)
 	echo.type   = OFPT10_ECHO_REQUEST;
 	echo.xid = 1234;
 	TRACE("openflow.c: Sent ECHO request");
-	sendtcp(&echo, sizeof(echo));
+	sendtcp(&echo, sizeof(echo), 1);
 	return;
 }
 
@@ -292,7 +294,7 @@ void echo_request(void)
 *	@param len - size of the packet to send
 *
 */
-void sendtcp(const void *buffer, u16_t len)
+void sendtcp(const void *buffer, uint16_t len, uint8_t push)
 {
 	err_t err;
 	uint16_t buf_size;
@@ -305,8 +307,17 @@ void sendtcp(const void *buffer, u16_t len)
 	}
 	
 	buf_size = tcp_sndbuf(tcp_pcb);
-	err = tcp_write(tcp_pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
-	TRACE("openflow.c: Sending %d bytes to TCP stack, %d available in buffer", len, buf_size);
+	if (push == 0)
+	{
+		TRACE("openflow.c: Sending %d bytes to TCP stack, %d available in buffer", len, buf_size);
+		err = tcp_write(tcp_pcb, buffer, len, TCP_WRITE_FLAG_COPY + TCP_WRITE_FLAG_MORE);
+	
+	} else {
+		TRACE("openflow.c: Sending %d bytes immediately, %d available in buffer", len, buf_size);
+		err = tcp_write(tcp_pcb, buffer, len, TCP_WRITE_FLAG_COPY);
+		tcp_output(tcp_pcb);
+	}
+
 	return;
 }
 

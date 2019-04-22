@@ -139,6 +139,7 @@ int main (void)
 	membag_init();
 
 	loadConfig(); // Load Config
+	if (Zodiac_Config.stats_interval > 30) Zodiac_Config.stats_interval = 1;	// If this value has never been set make it the default of 1
 
 	IP4_ADDR(&x_ip_addr, Zodiac_Config.IP_address[0], Zodiac_Config.IP_address[1],Zodiac_Config.IP_address[2], Zodiac_Config.IP_address[3]);
 	IP4_ADDR(&x_net_mask, Zodiac_Config.netmask[0], Zodiac_Config.netmask[1],Zodiac_Config.netmask[2], Zodiac_Config.netmask[3]);

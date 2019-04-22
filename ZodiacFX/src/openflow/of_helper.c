@@ -58,6 +58,8 @@ extern struct flows_counter flow_counters[MAX_FLOWS_13];
 extern struct table_counter table_counters[MAX_TABLES];
 extern struct meter_entry13 *meter_entry[MAX_METER_13];
 extern struct meter_band_stats_array band_stats_array[MAX_METER_13];
+extern struct group_entry13 group_entry13[MAX_GROUPS];
+extern struct action_bucket action_bucket[MAX_BUCKETS];
 extern struct ofp_flow_mod *flow_match10[MAX_FLOWS_10];
 extern struct flow_tbl_actions *flow_actions10[MAX_FLOWS_10];
 extern struct ofp13_flow_mod *flow_match13[MAX_FLOWS_13];
@@ -66,7 +68,8 @@ extern uint8_t *ofp13_oxm_inst[MAX_FLOWS_13];
 extern uint16_t ofp13_oxm_inst_size[MAX_FLOWS_13];
 
 // Local Variables
-uint8_t timer_alt;
+uint8_t timer_alt = 0;
+uint8_t update_interval = 0;
 static uint16_t VLAN_VID_MASK = 0x0fff;
 
 static inline uint64_t (htonll)(uint64_t n)
@@ -137,21 +140,24 @@ void nnOF_timer(void)
 {
 	totaltime ++; // Because this is called every 500ms totaltime is actually 2 x the real time
 	// Round robin the timer events so they don't have such a big impact on switching
-	if (timer_alt == 0){
-		update_port_stats();
-		timer_alt = 1;
-	} else if (timer_alt == 1){
-		update_port_status();
-		// If port status has changed send a port status message
-		for (int x=0;x<TOTAL_PORTS;x++)
-		{
-			if (last_port_status[x] != port_status[x] && OF_Version == 1 && Zodiac_Config.of_port[x] == 1) port_status_message10(x);
-			if (last_port_status[x] != port_status[x] && OF_Version == 4 && Zodiac_Config.of_port[x] == 1) port_status_message13(x);
+	update_interval ++;
+	if ((update_interval/2) > Zodiac_Config.stats_interval)
+	{
+		if (timer_alt == 0){
+			if (Zodiac_Config.stats_interval > 0) update_port_stats();
+			timer_alt = 1;
+		} else if (timer_alt == 1){
+			flow_timeouts();
+			if (Zodiac_Config.stats_interval > 0) update_port_status();
+			// If port status has changed send a port status message
+			for (int x=0;x<TOTAL_PORTS;x++)
+			{
+				if (last_port_status[x] != port_status[x] && OF_Version == 1 && Zodiac_Config.of_port[x] == 1) port_status_message10(x);
+				if (last_port_status[x] != port_status[x] && OF_Version == 4 && Zodiac_Config.of_port[x] == 1) port_status_message13(x);
+			}
+			timer_alt = 0;
 		}
-		timer_alt = 2;
-	} else if (timer_alt == 2){
-		flow_timeouts();
-		timer_alt = 0;
+		update_interval = 2;
 	}
 	return;
 }
@@ -407,7 +413,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_ETH_DST_W:
 				for (int j=0; j<6; j++ )
 				{
-					if (oxm_value[j] != eth_dst[j] & oxm_value[6+j]){
+					if ((oxm_value[j] & oxm_value[6+j]) != eth_dst[j] & oxm_value[6+j]){
 						priority_match = -1;
 					}
 				}
@@ -423,7 +429,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_ETH_SRC_W:
 				for (int j=0; j<6; j++ )
 				{
-					if (oxm_value[j] != eth_src[j] & oxm_value[6+j]){
+					if ((oxm_value[j] & oxm_value[6+j]) != eth_src[j] & oxm_value[6+j]){
 						priority_match = -1;
 					}
 				}
@@ -570,13 +576,9 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 					priority_match = -1;
 				}
 				break;
-				if (!(fields->isVlanTag && (pBuffer[14]>>5) == oxm_value[0]))
-				{
-					priority_match = -1;
-				}
 
 				case OXM_OF_MPLS_LABEL:
-				if (fields->isMPLSTag && fields->mpls_label != ntohl(*(uint32_t*)oxm_value))
+				if (fields->isMPLSTag && fields->mpls_label != *(uint32_t*)oxm_value)
 				{
 					priority_match = -1;
 				}
@@ -596,6 +598,9 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				}
 				break;
 				
+				default:
+				priority_match = -1;
+				break;
 			}
 
 			if (priority_match == -1)
@@ -1197,6 +1202,13 @@ void clear_flows(void)
 		{
 			meter_entry[x] = NULL;
 		}
+	}
+	
+	/* Clear Groups*/
+	for(int x=0; x<MAX_GROUPS;x++)
+	{
+		group_entry13[x].active = false;
+		action_bucket[group_entry13[x].bucket_id-1].active = false;
 	}
 }
 
