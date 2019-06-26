@@ -746,6 +746,9 @@ static err_t http_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 
 					// Force OpenFlow version
 					reset_config.of_version = 0;			// Force version disabled
+					
+					//How often to retrieve stats from switch
+					reset_config.stats_interval = 1;		// Default 1 second
 
 					memcpy(&reset_config.MAC_address, &Zodiac_Config.MAC_address, 6);		// Copy over existing MAC address so it is not reset
 					memcpy(&Zodiac_Config, &reset_config, sizeof(struct zodiac_config));
