@@ -81,7 +81,7 @@ bool rcv_freq;
 // Internal Functions
 void OF_hello(void);
 void echo_request(void);
-void echo_reply(uint32_t xid);
+void echo_reply(struct ofp_header *ofph, int size, int len);
 err_t TCPready(void *arg, struct tcp_pcb *tpcb, err_t err);
 void tcp_error(void * arg, err_t err);
 static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
@@ -190,7 +190,7 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 				break;
 
 				case OFPT10_ECHO_REQUEST:
-					echo_reply(ofph->xid);
+					echo_reply(ofph, size, len);
 				break;
 
 				default:
@@ -259,15 +259,12 @@ void OF_hello(void)
 *	@param xid - transaction ID
 *
 */
-void echo_reply(uint32_t xid)
+void echo_reply(struct ofp_header *ofph, int size, int len)
 {
-	struct ofp_header echo;
-	echo.version = OF_Version;
-	echo.length = HTONS(sizeof(echo));
-	echo.type   = OFPT10_ECHO_REPLY;
-	echo.xid = xid;
+	// Change the message type to Echo Reply and return any data that was sent
+	ofph->type   = OFPT10_ECHO_REPLY;
 	TRACE("openflow.c: Sent ECHO reply");
-	sendtcp(&echo, sizeof(echo), 1);
+	sendtcp(ofph, len, 1);
 	return;
 }
 

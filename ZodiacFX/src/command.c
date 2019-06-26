@@ -1958,6 +1958,7 @@ void printhelp(void)
 	printf(" delete vlan-port <port>\r\n");
 	printf(" set of-version <version(0|1|4)>\r\n");
 	printf(" set ethertype-filter <enable|disable>\r\n");
+	printf(" set stats-interval <seconds>\r\n");
 	printf(" factory reset\r\n");
 	printf(" exit\r\n");
 	printf("\r\n");
