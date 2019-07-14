@@ -339,7 +339,7 @@ void nnOF10_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	return;	// Should only get to here if the action is unknown
 }
 
-void of10_message(struct ofp_header *ofph, int size, int len)
+void of10_message(struct ofp_header *ofph, int len)
 {
 	struct ofp_stats_request *stats_req;
 	switch(ofph->type)
