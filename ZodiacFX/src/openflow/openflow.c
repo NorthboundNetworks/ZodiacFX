@@ -75,7 +75,6 @@ int tcp_con_state = -1;
 int tcp_wait = 0;
 int totaltime = 0;
 int heartbeat = 0;
-int multi_pos;
 uint32_t reply_more_xid = 0;
 bool reply_more_flag = false;
 bool rcv_freq;
@@ -154,7 +153,6 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 		while (off < len)
 		{
 			ofph = &packetbuffer[off];
-			if (off == 0) multi_pos = 0;
 			if (ofph->length == 0 || ofph->version == 0){
 				return ERR_OK;	//Not an OpenFlow packet
 			}
@@ -197,7 +195,7 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 
 				default:
 					if (OF_Version == 0x01) of10_message(ofph, ofp_len);
-					if (OF_Version == 0x04) of13_message(ofph, off, ofp_len);
+					if (OF_Version == 0x04) of13_message(ofph, ofp_len);
 			};
 
 		}
