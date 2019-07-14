@@ -79,6 +79,12 @@ uint32_t reply_more_xid = 0;
 bool reply_more_flag = false;
 bool rcv_freq;
 
+// Buffer for multi-segment messages
+#define PACKET_BUFFER_SIZE		(2*TCP_MSS+64)	// TDDO: Ideally would be (2*1536)
+static uint8_t packet_buffer[PACKET_BUFFER_SIZE];
+static unsigned int packet_buffer_off = 0;
+static unsigned int packet_buffer_len = 0;
+
 // Internal Functions
 void OF_hello(void);
 void echo_request(void);
@@ -134,41 +140,43 @@ void nnOF_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 */
 static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 {
-	char *pc;
-	char packetbuffer[1536];
 	heartbeat = 0;	// Reset heartbeat counter
 
 	if (err == ERR_OK && p != NULL)
 	{
-		tcp_recved(tpcb, p->tot_len);
-		pc=(char *)p->payload;	//pointer to the payload
-		int len = p->tot_len;	//size of the payload
-		for (int i=0; i<len; i++)packetbuffer[i] = pc[i];	//copy to our own buffer
-		pbuf_free(p);	//Free the packet buffer
-		TRACE("openflow.c: OpenFlow data received (%d bytes)", len);
-		struct ofp_header *ofph;
-		int off = 0;
-		int ofp_len = 0;
+		int plen = p->tot_len;	//size of the payload
+		if (packet_buffer_len + plen > PACKET_BUFFER_SIZE) {
+			TRACE("openflow.c: packet buffer exceeded, aborting!!!");
+			return ERR_ABRT;
+		}
+		memcpy(&packet_buffer[packet_buffer_len], p->payload, plen);	// append to our own buffer
+		packet_buffer_len += plen;
+		TRACE("openflow.c: OpenFlow data received (%d bytes)", plen);
 
-		while (off < len)
+		// Accept the TCP data and release the packet
+		tcp_recved(tpcb, plen);
+		pbuf_free(p);
+
+		while (packet_buffer_off < packet_buffer_len)
 		{
-			ofph = &packetbuffer[off];
+			struct ofp_header *ofph = &packet_buffer[packet_buffer_off];
 			if (ofph->length == 0 || ofph->version == 0){
-				return ERR_OK;	//Not an OpenFlow packet
+				TRACE("openflow.c: Invalid OpenFlow packet, aborting!");
+				return ERR_ABRT;
 			}
-			ofp_len = htons(ofph->length);
-			
-			if (ofph->version > 6 || ofph->type > 30) //	Invalid OpenFlow message
+			if (ofph->version > 6 || ofph->type > 30)
 			{
-				TRACE("openflow.c: Invalid OpenFlow command, ignoring!");
-				return ERR_OK;
+				TRACE("openflow.c: Invalid OpenFlow packet values, aborting!");
+				return ERR_ABRT;
 			}
-			off = off + ofp_len;
-			if (off > len) // corrupt OpenFlow command
+
+			int ofp_len = htons(ofph->length);
+			if ((packet_buffer_off + ofp_len) > packet_buffer_len)
 			{
-				TRACE("openflow.c: Corrupt OpenFlow Message!!!");
+				// TRACE("openflow.c: Partial OpenFlow message - waiting for more data...");
 				break;
 			}
+			packet_buffer_off += ofp_len;
 			TRACE("openflow.c: Processing %d byte OpenFlow message %u", ofp_len, htonl(ofph->xid));
 
 			switch(ofph->type)
@@ -197,7 +205,17 @@ static err_t of_receive(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t e
 					if (OF_Version == 0x01) of10_message(ofph, ofp_len);
 					if (OF_Version == 0x04) of13_message(ofph, ofp_len);
 			};
+		}
 
+		if (packet_buffer_off == packet_buffer_len) {
+			packet_buffer_off = 0;
+			packet_buffer_len = 0;
+		} else {
+			unsigned int rem = packet_buffer_len - packet_buffer_off;
+			memcpy(packet_buffer, &packet_buffer[packet_buffer_off], rem);
+			packet_buffer_off = 0;
+			packet_buffer_len = rem;
+			TRACE("openflow.c: Partial OpenFlow message - keeping %d bytes", rem);
 		}
 	} else {
 		pbuf_free(p);
@@ -405,6 +423,8 @@ void task_openflow(void)
 */
 err_t TCPready(void *arg, struct tcp_pcb *tpcb, err_t err)
 {
+	packet_buffer_off = 0;
+	packet_buffer_len = 0;
 	tcp_con_state = true;
 	tcp_recv(tpcb, of_receive);
 	tcp_poll(tpcb, NULL, 4);
