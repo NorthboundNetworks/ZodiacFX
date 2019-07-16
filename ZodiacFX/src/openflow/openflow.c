@@ -80,7 +80,7 @@ bool reply_more_flag = false;
 bool rcv_freq;
 
 // Buffer for multi-segment messages
-#define PACKET_BUFFER_SIZE		(2*TCP_MSS+64)	// TDDO: Ideally would be (2*1536)
+#define PACKET_BUFFER_SIZE		(2*TCP_MSS+64)	// TODO: Ideally would be (2*1536)
 static uint8_t packet_buffer[PACKET_BUFFER_SIZE];
 static unsigned int packet_buffer_off = 0;
 static unsigned int packet_buffer_len = 0;
