@@ -387,11 +387,15 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 		// If the flow has no match fields (full wild) it is an automatic match
 		if (ofp13_oxm_match[i] ==  NULL)
 		{
-			if (matched_flow == -1 || (ntohs(flow_match13[i]->priority) > ntohs(flow_match13[matched_flow]->priority))) matched_flow = i;
+			if (matched_flow == -1 ||
+				(ntohs(flow_match13[i]->priority) > ntohs(flow_match13[matched_flow]->priority)))
+				matched_flow = i;
 			continue;
 		}
 		// If this flow is of a lower priority then one that is already match then there is no point going through a check.
-		if (matched_flow > -1 && (ntohs(flow_match13[matched_flow]->priority) >= ntohs(flow_match13[i]->priority))) continue;
+		if (matched_flow > -1 &&
+			(ntohs(flow_match13[matched_flow]->priority) >= ntohs(flow_match13[i]->priority)))
+			continue;
 
 		// Main flow match loop
 		priority_match = 0;
@@ -422,7 +426,9 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_ETH_DST_W:
 				for (int j=0; j<6; j++ )
 				{
-					if ((oxm_value[j] & oxm_value[6+j]) != eth_dst[j] & oxm_value[6+j]){
+					if ((oxm_value[j] & oxm_value[6+j]) !=
+						(eth_dst[j] & oxm_value[6+j]))
+					{
 						priority_match = -1;
 					}
 				}
@@ -438,7 +444,9 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_ETH_SRC_W:
 				for (int j=0; j<6; j++ )
 				{
-					if ((oxm_value[j] & oxm_value[6+j]) != eth_src[j] & oxm_value[6+j]){
+					if ((oxm_value[j] & oxm_value[6+j]) !=
+						(eth_src[j] & oxm_value[6+j]))
+					{
 						priority_match = -1;
 					}
 				}
@@ -447,7 +455,8 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				case OXM_OF_ETH_TYPE:
 				if (fields->eth_prot != *(uint16_t*)oxm_value)
 				{
-					if(*(uint16_t*)oxm_value != htons(0x8847) && *(uint16_t*)oxm_value != htons(0x8848))
+					if(*(uint16_t*)oxm_value != htons(0x8847) &&
+					   *(uint16_t*)oxm_value != htons(0x8848))
 					{
 						priority_match = -1;
 					} else {
@@ -461,9 +470,11 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 
 				case OXM_OF_IP_DSCP:
 				priority_match = -1;
-				if (fields->eth_prot == htons(0x0800)){
+				if (fields->eth_prot == htons(0x0800))
+				{
 					struct ip_hdr *iph = fields->payload;
-					if(IPH_TOS(iph)>>2 == oxm_value[0]){
+					if(IPH_TOS(iph)>>2 == oxm_value[0])
+					{
 						priority_match = 0;
 					}
 				}
@@ -471,9 +482,11 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 
 				case OXM_OF_IP_ECN:
 				priority_match = -1;
-				if (fields->eth_prot == htons(0x0800)){
+				if (fields->eth_prot == htons(0x0800))
+				{
 					struct ip_hdr *iph = fields->payload;
-					if((IPH_TOS(iph)&03) == oxm_value[0]){
+					if((IPH_TOS(iph)&03) == oxm_value[0])
+					{
 						priority_match = 0;
 					}
 				}
@@ -525,28 +538,32 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_TCP_SRC:
-				if (!(fields->ip_prot == 6 && fields->tp_src == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 6 &&
+					  fields->tp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_TCP_DST:
-				if (!(fields->ip_prot == 6 && fields->tp_dst == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 6 &&
+					  fields->tp_dst == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_SRC:
-				if (!(fields->ip_prot == 17 && fields->tp_src == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 17 &&
+					  fields->tp_src == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_UDP_DST:
-				if (!(fields->ip_prot == 17 && fields->tp_dst == *(uint16_t*)oxm_value))
+				if (!(fields->ip_prot == 17 &&
+					  fields->tp_dst == *(uint16_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
@@ -556,7 +573,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				if (fields->isVlanTag)
 				{
 					oxm_value16 = htons(OFPVID_PRESENT | ntohs(fields->vlanid));
-				}else{
+				} else {
 					oxm_value16 = htons(OFPVID_NONE);
 				}
 				if (oxm_value16 != *(uint16_t*)oxm_value)
@@ -569,7 +586,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				if (fields->isVlanTag)
 				{
 					oxm_value16 = htons(OFPVID_PRESENT | ntohs(fields->vlanid));
-				}else{
+				} else {
 					oxm_value16 = htons(OFPVID_NONE);
 				}
 				oxm_value16 &= *(uint16_t*)(oxm_value+2);
@@ -580,28 +597,32 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_VLAN_PCP:
-				if (!(fields->isVlanTag && (pBuffer[14]>>5) == oxm_value[0]))
+				if (!(fields->isVlanTag &&
+					  (pBuffer[14]>>5) == oxm_value[0]))
 				{
 					priority_match = -1;
 				}
 				break;
 
 				case OXM_OF_MPLS_LABEL:
-				if (!(fields->isMPLSTag && ntohl(fields->mpls_label) == *(uint32_t*)oxm_value))
+				if (!(fields->isMPLSTag &&
+					  ntohl(fields->mpls_label) == *(uint32_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
 				break;
 							
 				case OXM_OF_MPLS_TC:
-				if (fields->isMPLSTag && fields->mpls_tc != *oxm_value)
+				if (fields->isMPLSTag &&
+					fields->mpls_tc != *oxm_value)
 				{
 					priority_match = -1;
 				}
 				break;
 				
 				case OXM_OF_MPLS_BOS:
-				if (fields->isMPLSTag && fields->mpls_bos != *oxm_value)
+				if (fields->isMPLSTag &&
+					fields->mpls_bos != *oxm_value)
 				{
 					priority_match = -1;
 				}
@@ -696,7 +717,8 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				} else {
 					for (int j=0; j<6; j++ )
 					{
-						if ((oxm_value[j] & oxm_value[6+j]) != fields->arp_sha[j] & oxm_value[6+j]){
+						if ((oxm_value[j] & oxm_value[6+j]) !=
+							fields->arp_sha[j] & oxm_value[6+j]){
 							priority_match = -1;
 						}
 					}
@@ -722,7 +744,8 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				} else {
 					for (int j=0; j<6; j++ )
 					{
-						if ((oxm_value[j] & oxm_value[6+j]) != fields->arp_tha[j] & oxm_value[6+j]){
+						if ((oxm_value[j] & oxm_value[6+j]) !=
+							fields->arp_tha[j] & oxm_value[6+j]){
 							priority_match = -1;
 						}
 					}
@@ -731,6 +754,8 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 												
 				default:
 				priority_match = -1;
+				TRACE("of_helper.c: flow %d: unsupported field (0x%08x) - flow ignored !",
+				      i+1, field);
 				break;
 			}
 
