@@ -65,7 +65,6 @@ extern struct table_counter table_counters[MAX_TABLES];
 extern uint8_t port_status[TOTAL_PORTS];
 extern struct ofp_switch_config Switch_config;
 extern uint8_t shared_buffer[SHARED_BUFFER_LEN];
-extern int multi_pos;
 extern uint8_t NativePortMatrix;
 extern bool reply_more_flag;
 extern uint32_t reply_more_xid;
@@ -356,14 +355,13 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						mpls[2] &= 0xFE; // clear bottom stack bit
 					}
 					struct ofp13_action_push *push = (struct ofp13_action_push*)act_hdr;
-					memmove(fields.payload + 4, fields.payload-2, packet_size - 12);
+					memmove(fields.payload + 4, fields.payload, packet_size - 12);
 					memcpy(fields.payload - 2, &push->ethertype, 2);
 					memcpy(fields.payload, mpls, 4);
-					fields.payload += 6;
-					packet_size += 6;
-					*ul_size += 6;
-					fields.eth_prot = push->ethertype;
-					fields.isMPLSTag = true;
+					fields.payload += 4;
+					packet_size += 4;
+					*ul_size += 4;
+					packet_fields_parser(p_uc_data, &fields);
 				}
 				break;
 
@@ -371,10 +369,11 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 				case OFPAT13_POP_MPLS:
 				if(fields.isMPLSTag){
 					struct ofp13_action_pop_mpls *pop = (struct ofp13_action_pop_mpls*)act_hdr;
-					memmove(p_uc_data+12, p_uc_data+18, packet_size-18);
-					fields.payload -= 6;
-					packet_size -= 6;
-					*ul_size -= 6;
+					memmove(p_uc_data+14, p_uc_data+18, packet_size-16);
+					fields.payload -= 4;
+					memcpy(fields.payload - 2, &pop->ethertype, 2);
+					packet_size -= 4;
+					*ul_size -= 4;
 					packet_fields_parser(p_uc_data, &fields);
 				}
 				break;
@@ -663,9 +662,11 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 	return;
 }
 
-void of13_message(struct ofp_header *ofph, int size, int len)
+void of13_message(struct ofp_header *ofph, int len)
 {
 	struct ofp13_multipart_request *multi_req;
+	int multi_len;
+
 	TRACE("openflow_13.c: %u: OpenFlow message received type = %d", htonl(ofph->xid), ofph->type);
 	switch(ofph->type)
 	{
@@ -697,73 +698,84 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 
 		case OFPT13_MULTIPART_REQUEST:
 		multi_req  = (struct ofp13_multipart_request *) ofph;
+		if(multi_req->flags != 0)
+		{
+			TRACE("openflow_13.c: unsupported MULTIPART 'flags' request: %04x", multi_req->flags);
+			return;
+		}
+
 		if ( ntohs(multi_req->type) == OFPMP13_DESC )
 		{
-			multi_pos += multi_desc_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_desc_reply13(shared_buffer, multi_req);
 		}
 
 		if ( ntohs(multi_req->type) == 	OFPMP13_FLOW )
 		{
-			multi_pos += multi_flow_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_flow_reply13(shared_buffer, multi_req);
 		}
 		
 		if ( ntohs(multi_req->type) == OFPMP13_AGGREGATE )
 		{
-			multi_pos += multi_aggregate_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_aggregate_reply13(shared_buffer, multi_req);
 		}
 		
 		if ( ntohs(multi_req->type) == OFPMP13_PORT_STATS )
 		{
-			multi_pos += multi_portstats_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_portstats_reply13(shared_buffer, multi_req);
 		}
 
 		if ( ntohs(multi_req->type) == OFPMP13_PORT_DESC )
 		{
-			multi_pos += multi_portdesc_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_portdesc_reply13(shared_buffer, multi_req);
 		}
 
 		if ( ntohs(multi_req->type) == OFPMP13_METER )
 		{
-			multi_pos += multi_meter_stats_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_meter_stats_reply13(shared_buffer, multi_req);
 		}
 		
 		if ( ntohs(multi_req->type) == OFPMP13_METER_CONFIG )
 		{
-			multi_pos += multi_meter_config_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_meter_config_reply13(shared_buffer, multi_req);
 		}
 		
 		if ( ntohs(multi_req->type) == OFPMP13_METER_FEATURES )
 		{
-			multi_pos += multi_meter_features_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_meter_features_reply13(shared_buffer, multi_req);
 		}
 		
 		if ( ntohs(multi_req->type) == OFPMP13_GROUP_FEATURES )
 		{
-			multi_pos += multi_group_features_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_group_features_reply13(shared_buffer, multi_req);
 		}
 
 		if ( ntohs(multi_req->type) == OFPMP13_GROUP_DESC )
 		{
-			multi_pos += multi_group_desc_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_group_desc_reply13(shared_buffer, multi_req);
 		}
 
 		if ( ntohs(multi_req->type) == OFPMP13_GROUP )
 		{
-			multi_pos += multi_group_stats_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_group_stats_reply13(shared_buffer, multi_req);
 		}
 
 		if ( htons(multi_req->type) == OFPMP13_TABLE_FEATURES )
 		{
 			/**** Floodlight v1.2 crashes when it gets this reply, removed for the moment. *****/
-			multi_pos += multi_tablefeat_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_tablefeat_reply13(shared_buffer, multi_req);
 			//of_error13(ofph, OFPET13_BAD_REQUEST, OFPBRC13_BAD_TYPE);
 		}
 
 		if ( ntohs(multi_req->type) == OFPMP13_TABLE )
 		{
-			multi_pos += multi_table_reply13(&shared_buffer[multi_pos], multi_req);
+			multi_len = multi_table_reply13(shared_buffer, multi_req);
 		}
 
+
+		if (multi_len !=0)
+		{
+			sendtcp(shared_buffer, multi_len, 0);
+		}
 		break;
 
 		case OFPT10_PACKET_OUT:
@@ -778,11 +790,6 @@ void of13_message(struct ofp_header *ofph, int size, int len)
 		meter_mod13(ofph);
 		break;
 	};
-
-	if (size == len && multi_pos !=0)
-	{
-		sendtcp(&shared_buffer, multi_pos, 0);
-	}
 	return;
 }
 
@@ -1091,8 +1098,9 @@ int multi_portdesc_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 int multi_table_reply13(uint8_t *buffer, struct ofp13_multipart_request *msg)
 {
 	int len = offsetof(struct ofp13_multipart_reply, body) + sizeof(struct ofp13_table_stats) * MAX_TABLES;
-	if (SHARED_BUFFER_LEN - multi_pos < len){
-			return 0; // guard for buffer overrun
+	if (SHARED_BUFFER_LEN < len) { // guard for buffer overrun
+		TRACE("openflow_13.c: multi-table reply space exceeded, ignoring");
+		return 0;
 	}
 	bzero(buffer, len);
 	struct ofp13_multipart_reply *reply = buffer;

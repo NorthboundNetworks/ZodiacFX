@@ -436,7 +436,7 @@ void switch_init(void)
 				uint8_t vlanmaplow;
 				vlanmaphigh = 16; // Set valid bit
 				if (Zodiac_Config.vlan_list[x].uVlanType == 2) vlanmaphigh += 8; // Port 5 (CPU);
-				switch_write(80,2);	// remove any VLAN tags going to the CPU
+				//switch_write(80,2);	// remove any VLAN tags going to the CPU
 				if (Zodiac_Config.vlan_list[x].portmap[3] == 1) // Port 4
 				{
 					vlanmaphigh += 4;

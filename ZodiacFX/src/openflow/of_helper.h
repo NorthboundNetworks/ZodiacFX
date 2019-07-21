@@ -44,6 +44,11 @@ struct packet_fields
 	uint16_t vlanid;
 	uint32_t ip_src;
 	uint32_t ip_dst;
+	uint32_t arp_spa;
+	uint32_t arp_tpa;
+	uint32_t arp_op;
+	uint8_t arp_sha[6];
+	uint8_t arp_tha[6];
 	uint32_t mpls_label;
 	uint8_t mpls_tc;
 	uint8_t mpls_bos;

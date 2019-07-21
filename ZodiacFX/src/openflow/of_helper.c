@@ -336,6 +336,15 @@ void packet_fields_parser(uint8_t *pBuffer, struct packet_fields *fields) {
 			fields->tp_dst = udphdr->dest;
 		}
 	}
+	
+	if(ntohs(fields->eth_prot) == 0x0806){
+		memcpy(&fields->arp_op, fields->payload + 6, 2);
+		memcpy(&fields->arp_sha, fields->payload + 8, 6);
+		memcpy(&fields->arp_spa, fields->payload + 14, 4);
+		memcpy(&fields->arp_tha, fields->payload + 18, 6);
+		memcpy(&fields->arp_tpa, fields->payload + 24, 4);
+	}
+	
 	fields->parsed = true;
 }
 
@@ -578,7 +587,7 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 				break;
 
 				case OXM_OF_MPLS_LABEL:
-				if (fields->isMPLSTag && fields->mpls_label != *(uint32_t*)oxm_value)
+				if (!(fields->isMPLSTag && ntohl(fields->mpls_label) == *(uint32_t*)oxm_value))
 				{
 					priority_match = -1;
 				}
@@ -597,7 +606,129 @@ int flowmatch13(uint8_t *pBuffer, int port, uint8_t table_id, struct packet_fiel
 					priority_match = -1;
 				}
 				break;
+
+				case OXM_OF_ARP_OP:
+				if (fields->eth_prot != htons(0x0806))
+				{
+					priority_match = -1;
+				} else {
+					if (fields->arp_op != *(uint16_t*)oxm_value)
+					{
+						priority_match = -1;
+					}
+				}
+				break;
 				
+				case OXM_OF_ARP_SPA:
+				if (fields->eth_prot != htons(0x0806))
+				{
+					priority_match = -1;
+				} else {
+					if (memcmp(&fields->arp_spa, oxm_value, 4) != 0)
+					{
+						priority_match = -1;
+					}
+				}
+				break;
+
+				case OXM_OF_ARP_SPA_W:
+				if (fields->eth_prot != htons(0x0806))
+				{
+					priority_match = -1;
+				} else {
+					memcpy(oxm_ipv4, &fields->arp_spa, 4);
+					for (int j=0; j<4; j++)
+					{
+						oxm_ipv4[j] &= oxm_value[4+j];
+					}
+					if (memcmp(oxm_ipv4, oxm_value, 4) != 0)
+					{
+						priority_match = -1;
+					}
+				}
+				break;
+				
+				case OXM_OF_ARP_TPA:
+				if (fields->eth_prot != htons(0x0806))
+				{
+					priority_match = -1;
+				} else {
+					if (memcmp(&fields->arp_tpa, oxm_value, 4) != 0)
+					{
+						priority_match = -1;
+					}
+				}
+				break;
+
+				case OXM_OF_ARP_TPA_W:
+				if (fields->eth_prot != htons(0x0806))
+				{
+					priority_match = -1;
+				} else {
+					memcpy(oxm_ipv4, &fields->arp_tpa, 4);
+					for (int j=0; j<4; j++)
+					{
+						oxm_ipv4[j] &= oxm_value[4+j];
+					}
+					if (memcmp(oxm_ipv4, oxm_value, 4) != 0)
+					{
+						priority_match = -1;
+					}
+				}
+				break;
+				
+				case OXM_OF_ARP_SHA:
+				if (fields->eth_prot != htons(0x0806))
+				{
+					priority_match = -1;
+				} else {
+					if (memcmp(&fields->arp_sha, oxm_value, 6) != 0)
+					{
+						priority_match = -1;
+					}
+				}
+				break;
+
+				case OXM_OF_ARP_SHA_W:
+				if (fields->eth_prot != htons(0x0806))
+				{
+					priority_match = -1;
+				} else {
+					for (int j=0; j<6; j++ )
+					{
+						if ((oxm_value[j] & oxm_value[6+j]) != fields->arp_sha[j] & oxm_value[6+j]){
+							priority_match = -1;
+						}
+					}
+				}
+				break;
+				
+				case OXM_OF_ARP_THA:
+				if (fields->eth_prot != htons(0x0806))
+				{
+					priority_match = -1;
+				} else {
+					if (memcmp(&fields->arp_tha, oxm_value, 6) != 0)
+					{
+						priority_match = -1;
+					}
+				}
+				break;
+
+				case OXM_OF_ARP_THA_W:
+				if (fields->eth_prot != htons(0x0806))
+				{
+					priority_match = -1;
+				} else {
+					for (int j=0; j<6; j++ )
+					{
+						if ((oxm_value[j] & oxm_value[6+j]) != fields->arp_tha[j] & oxm_value[6+j]){
+							priority_match = -1;
+						}
+					}
+				}
+				break;
+												
 				default:
 				priority_match = -1;
 				break;

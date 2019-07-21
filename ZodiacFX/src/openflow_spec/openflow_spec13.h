@@ -1498,7 +1498,9 @@ enum ofp_vlan_id {
  *
  * Masking: Not maskable. */
 #define OXM_OF_ARP_SHA    OXM_HEADER  (0x8000, OFPXMT_OFB_ARP_SHA, 6)
+#define OXM_OF_ARP_SHA_W  OXM_HEADER_W(0x8000, OFPXMT_OFB_ARP_SHA, 6)
 #define OXM_OF_ARP_THA    OXM_HEADER  (0x8000, OFPXMT_OFB_ARP_THA, 6)
+#define OXM_OF_ARP_THA_W  OXM_HEADER_W(0x8000, OFPXMT_OFB_ARP_THA, 6)
 
 /* The source or destination address in the IPv6 header.
  *
