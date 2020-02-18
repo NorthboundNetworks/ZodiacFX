@@ -351,31 +351,38 @@ void nnOF13_tablelookup(uint8_t *p_uc_data, uint32_t *ul_size, int port)
 						struct ip_hdr *hdr = fields.payload;
 						mpls[3] = IPH_TTL(hdr);
 					} else if (fields.eth_prot == htons(0x8847) || fields.eth_prot == htons(0x8848)){
-						memcpy(mpls, fields.payload, 4);
+						//memcpy(mpls, fields.payload, 4);
+						struct ip_hdr *hdr = fields.payload;
+						memcpy(mpls + 3, fields.payload + 3, 1);//Copy old MPLS TTL in new MPLS TTL field
 						mpls[2] &= 0xFE; // clear bottom stack bit
 					}
 					struct ofp13_action_push *push = (struct ofp13_action_push*)act_hdr;
-					memmove(fields.payload + 4, fields.payload, packet_size - 12);
-					memcpy(fields.payload - 2, &push->ethertype, 2);
-					memcpy(fields.payload, mpls, 4);
-					fields.payload += 4;
+					memmove(fields.payload + 4, fields.payload,packet_size - 14);//Leave space to the new MPLS label, we have to move The hole packet less the ETH header(14 bytes) so  - 14 not -12
+					memcpy(fields.payload - 2, &push->ethertype, 2);//Set the new ethertype
+					memcpy(fields.payload, mpls, 4);//Placing the new MPLS label 
+					//fields.payload += 4; //the payload of the packet stil being the same(starting at the next bit to the ETH header). Move payload pointer is an error
 					packet_size += 4;
 					*ul_size += 4;
-					packet_fields_parser(p_uc_data, &fields);
+					fields.eth_prot = push->ethertype;
+					fields.isMPLSTag = true;
 				}
 				break;
 
 				// Pop an MPLS tag
 				case OFPAT13_POP_MPLS:
+				TRACE("case OFPAT13_POP_MPLS");
 				if(fields.isMPLSTag){
 					struct ofp13_action_pop_mpls *pop = (struct ofp13_action_pop_mpls*)act_hdr;
-					memmove(p_uc_data+14, p_uc_data+18, packet_size-16);
-					fields.payload -= 4;
-					memcpy(fields.payload - 2, &pop->ethertype, 2);
+					memmove(p_uc_data + 14, p_uc_data + 18,packet_size - 18);//The size of MPLS header + ETHERNET header is 18, not 16
+					fields.eth_prot=pop->ethertype;
+					memmove(p_uc_data + 12, &pop->ethertype, 2);//The other way was ok if you are placing well the payload pointer, but im not sure of that
 					packet_size -= 4;
 					*ul_size -= 4;
 					packet_fields_parser(p_uc_data, &fields);
+				}else{
+					TRACE("ERROR: Not MPLS detected but pop requested");
 				}
+				
 				break;
 
 				// Set MPLS TTL
